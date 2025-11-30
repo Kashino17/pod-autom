@@ -319,9 +319,9 @@ def get_campaigns():
     try:
         data = request.json
         shop_id = data.get('shop_id')
-        ad_account_id = data.get('ad_account_id')
+        pinterest_account_id = data.get('ad_account_id')  # This is the Pinterest account ID string
 
-        if not shop_id or not ad_account_id:
+        if not shop_id or not pinterest_account_id:
             return jsonify({'error': 'Missing shop_id or ad_account_id'}), 400
 
         supabase = get_supabase_client()
@@ -336,9 +336,14 @@ def get_campaigns():
 
         access_token = auth_result.data['access_token']
 
+        # Get the Supabase UUID for this ad account
+        ad_account_result = supabase.table('pinterest_ad_accounts').select('id').eq('shop_id', shop_id).eq('pinterest_account_id', pinterest_account_id).single().execute()
+
+        ad_account_uuid = ad_account_result.data.get('id') if ad_account_result.data else None
+
         # Fetch campaigns from Pinterest API
         response = requests.get(
-            f'https://api.pinterest.com/v5/ad_accounts/{ad_account_id}/campaigns',
+            f'https://api.pinterest.com/v5/ad_accounts/{pinterest_account_id}/campaigns',
             headers={'Authorization': f'Bearer {access_token}'},
             timeout=15
         )
@@ -353,7 +358,7 @@ def get_campaigns():
         for campaign in campaigns:
             supabase.table('pinterest_campaigns').upsert({
                 'shop_id': shop_id,
-                'ad_account_id': ad_account_id,
+                'ad_account_id': ad_account_uuid,  # Use Supabase UUID, not Pinterest ID
                 'pinterest_campaign_id': campaign.get('id'),
                 'name': campaign.get('name', 'Unnamed Campaign'),
                 'status': campaign.get('status', 'PAUSED'),
