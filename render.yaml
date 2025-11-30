@@ -28,7 +28,6 @@ services:
   - type: web
     name: reboss-frontend
     runtime: static
-    region: frankfurt
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     envVars:
