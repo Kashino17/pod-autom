@@ -20,7 +20,13 @@ app = Flask(__name__)
 # Enable CORS for all routes
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["http://localhost:3000", "http://localhost:3007", "http://localhost:5173", "https://reboss.app"],
+        "origins": [
+            "http://localhost:3000",
+            "http://localhost:3007",
+            "http://localhost:5173",
+            "https://reboss.app",
+            "https://reboss-frontend.onrender.com"
+        ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
     }

@@ -1,10 +1,11 @@
 """
 Pinterest OAuth Routes
-Handles Pinterest OAuth2 authorization flow
+Handles Pinterest OAuth2 authorization flow and API operations
 """
 import os
 import secrets
 import time
+from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, redirect, jsonify
 import requests
 
@@ -17,9 +18,16 @@ oauth_states = {}
 PINTEREST_APP_ID = os.environ.get('PINTEREST_APP_ID', '')
 PINTEREST_APP_SECRET = os.environ.get('PINTEREST_APP_SECRET', '')
 API_URL = os.environ.get('API_URL', 'http://localhost:5001')
-FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3007')
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
 SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY', '')
+
+def get_supabase_client():
+    """Get Supabase client if configured"""
+    if SUPABASE_URL and SUPABASE_SERVICE_KEY:
+        from supabase import create_client
+        return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    return None
 
 
 def cleanup_expired_states():
@@ -127,22 +135,26 @@ def callback():
         if user_response.ok:
             pinterest_user = user_response.json()
 
-        # Save tokens to Supabase
-        if SUPABASE_URL and SUPABASE_SERVICE_KEY:
-            from supabase import create_client
-            supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        # Calculate expiry timestamp
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
+        scopes_list = ['ads:read', 'ads:write', 'boards:read', 'boards:write', 'pins:read', 'pins:write', 'user_accounts:read']
 
+        # Save tokens to Supabase
+        supabase = get_supabase_client()
+        if supabase:
             supabase.table('pinterest_auth').upsert({
                 'shop_id': shop_id,
                 'access_token': access_token,
                 'refresh_token': refresh_token,
-                'expires_in': expires_in,
+                'expires_at': expires_at,
+                'scopes': scopes_list,
+                'pinterest_user_id': pinterest_user.get('id'),
                 'pinterest_username': pinterest_user.get('username'),
-                'pinterest_account_type': pinterest_user.get('account_type'),
-                'connected_at': 'now()'
+                'is_connected': True,
+                'updated_at': datetime.now(timezone.utc).isoformat()
             }, on_conflict='shop_id').execute()
 
-        return redirect(f"{FRONTEND_URL}/shops/{shop_id}?pinterest=connected")
+        return redirect(f"{FRONTEND_URL}?shop={shop_id}&pinterest=connected")
 
     except Exception as e:
         print(f"Pinterest OAuth error: {str(e)}")
@@ -201,3 +213,190 @@ def status():
         'api_url': API_URL,
         'frontend_url': FRONTEND_URL
     })
+
+
+@pinterest_bp.route('/api/pinterest/disconnect', methods=['POST'])
+def disconnect():
+    """Disconnect Pinterest from shop"""
+    try:
+        data = request.json
+        shop_id = data.get('shop_id')
+
+        if not shop_id:
+            return jsonify({'error': 'Missing shop_id'}), 400
+
+        supabase = get_supabase_client()
+        if supabase:
+            # Clear auth tokens
+            supabase.table('pinterest_auth').update({
+                'access_token': None,
+                'refresh_token': None,
+                'expires_at': None,
+                'pinterest_user_id': None,
+                'pinterest_username': None,
+                'is_connected': False,
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }).eq('shop_id', shop_id).execute()
+
+            # Clear ad accounts
+            supabase.table('pinterest_ad_accounts').delete().eq('shop_id', shop_id).execute()
+
+            # Clear campaigns
+            supabase.table('pinterest_campaigns').delete().eq('shop_id', shop_id).execute()
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@pinterest_bp.route('/api/pinterest/ad-accounts', methods=['POST'])
+def get_ad_accounts():
+    """Get Pinterest Ad Accounts for a shop"""
+    try:
+        data = request.json
+        shop_id = data.get('shop_id')
+
+        if not shop_id:
+            return jsonify({'error': 'Missing shop_id'}), 400
+
+        supabase = get_supabase_client()
+        if not supabase:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Get access token from Supabase
+        auth_result = supabase.table('pinterest_auth').select('access_token, expires_at').eq('shop_id', shop_id).single().execute()
+
+        if not auth_result.data or not auth_result.data.get('access_token'):
+            return jsonify({'error': 'Pinterest not connected'}), 401
+
+        access_token = auth_result.data['access_token']
+
+        # Check if token expired
+        expires_at = auth_result.data.get('expires_at')
+        if expires_at:
+            expiry = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+            if datetime.now(timezone.utc) >= expiry:
+                return jsonify({'error': 'Token expired, please reconnect'}), 401
+
+        # Fetch ad accounts from Pinterest API
+        response = requests.get(
+            'https://api.pinterest.com/v5/ad_accounts',
+            headers={'Authorization': f'Bearer {access_token}'},
+            timeout=15
+        )
+
+        if not response.ok:
+            return jsonify({'error': f'Pinterest API error: {response.status_code}'}), response.status_code
+
+        pinterest_data = response.json()
+        ad_accounts = pinterest_data.get('items', [])
+
+        # Sync to Supabase
+        for account in ad_accounts:
+            supabase.table('pinterest_ad_accounts').upsert({
+                'shop_id': shop_id,
+                'pinterest_account_id': account.get('id'),
+                'name': account.get('name', 'Unnamed Account'),
+                'country': account.get('country', 'US'),
+                'currency': account.get('currency', 'USD'),
+                'synced_at': datetime.now(timezone.utc).isoformat()
+            }, on_conflict='shop_id,pinterest_account_id').execute()
+
+        return jsonify({
+            'success': True,
+            'ad_accounts': ad_accounts
+        })
+
+    except Exception as e:
+        print(f"Error fetching ad accounts: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@pinterest_bp.route('/api/pinterest/campaigns', methods=['POST'])
+def get_campaigns():
+    """Get Pinterest Campaigns for an ad account"""
+    try:
+        data = request.json
+        shop_id = data.get('shop_id')
+        ad_account_id = data.get('ad_account_id')
+
+        if not shop_id or not ad_account_id:
+            return jsonify({'error': 'Missing shop_id or ad_account_id'}), 400
+
+        supabase = get_supabase_client()
+        if not supabase:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Get access token
+        auth_result = supabase.table('pinterest_auth').select('access_token').eq('shop_id', shop_id).single().execute()
+
+        if not auth_result.data or not auth_result.data.get('access_token'):
+            return jsonify({'error': 'Pinterest not connected'}), 401
+
+        access_token = auth_result.data['access_token']
+
+        # Fetch campaigns from Pinterest API
+        response = requests.get(
+            f'https://api.pinterest.com/v5/ad_accounts/{ad_account_id}/campaigns',
+            headers={'Authorization': f'Bearer {access_token}'},
+            timeout=15
+        )
+
+        if not response.ok:
+            return jsonify({'error': f'Pinterest API error: {response.status_code}'}), response.status_code
+
+        pinterest_data = response.json()
+        campaigns = pinterest_data.get('items', [])
+
+        # Sync to Supabase
+        for campaign in campaigns:
+            supabase.table('pinterest_campaigns').upsert({
+                'shop_id': shop_id,
+                'ad_account_id': ad_account_id,
+                'pinterest_campaign_id': campaign.get('id'),
+                'name': campaign.get('name', 'Unnamed Campaign'),
+                'status': campaign.get('status', 'PAUSED'),
+                'daily_budget': campaign.get('daily_spend_cap'),
+                'synced_at': datetime.now(timezone.utc).isoformat()
+            }, on_conflict='shop_id,pinterest_campaign_id').execute()
+
+        return jsonify({
+            'success': True,
+            'campaigns': campaigns
+        })
+
+    except Exception as e:
+        print(f"Error fetching campaigns: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@pinterest_bp.route('/api/pinterest/select-ad-account', methods=['POST'])
+def select_ad_account():
+    """Set selected ad account for a shop"""
+    try:
+        data = request.json
+        shop_id = data.get('shop_id')
+        ad_account_id = data.get('ad_account_id')
+
+        if not shop_id or not ad_account_id:
+            return jsonify({'error': 'Missing shop_id or ad_account_id'}), 400
+
+        supabase = get_supabase_client()
+        if not supabase:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Deselect all ad accounts for this shop
+        supabase.table('pinterest_ad_accounts').update({
+            'is_selected': False
+        }).eq('shop_id', shop_id).execute()
+
+        # Select the chosen one
+        supabase.table('pinterest_ad_accounts').update({
+            'is_selected': True
+        }).eq('shop_id', shop_id).eq('pinterest_account_id', ad_account_id).execute()
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

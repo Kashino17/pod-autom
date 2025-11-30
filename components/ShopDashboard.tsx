@@ -220,12 +220,7 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
           ) : activeTab === 'general' ? (
             <GeneralSettings config={generalConfig} onChange={setGeneralConfig} />
           ) : activeTab === 'pinterest' ? (
-            <PinterestSync 
-               config={pinterestConfig} 
-               onChange={setPinterestConfig} 
-               metaLinks={metaConfig.activeLinks}
-               googleLinks={googleConfig.activeLinks}
-            />
+            <PinterestSync shopId={shop.id} />
           ) : activeTab === 'meta-ads' ? (
             <MetaAdsSync 
                config={metaConfig} 
