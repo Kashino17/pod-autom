@@ -220,6 +220,99 @@ export function useUpdatePinterestSettings() {
 }
 
 // ==========================================
+// PINTEREST CAMPAIGNS (stored in Supabase for FK relationships)
+// ==========================================
+
+export function useStoredPinterestCampaigns(shopId: string | null) {
+  return useQuery({
+    queryKey: ['stored-pinterest-campaigns', shopId],
+    queryFn: async () => {
+      if (!shopId) return []
+
+      const { data, error } = await supabase
+        .from('pinterest_campaigns')
+        .select('*')
+        .eq('shop_id', shopId)
+        .order('name')
+
+      if (error) throw error
+      return data || []
+    },
+    enabled: !!shopId
+  })
+}
+
+export function useUpsertPinterestCampaign() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (campaign: {
+      shop_id: string
+      ad_account_id?: string  // pinterest_account_id from pinterest_ad_accounts
+      pinterest_campaign_id: string  // The actual Pinterest campaign ID
+      name: string
+      status: string
+      daily_budget?: number
+    }) => {
+      // First get the ad_account UUID if we have the pinterest_account_id
+      let adAccountUuid: string | null = null
+      if (campaign.ad_account_id) {
+        const { data: adAccount } = await supabase
+          .from('pinterest_ad_accounts')
+          .select('id')
+          .eq('shop_id', campaign.shop_id)
+          .eq('pinterest_account_id', campaign.ad_account_id)
+          .single()
+        adAccountUuid = (adAccount as any)?.id || null
+      }
+
+      const { data, error } = await supabase
+        .from('pinterest_campaigns')
+        .upsert({
+          shop_id: campaign.shop_id,
+          ad_account_id: adAccountUuid,
+          pinterest_campaign_id: campaign.pinterest_campaign_id,
+          name: campaign.name,
+          status: campaign.status,
+          daily_budget: campaign.daily_budget,
+          synced_at: new Date().toISOString()
+        } as any, { onConflict: 'shop_id,pinterest_campaign_id' })
+        .select()
+        .single()
+
+      if (error) throw error
+      return data as { id: string; shop_id: string; name: string; status: string }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['stored-pinterest-campaigns', variables.shop_id] })
+    }
+  })
+}
+
+// ==========================================
+// SHOPIFY COLLECTIONS (stored in Supabase)
+// ==========================================
+
+export function useStoredShopifyCollections(shopId: string | null) {
+  return useQuery({
+    queryKey: ['stored-shopify-collections', shopId],
+    queryFn: async () => {
+      if (!shopId) return []
+
+      const { data, error } = await supabase
+        .from('shopify_collections')
+        .select('*')
+        .eq('shop_id', shopId)
+        .order('title')
+
+      if (error) throw error
+      return data || []
+    },
+    enabled: !!shopId
+  })
+}
+
+// ==========================================
 // CAMPAIGN BATCH ASSIGNMENTS
 // ==========================================
 
@@ -229,11 +322,31 @@ export function useCampaignBatchAssignments(shopId: string | null) {
     queryFn: async () => {
       if (!shopId) return []
 
-      // Query assignments directly by shop_id
+      // First get all campaigns for this shop to get their IDs
+      const { data: campaigns, error: campaignError } = await supabase
+        .from('pinterest_campaigns')
+        .select('id')
+        .eq('shop_id', shopId)
+
+      if (campaignError) throw campaignError
+      if (!campaigns || campaigns.length === 0) return []
+
+      const campaignIds = (campaigns as any[]).map(c => c.id)
+
+      // Then get assignments for these campaigns with joined data
       const { data, error } = await supabase
         .from('campaign_batch_assignments')
-        .select('*')
-        .eq('shop_id', shopId)
+        .select(`
+          id,
+          campaign_id,
+          collection_id,
+          batch_indices,
+          created_at,
+          updated_at,
+          pinterest_campaigns(id, name, status, pinterest_campaign_id),
+          shopify_collections(id, title, shopify_id, product_count)
+        `)
+        .in('campaign_id', campaignIds)
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -249,15 +362,17 @@ export function useCreateCampaignBatchAssignment() {
   return useMutation({
     mutationFn: async (assignment: {
       shop_id: string
-      pinterest_campaign_id: string
-      pinterest_campaign_name: string
-      collection_id: string
-      collection_name: string
+      campaign_id: string  // UUID from pinterest_campaigns table
+      collection_id: string  // UUID from shopify_collections table
       batch_indices: number[]
     }) => {
       const { data, error } = await supabase
         .from('campaign_batch_assignments')
-        .insert(assignment as any)
+        .insert({
+          campaign_id: assignment.campaign_id,
+          collection_id: assignment.collection_id,
+          batch_indices: assignment.batch_indices
+        } as any)
         .select()
         .single()
 
@@ -274,7 +389,7 @@ export function useDeleteCampaignBatchAssignment() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (assignmentId: string) => {
+    mutationFn: async ({ assignmentId, shopId }: { assignmentId: string; shopId: string }) => {
       const { error } = await supabase
         .from('campaign_batch_assignments')
         .delete()
@@ -282,8 +397,8 @@ export function useDeleteCampaignBatchAssignment() {
 
       if (error) throw error
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['campaign-batch-assignments'] })
+    onSuccess: (_, { shopId }) => {
+      queryClient.invalidateQueries({ queryKey: ['campaign-batch-assignments', shopId] })
     }
   })
 }

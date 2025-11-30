@@ -16,9 +16,11 @@ import {
   useUpdatePinterestSettings,
   useCampaignBatchAssignments,
   useCreateCampaignBatchAssignment,
-  useDeleteCampaignBatchAssignment
+  useDeleteCampaignBatchAssignment,
+  useStoredShopifyCollections,
+  useUpsertPinterestCampaign
 } from '../../src/hooks/usePinterest';
-import { useShop, useShopifyCollections } from '../../src/hooks/useShops';
+import { useShop } from '../../src/hooks/useShops';
 
 interface PinterestSyncProps {
   shopId: string;
@@ -51,19 +53,30 @@ interface PinterestSettings {
 
 interface ShopifyCollection {
   id: string;
+  shopify_id: string;
   title: string;
-  products_count: number;
+  product_count: number;
 }
 
-interface SyncAssignment {
+// Joined assignment data from Supabase
+interface SyncAssignmentJoined {
   id: string;
-  shop_id: string;
-  pinterest_campaign_id: string;
-  pinterest_campaign_name: string;
+  campaign_id: string;
   collection_id: string;
-  collection_name: string;
   batch_indices: number[];
   created_at: string;
+  pinterest_campaigns: {
+    id: string;
+    name: string;
+    status: string;
+    pinterest_campaign_id: string;
+  } | null;
+  shopify_collections: {
+    id: string;
+    title: string;
+    shopify_id: string;
+    product_count: number;
+  } | null;
 }
 
 export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
@@ -82,11 +95,8 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   const campaigns = campaignsRaw as PinterestCampaign[];
   const { data: settingsRaw } = usePinterestSettings(shopId);
   const settings = settingsRaw as PinterestSettings | null;
-  // Load collections directly from Shopify API
-  const { data: collectionsRaw = [] } = useShopifyCollections(
-    (shop as any)?.shop_domain || null,
-    (shop as any)?.access_token || null
-  );
+  // Load collections from Supabase (synced from Shopify)
+  const { data: collectionsRaw = [] } = useStoredShopifyCollections(shopId);
   const collections = collectionsRaw as ShopifyCollection[];
 
   // Mutations
@@ -99,9 +109,10 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
 
   // Sync assignments
   const { data: syncAssignmentsRaw = [] } = useCampaignBatchAssignments(shopId);
-  const syncAssignments = syncAssignmentsRaw as SyncAssignment[];
+  const syncAssignments = syncAssignmentsRaw as SyncAssignmentJoined[];
   const createAssignment = useCreateCampaignBatchAssignment();
   const deleteAssignment = useDeleteCampaignBatchAssignment();
+  const upsertCampaign = useUpsertPinterestCampaign();
 
   // Local state
   const [searchQuery, setSearchQuery] = useState('');
@@ -217,54 +228,68 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   // Selected collection for batch calculation
   const selectedCollection = collections.find(c => c.id === formState.selectedCollectionId);
   const batchSize = settings?.global_batch_size || 10;
-  const maxBatches = selectedCollection ? Math.ceil((selectedCollection.products_count || 0) / batchSize) : 1;
+  const maxBatches = selectedCollection ? Math.ceil((selectedCollection.product_count || 0) / batchSize) : 1;
 
   // Filter sync assignments for search
   const filteredAssignments = syncAssignments.filter(a =>
-    (a.pinterest_campaign_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (a.collection_name || '').toLowerCase().includes(searchQuery.toLowerCase())
+    (a.pinterest_campaigns?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (a.shopify_collections?.title || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Get campaign name and collection name for an assignment
-  const getCampaignName = (assignment: any) => {
-    return assignment.pinterest_campaign_name || 'Unbekannte Kampagne';
+  const getCampaignName = (assignment: SyncAssignmentJoined) => {
+    return assignment.pinterest_campaigns?.name || 'Unbekannte Kampagne';
   };
 
-  const getCollectionName = (assignment: any) => {
-    return assignment.collection_name || 'Unbekannte Kollektion';
+  const getCollectionName = (assignment: SyncAssignmentJoined) => {
+    return assignment.shopify_collections?.title || 'Unbekannte Kollektion';
   };
 
   // Handle creating a sync assignment
   const handleCreateSync = async () => {
     if (!formState.selectedCampaignId || !formState.selectedCollectionId) return;
 
+    // Find the selected campaign from Pinterest API data
     const selectedCampaign = campaigns.find(c => c.id === formState.selectedCampaignId);
     const selectedCol = collections.find(c => c.id === formState.selectedCollectionId);
 
     if (!selectedCampaign || !selectedCol) return;
 
-    await createAssignment.mutateAsync({
-      shop_id: shopId,
-      pinterest_campaign_id: formState.selectedCampaignId,
-      pinterest_campaign_name: selectedCampaign.name,
-      collection_id: formState.selectedCollectionId,
-      collection_name: selectedCol.title,
-      batch_indices: [formState.selectedBatch]
-    });
+    try {
+      // Step 1: Upsert the campaign to Supabase to get/create a UUID
+      const savedCampaign = await upsertCampaign.mutateAsync({
+        shop_id: shopId,
+        ad_account_id: selectedAdAccount?.pinterest_account_id,
+        pinterest_campaign_id: selectedCampaign.id, // The Pinterest API campaign ID
+        name: selectedCampaign.name,
+        status: selectedCampaign.status,
+        daily_budget: selectedCampaign.daily_budget
+      });
 
-    // Reset form
-    setFormState({
-      ...formState,
-      selectedCampaignId: '',
-      selectedCollectionId: '',
-      selectedBatch: 1
-    });
+      // Step 2: Create the assignment using the Supabase UUIDs
+      await createAssignment.mutateAsync({
+        shop_id: shopId,
+        campaign_id: savedCampaign.id,  // UUID from pinterest_campaigns table
+        collection_id: selectedCol.id,   // UUID from shopify_collections table
+        batch_indices: [formState.selectedBatch]
+      });
+
+      // Reset form
+      setFormState({
+        ...formState,
+        selectedCampaignId: '',
+        selectedCollectionId: '',
+        selectedBatch: 1
+      });
+    } catch (error) {
+      console.error('Error creating sync:', error);
+    }
   };
 
   // Handle delete confirmation
   const confirmDelete = async () => {
     if (linkToDelete) {
-      await deleteAssignment.mutateAsync(linkToDelete);
+      await deleteAssignment.mutateAsync({ assignmentId: linkToDelete, shopId });
       setLinkToDelete(null);
     }
   };
@@ -550,7 +575,7 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
                   <option value="">-- Kollektion auswählen --</option>
                   {collections.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.title} ({c.products_count || 0} Produkte)
+                      {c.title} ({c.product_count || 0} Produkte)
                     </option>
                   ))}
                 </select>
@@ -569,7 +594,7 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
                 >
                   {Array.from({ length: maxBatches }, (_, i) => i + 1).map(num => {
                     const startItem = (num - 1) * batchSize + 1;
-                    const endItem = Math.min(num * batchSize, selectedCollection?.products_count || 0);
+                    const endItem = Math.min(num * batchSize, selectedCollection?.product_count || 0);
                     return (
                       <option key={num} value={num}>
                         Batch {num} (Produkte {startItem} - {endItem})
