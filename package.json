@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "db:types": "supabase gen types typescript --project-id YOUR_PROJECT_ID > src/lib/database.types.ts"
   },

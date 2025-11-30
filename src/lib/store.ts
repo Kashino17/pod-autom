@@ -49,7 +49,11 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'reboss-app-store',
-      partials: ['activeShopId', 'activeTabId', 'sidebarCollapsed']
+      partialize: (state) => ({
+        activeShopId: state.activeShopId,
+        activeTabId: state.activeTabId,
+        sidebarCollapsed: state.sidebarCollapsed
+      })
     }
   )
 )
