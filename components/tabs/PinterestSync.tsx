@@ -521,9 +521,9 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
                   disabled={campaignsLoading || campaigns.length === 0}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-3 px-4 text-sm text-white focus:outline-none focus:border-zinc-600 appearance-none disabled:opacity-50"
                 >
-                  <option value="">-- Kampagne auswählen ({campaigns.filter(c => ['ACTIVE', 'PAUSED', 'SCHEDULED'].includes(c.status)).length} verfügbar) --</option>
+                  <option value="">-- Kampagne auswählen ({campaigns.filter(c => ['ACTIVE', 'SCHEDULED'].includes(c.status)).length} verfügbar) --</option>
                   {campaigns
-                    .filter(c => ['ACTIVE', 'PAUSED', 'SCHEDULED'].includes(c.status))
+                    .filter(c => ['ACTIVE', 'SCHEDULED'].includes(c.status))
                     .map(c => (
                       <option key={c.id} value={c.id}>
                         {c.name} ({c.status})
