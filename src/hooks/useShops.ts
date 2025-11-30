@@ -266,7 +266,7 @@ export function useToggleCollectionSelected() {
 // API URL Configuration
 // ==========================================
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001'
+const API_URL = import.meta.env.VITE_API_URL || 'https://reboss-api.onrender.com'
 
 // ==========================================
 // TEST SHOPIFY CONNECTION
