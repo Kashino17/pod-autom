@@ -92,29 +92,31 @@ export function useSelectPinterestAdAccount() {
 }
 
 // ==========================================
-// PINTEREST CAMPAIGNS
+// PINTEREST CAMPAIGNS (from API, not stored in Supabase)
 // ==========================================
 
 export function usePinterestCampaigns(shopId: string | null, adAccountId: string | null) {
   return useQuery({
     queryKey: ['pinterest-campaigns', shopId, adAccountId],
     queryFn: async () => {
-      if (!shopId) return []
+      if (!shopId || !adAccountId) return []
 
-      const { data, error } = await supabase
-        .from('pinterest_campaigns')
-        .select('*')
-        .eq('shop_id', shopId)
-        .order('name')
+      // Fetch directly from Pinterest API via our backend
+      const response = await fetch(`${API_URL}/api/pinterest/campaigns`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop_id: shopId, ad_account_id: adAccountId })
+      })
 
-      if (error) throw error
-      return data || []
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Failed to fetch campaigns')
+      return data.campaigns || []
     },
-    enabled: !!shopId
+    enabled: !!shopId && !!adAccountId
   })
 }
 
-export function useSyncPinterestCampaigns() {
+export function useRefreshPinterestCampaigns() {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -126,7 +128,7 @@ export function useSyncPinterestCampaigns() {
       })
 
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Failed to sync campaigns')
+      if (!response.ok) throw new Error(data.error || 'Failed to refresh campaigns')
       return data.campaigns
     },
     onSuccess: (_, { shopId, adAccountId }) => {

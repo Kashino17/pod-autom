@@ -11,17 +11,20 @@ import {
   useConnectPinterest,
   useDisconnectPinterest,
   useSyncPinterestAdAccounts,
-  useSyncPinterestCampaigns,
+  useRefreshPinterestCampaigns,
   useSelectPinterestAdAccount,
   useUpdatePinterestSettings
 } from '../../src/hooks/usePinterest';
-import { useShopCollections } from '../../src/hooks/useShops';
+import { useShop, useShopifyCollections } from '../../src/hooks/useShops';
 
 interface PinterestSyncProps {
   shopId: string;
 }
 
 export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
+  // Get shop data for Shopify credentials
+  const { data: shop } = useShop(shopId);
+
   // Data queries
   const { data: pinterestAuth, isLoading: authLoading } = usePinterestAuth(shopId);
   const { data: adAccounts = [], isLoading: accountsLoading } = usePinterestAdAccounts(shopId);
@@ -30,13 +33,17 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
     adAccounts.find(a => a.is_selected)?.pinterest_account_id || null
   );
   const { data: settings } = usePinterestSettings(shopId);
-  const { data: collections = [] } = useShopCollections(shopId);
+  // Load collections directly from Shopify API
+  const { data: collections = [] } = useShopifyCollections(
+    shop?.shop_domain || null,
+    shop?.access_token || null
+  );
 
   // Mutations
   const connectPinterest = useConnectPinterest();
   const disconnectPinterest = useDisconnectPinterest();
   const syncAdAccounts = useSyncPinterestAdAccounts();
-  const syncCampaigns = useSyncPinterestCampaigns();
+  const refreshCampaigns = useRefreshPinterestCampaigns();
   const selectAdAccount = useSelectPinterestAdAccount();
   const updateSettings = useUpdatePinterestSettings();
 
@@ -76,12 +83,7 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
     }
   }, [adAccounts, selectedAdAccount]);
 
-  // Auto-sync campaigns when ad account is selected but no campaigns
-  useEffect(() => {
-    if (selectedAdAccount && !campaignsLoading && campaigns.length === 0 && !syncCampaigns.isPending) {
-      syncCampaigns.mutate({ shopId, adAccountId: selectedAdAccount.pinterest_account_id });
-    }
-  }, [selectedAdAccount, campaignsLoading, campaigns.length]);
+  // Campaigns are now automatically loaded by usePinterestCampaigns when adAccountId is set
 
   const hasBatchSizeChanged = tempBatchSize !== (settings?.global_batch_size || 10);
 
@@ -102,13 +104,11 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
 
   const handleSelectAdAccount = async (accountId: string) => {
     await selectAdAccount.mutateAsync({ shopId, adAccountId: accountId });
-    // Sync campaigns for newly selected account
-    await syncCampaigns.mutateAsync({ shopId, adAccountId: accountId });
   };
 
-  const handleSyncCampaigns = async () => {
+  const handleRefreshCampaigns = async () => {
     if (selectedAdAccount) {
-      await syncCampaigns.mutateAsync({
+      await refreshCampaigns.mutateAsync({
         shopId,
         adAccountId: selectedAdAccount.pinterest_account_id
       });
@@ -161,7 +161,7 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   // Selected collection for batch calculation
   const selectedCollection = collections.find(c => c.id === formState.selectedCollectionId);
   const batchSize = settings?.global_batch_size || 10;
-  const maxBatches = selectedCollection ? Math.ceil((selectedCollection.product_count || 0) / batchSize) : 1;
+  const maxBatches = selectedCollection ? Math.ceil((selectedCollection.products_count || 0) / batchSize) : 1;
 
   // Filter campaigns for search
   const filteredCampaigns = campaigns.filter(c =>
@@ -314,12 +314,12 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
                   {campaigns.length} Kampagnen
                 </span>
                 <button
-                  onClick={handleSyncCampaigns}
-                  disabled={syncCampaigns.isPending || !selectedAdAccount}
+                  onClick={handleRefreshCampaigns}
+                  disabled={refreshCampaigns.isPending || !selectedAdAccount}
                   className="p-1.5 hover:bg-zinc-800 rounded text-zinc-500 hover:text-white transition-colors disabled:opacity-50"
                   title="Kampagnen neu laden"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${syncCampaigns.isPending ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-3.5 h-3.5 ${refreshCampaigns.isPending ? 'animate-spin' : ''}`} />
                 </button>
               </div>
             </div>
@@ -431,7 +431,7 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
                   <option value="">-- Kollektion auswählen --</option>
                   {collections.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.title} ({c.product_count || 0} Produkte)
+                      {c.title} ({c.products_count || 0} Produkte)
                     </option>
                   ))}
                 </select>
@@ -450,7 +450,7 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
                 >
                   {Array.from({ length: maxBatches }, (_, i) => i + 1).map(num => {
                     const startItem = (num - 1) * batchSize + 1;
-                    const endItem = Math.min(num * batchSize, selectedCollection?.product_count || 0);
+                    const endItem = Math.min(num * batchSize, selectedCollection?.products_count || 0);
                     return (
                       <option key={num} value={num}>
                         Batch {num} (Produkte {startItem} - {endItem})

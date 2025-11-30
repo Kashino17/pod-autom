@@ -350,3 +350,33 @@ export function useSyncShopifyCollections() {
     }
   })
 }
+
+// ==========================================
+// FETCH SHOPIFY COLLECTIONS (without saving to Supabase)
+// ==========================================
+
+export function useShopifyCollections(shopDomain: string | null, accessToken: string | null) {
+  return useQuery({
+    queryKey: ['shopify-collections', shopDomain],
+    queryFn: async () => {
+      if (!shopDomain || !accessToken) return []
+
+      const response = await fetch(`${API_URL}/api/shopify/get-collections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shop_domain: shopDomain,
+          access_token: accessToken
+        })
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to fetch collections')
+      }
+
+      return data.collections || []
+    },
+    enabled: !!shopDomain && !!accessToken
+  })
+}
