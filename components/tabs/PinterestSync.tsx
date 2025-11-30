@@ -69,6 +69,20 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
     }
   }, [pinterestAuth?.is_connected, accountsLoading, adAccounts.length]);
 
+  // Auto-select first ad account if none selected
+  useEffect(() => {
+    if (adAccounts.length > 0 && !selectedAdAccount && !selectAdAccount.isPending) {
+      selectAdAccount.mutate({ shopId, adAccountId: adAccounts[0].pinterest_account_id });
+    }
+  }, [adAccounts, selectedAdAccount]);
+
+  // Auto-sync campaigns when ad account is selected but no campaigns
+  useEffect(() => {
+    if (selectedAdAccount && !campaignsLoading && campaigns.length === 0 && !syncCampaigns.isPending) {
+      syncCampaigns.mutate({ shopId, adAccountId: selectedAdAccount.pinterest_account_id });
+    }
+  }, [selectedAdAccount, campaignsLoading, campaigns.length]);
+
   const hasBatchSizeChanged = tempBatchSize !== (settings?.global_batch_size || 10);
 
   // Handlers
@@ -415,9 +429,9 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-3 px-4 text-sm text-white focus:outline-none focus:border-zinc-600 appearance-none"
                 >
                   <option value="">-- Kollektion auswählen --</option>
-                  {collections.filter(c => c.is_selected).map(c => (
+                  {collections.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.title} ({c.product_count} Produkte)
+                      {c.title} ({c.product_count || 0} Produkte)
                     </option>
                   ))}
                 </select>
