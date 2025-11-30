@@ -1,0 +1,22 @@
+# Render Cron Job Configuration for Sales Tracker
+# This file documents the Render setup - configure in Render Dashboard
+
+# Cron Job Settings:
+# - Name: sales-tracker
+# - Schedule: 0 2 * * * (Daily at 2 AM UTC)
+# - Docker Build Path: backend/jobs/sales_tracker
+# - Dockerfile Path: backend/jobs/sales_tracker/Dockerfile
+
+# Environment Variables to set in Render:
+# - SUPABASE_URL: Your Supabase project URL
+# - SUPABASE_SERVICE_KEY: Your Supabase service role key
+
+# Resource Settings:
+# - Memory: 512 MB (can increase for larger shops)
+# - No timeout limit on Render Cron Jobs
+
+# Notes:
+# - This job processes ALL shops in the database (multi-tenant)
+# - Uses AsyncIO for parallel processing (3 shops concurrent)
+# - Logs job runs to `job_runs` table in Supabase
+# - Sales data saved to `sales_data` table
