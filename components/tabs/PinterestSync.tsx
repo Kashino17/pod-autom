@@ -62,6 +62,13 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
     }
   }, [settings]);
 
+  // Auto-sync ad accounts when connected but no accounts loaded
+  useEffect(() => {
+    if (pinterestAuth?.is_connected && !accountsLoading && adAccounts.length === 0 && !syncAdAccounts.isPending) {
+      syncAdAccounts.mutate(shopId);
+    }
+  }, [pinterestAuth?.is_connected, accountsLoading, adAccounts.length]);
+
   const hasBatchSizeChanged = tempBatchSize !== (settings?.global_batch_size || 10);
 
   // Handlers
