@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Share2, Plus, Search, Layers, Save, Trash2, ChevronDown,
-  AlertTriangle, Info, Target, RefreshCw, Loader2, LogOut, Check
+  AlertTriangle, Info, Target, RefreshCw, Loader2, LogOut, Check, Filter
 } from 'lucide-react';
 import {
   usePinterestAuth,
@@ -13,7 +13,10 @@ import {
   useSyncPinterestAdAccounts,
   useRefreshPinterestCampaigns,
   useSelectPinterestAdAccount,
-  useUpdatePinterestSettings
+  useUpdatePinterestSettings,
+  useCampaignBatchAssignments,
+  useCreateCampaignBatchAssignment,
+  useDeleteCampaignBatchAssignment
 } from '../../src/hooks/usePinterest';
 import { useShop, useShopifyCollections } from '../../src/hooks/useShops';
 
@@ -21,23 +24,70 @@ interface PinterestSyncProps {
   shopId: string;
 }
 
+// Type definitions for API responses
+interface PinterestAuth {
+  is_connected: boolean;
+  pinterest_username?: string;
+}
+
+interface PinterestAdAccount {
+  id: string;
+  pinterest_account_id: string;
+  name: string;
+  currency: string;
+  is_selected: boolean;
+}
+
+interface PinterestCampaign {
+  id: string;
+  name: string;
+  status: string;
+  daily_budget?: number;
+}
+
+interface PinterestSettings {
+  global_batch_size: number;
+}
+
+interface ShopifyCollection {
+  id: string;
+  title: string;
+  products_count: number;
+}
+
+interface SyncAssignment {
+  id: string;
+  shop_id: string;
+  pinterest_campaign_id: string;
+  pinterest_campaign_name: string;
+  collection_id: string;
+  collection_name: string;
+  batch_indices: number[];
+  created_at: string;
+}
+
 export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   // Get shop data for Shopify credentials
   const { data: shop } = useShop(shopId);
 
   // Data queries
-  const { data: pinterestAuth, isLoading: authLoading } = usePinterestAuth(shopId);
-  const { data: adAccounts = [], isLoading: accountsLoading } = usePinterestAdAccounts(shopId);
-  const { data: campaigns = [], isLoading: campaignsLoading } = usePinterestCampaigns(
+  const { data: pinterestAuthRaw, isLoading: authLoading } = usePinterestAuth(shopId);
+  const pinterestAuth = pinterestAuthRaw as PinterestAuth | null;
+  const { data: adAccountsRaw = [], isLoading: accountsLoading } = usePinterestAdAccounts(shopId);
+  const adAccounts = adAccountsRaw as PinterestAdAccount[];
+  const { data: campaignsRaw = [], isLoading: campaignsLoading } = usePinterestCampaigns(
     shopId,
     adAccounts.find(a => a.is_selected)?.pinterest_account_id || null
   );
-  const { data: settings } = usePinterestSettings(shopId);
+  const campaigns = campaignsRaw as PinterestCampaign[];
+  const { data: settingsRaw } = usePinterestSettings(shopId);
+  const settings = settingsRaw as PinterestSettings | null;
   // Load collections directly from Shopify API
-  const { data: collections = [] } = useShopifyCollections(
-    shop?.shop_domain || null,
-    shop?.access_token || null
+  const { data: collectionsRaw = [] } = useShopifyCollections(
+    (shop as any)?.shop_domain || null,
+    (shop as any)?.access_token || null
   );
+  const collections = collectionsRaw as ShopifyCollection[];
 
   // Mutations
   const connectPinterest = useConnectPinterest();
@@ -46,6 +96,12 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   const refreshCampaigns = useRefreshPinterestCampaigns();
   const selectAdAccount = useSelectPinterestAdAccount();
   const updateSettings = useUpdatePinterestSettings();
+
+  // Sync assignments
+  const { data: syncAssignmentsRaw = [] } = useCampaignBatchAssignments(shopId);
+  const syncAssignments = syncAssignmentsRaw as SyncAssignment[];
+  const createAssignment = useCreateCampaignBatchAssignment();
+  const deleteAssignment = useDeleteCampaignBatchAssignment();
 
   // Local state
   const [searchQuery, setSearchQuery] = useState('');
@@ -163,10 +219,55 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   const batchSize = settings?.global_batch_size || 10;
   const maxBatches = selectedCollection ? Math.ceil((selectedCollection.products_count || 0) / batchSize) : 1;
 
-  // Filter campaigns for search
-  const filteredCampaigns = campaigns.filter(c =>
-    c.name.toLowerCase().includes(searchQuery.toLowerCase())
+  // Filter sync assignments for search
+  const filteredAssignments = syncAssignments.filter(a =>
+    (a.pinterest_campaign_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (a.collection_name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Get campaign name and collection name for an assignment
+  const getCampaignName = (assignment: any) => {
+    return assignment.pinterest_campaign_name || 'Unbekannte Kampagne';
+  };
+
+  const getCollectionName = (assignment: any) => {
+    return assignment.collection_name || 'Unbekannte Kollektion';
+  };
+
+  // Handle creating a sync assignment
+  const handleCreateSync = async () => {
+    if (!formState.selectedCampaignId || !formState.selectedCollectionId) return;
+
+    const selectedCampaign = campaigns.find(c => c.id === formState.selectedCampaignId);
+    const selectedCol = collections.find(c => c.id === formState.selectedCollectionId);
+
+    if (!selectedCampaign || !selectedCol) return;
+
+    await createAssignment.mutateAsync({
+      shop_id: shopId,
+      pinterest_campaign_id: formState.selectedCampaignId,
+      pinterest_campaign_name: selectedCampaign.name,
+      collection_id: formState.selectedCollectionId,
+      collection_name: selectedCol.title,
+      batch_indices: [formState.selectedBatch]
+    });
+
+    // Reset form
+    setFormState({
+      ...formState,
+      selectedCampaignId: '',
+      selectedCollectionId: '',
+      selectedBatch: 1
+    });
+  };
+
+  // Handle delete confirmation
+  const confirmDelete = async () => {
+    if (linkToDelete) {
+      await deleteAssignment.mutateAsync(linkToDelete);
+      setLinkToDelete(null);
+    }
+  };
 
   return (
     <div className="space-y-6 h-full flex flex-col animate-in fade-in duration-500 relative">
@@ -193,10 +294,11 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
                   Abbrechen
                 </button>
                 <button
-                  onClick={() => setLinkToDelete(null)}
-                  className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium transition-colors shadow-lg shadow-red-900/20"
+                  onClick={confirmDelete}
+                  disabled={deleteAssignment.isPending}
+                  className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium transition-colors shadow-lg shadow-red-900/20 disabled:opacity-50"
                 >
-                  Löschen
+                  {deleteAssignment.isPending ? 'Löschen...' : 'Löschen'}
                 </button>
               </div>
             </div>
@@ -304,30 +406,21 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
       {/* MAIN CONTENT */}
       <div className="flex-1 min-h-0 grid grid-cols-12 gap-6">
 
-        {/* LEFT: CAMPAIGNS LIST */}
+        {/* LEFT: SYNC REGISTRY */}
         <div className="col-span-12 lg:col-span-5 flex flex-col bg-zinc-900/20 border border-zinc-800 rounded-xl overflow-hidden">
+          {/* Header & Search */}
           <div className="p-4 border-b border-zinc-800 bg-zinc-900/40 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-zinc-200 text-sm">Kampagnen</h3>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] bg-zinc-800 px-2 py-0.5 rounded-full text-zinc-400 border border-zinc-700">
-                  {campaigns.length} Kampagnen
-                </span>
-                <button
-                  onClick={handleRefreshCampaigns}
-                  disabled={refreshCampaigns.isPending || !selectedAdAccount}
-                  className="p-1.5 hover:bg-zinc-800 rounded text-zinc-500 hover:text-white transition-colors disabled:opacity-50"
-                  title="Kampagnen neu laden"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${refreshCampaigns.isPending ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
+              <h3 className="font-semibold text-zinc-200 text-sm">Sync Registry</h3>
+              <span className="text-[10px] bg-zinc-800 px-2 py-0.5 rounded-full text-zinc-400 border border-zinc-700">
+                {filteredAssignments.length} Aktiv
+              </span>
             </div>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
               <input
                 type="text"
-                placeholder="Kampagne suchen..."
+                placeholder="Kampagne oder Kollektion suchen..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-md py-1.5 pl-8 pr-2 text-xs text-white focus:outline-none focus:border-zinc-600 transition-colors placeholder:text-zinc-700"
@@ -335,51 +428,62 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
-            {campaignsLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-6 h-6 text-zinc-500 animate-spin" />
-              </div>
-            ) : filteredCampaigns.length > 0 ? (
-              <div className="divide-y divide-zinc-800/40">
-                {filteredCampaigns.map(campaign => (
-                  <div key={campaign.id} className="p-4 hover:bg-zinc-900/50 transition-colors">
-                    <div className="flex items-start gap-3">
-                      <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
-                        campaign.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-amber-500'
-                      }`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-zinc-200 truncate">
-                          {campaign.name}
+          {/* Table Content */}
+          <div className="flex-1 overflow-y-auto custom-scrollbar bg-zinc-950/30">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-zinc-950/80 text-[10px] uppercase text-zinc-500 font-semibold sticky top-0 z-10 backdrop-blur-md border-b border-zinc-800/50">
+                <tr>
+                  <th className="px-4 py-2 font-medium tracking-wider">Job Details</th>
+                  <th className="px-2 py-2 text-center font-medium tracking-wider w-16">Batch</th>
+                  <th className="px-4 py-2 text-right font-medium tracking-wider w-12"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/40">
+                {filteredAssignments.length > 0 ? (
+                  filteredAssignments.map(assignment => (
+                    <tr key={assignment.id} className="group hover:bg-zinc-900/50 transition-colors">
+                      <td className="px-4 py-3 align-top">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]" />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-medium text-zinc-200 truncate" title={getCampaignName(assignment)}>
+                              {getCampaignName(assignment)}
+                            </div>
+                            <div className="text-[10px] text-zinc-500 truncate mt-0.5" title={getCollectionName(assignment)}>
+                              {getCollectionName(assignment)}
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                            campaign.status === 'ACTIVE'
-                              ? 'bg-emerald-500/10 text-emerald-400'
-                              : 'bg-amber-500/10 text-amber-400'
-                          }`}>
-                            {campaign.status}
-                          </span>
-                          {campaign.daily_budget && (
-                            <span className="text-[10px] text-zinc-500">
-                              {(campaign.daily_budget / 1000000).toFixed(2)}€/Tag
-                            </span>
-                          )}
-                        </div>
+                      </td>
+                      <td className="px-2 py-3 text-center align-middle">
+                        <span className="text-[10px] font-mono text-zinc-400">
+                          #{assignment.batch_indices?.[0] || 1}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right align-top">
+                        <button
+                          onClick={() => setLinkToDelete(assignment.id)}
+                          className="p-1.5 hover:bg-red-500/10 rounded-md text-zinc-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                          title="Sync entfernen"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-12 text-center">
+                      <div className="flex flex-col items-center justify-center text-zinc-600">
+                        <Filter className="w-6 h-6 mb-2 opacity-20" />
+                        <p className="text-xs">Keine Sync-Jobs vorhanden</p>
+                        <p className="text-[10px] text-zinc-500 mt-1">Erstelle rechts eine neue Synchronisation</p>
                       </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-12 text-zinc-600">
-                <Target className="w-8 h-8 mb-2 opacity-20" />
-                <p className="text-xs">Keine Kampagnen gefunden</p>
-                {!selectedAdAccount && (
-                  <p className="text-[10px] text-zinc-500 mt-1">Wähle zuerst ein Ad Account</p>
+                    </td>
+                  </tr>
                 )}
-              </div>
-            )}
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -397,18 +501,31 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
 
               {/* SECTION 1: CAMPAIGN */}
               <div className="space-y-4">
-                <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-                  <Target className="w-3.5 h-3.5" /> 1. Kampagne wählen
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                    <Target className="w-3.5 h-3.5" /> 1. Kampagne wählen
+                  </label>
+                  <button
+                    onClick={handleRefreshCampaigns}
+                    disabled={refreshCampaigns.isPending || !selectedAdAccount}
+                    className="p-1.5 hover:bg-zinc-800 rounded text-zinc-500 hover:text-white transition-colors disabled:opacity-50"
+                    title="Kampagnen neu laden"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${refreshCampaigns.isPending ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
 
                 <select
                   value={formState.selectedCampaignId}
                   onChange={(e) => setFormState({...formState, selectedCampaignId: e.target.value})}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-3 px-4 text-sm text-white focus:outline-none focus:border-zinc-600 appearance-none"
+                  disabled={campaignsLoading || campaigns.length === 0}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-3 px-4 text-sm text-white focus:outline-none focus:border-zinc-600 appearance-none disabled:opacity-50"
                 >
-                  <option value="">-- Kampagne auswählen --</option>
-                  {campaigns.filter(c => c.status === 'ACTIVE').map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                  <option value="">-- Kampagne auswählen ({campaigns.length} verfügbar) --</option>
+                  {campaigns.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.status})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -463,11 +580,16 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
               {/* ACTION */}
               <div className="pt-6 border-t border-zinc-800">
                 <button
-                  disabled={!formState.selectedCampaignId || !formState.selectedCollectionId}
+                  onClick={handleCreateSync}
+                  disabled={!formState.selectedCampaignId || !formState.selectedCollectionId || createAssignment.isPending}
                   className="w-full bg-[#E60023] hover:bg-[#ad081b] disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-bold py-3 rounded-xl transition-colors disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  <Save className="w-4 h-4" />
-                  Sync erstellen
+                  {createAssignment.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  {createAssignment.isPending ? 'Speichern...' : 'Sync erstellen'}
                 </button>
               </div>
 

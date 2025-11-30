@@ -206,7 +206,7 @@ export function useUpdatePinterestSettings() {
         .upsert({
           shop_id: shopId,
           ...settings
-        }, { onConflict: 'shop_id' })
+        } as any, { onConflict: 'shop_id' })
         .select()
         .single()
 
@@ -229,13 +229,12 @@ export function useCampaignBatchAssignments(shopId: string | null) {
     queryFn: async () => {
       if (!shopId) return []
 
+      // Query assignments directly by shop_id
       const { data, error } = await supabase
         .from('campaign_batch_assignments')
-        .select(`
-          *,
-          pinterest_campaigns(name, status)
-        `)
-        .eq('pinterest_campaigns.shop_id', shopId)
+        .select('*')
+        .eq('shop_id', shopId)
+        .order('created_at', { ascending: false })
 
       if (error) throw error
       return data || []
@@ -249,21 +248,24 @@ export function useCreateCampaignBatchAssignment() {
 
   return useMutation({
     mutationFn: async (assignment: {
-      campaign_id: string
+      shop_id: string
+      pinterest_campaign_id: string
+      pinterest_campaign_name: string
       collection_id: string
+      collection_name: string
       batch_indices: number[]
     }) => {
       const { data, error } = await supabase
         .from('campaign_batch_assignments')
-        .insert(assignment)
+        .insert(assignment as any)
         .select()
         .single()
 
       if (error) throw error
       return data
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['campaign-batch-assignments'] })
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['campaign-batch-assignments', variables.shop_id] })
     }
   })
 }
