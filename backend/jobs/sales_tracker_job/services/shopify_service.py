@@ -6,6 +6,7 @@ import time
 import requests
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import sys
 import os
@@ -98,6 +99,13 @@ class ShopifyService:
         result, _ = self._make_request("GET", "shop.json")
         return result is not None
 
+    def get_shop_timezone(self) -> str:
+        """Get shop timezone from Shopify API."""
+        result, _ = self._make_request("GET", "shop.json")
+        if result and 'shop' in result:
+            return result['shop'].get('iana_timezone', 'Europe/Berlin')
+        return 'Europe/Berlin'  # Fallback
+
     def get_collection_products(self, collection_id: str) -> List[Product]:
         """Get all products from a collection."""
         products = []
@@ -123,8 +131,16 @@ class ShopifyService:
         return products
 
     def get_product_sales_comprehensive(self, product_id: str, since_date: datetime,
-                                         date_added_to_collection: datetime = None) -> SalesData:
-        """Get comprehensive sales data for a product."""
+                                         date_added_to_collection: datetime = None,
+                                         shop_timezone: str = 'Europe/Berlin') -> SalesData:
+        """Get comprehensive sales data for a product.
+
+        Args:
+            product_id: Shopify product ID
+            since_date: Earliest date to fetch orders from
+            date_added_to_collection: When product was added to collection (for first 7 days calc)
+            shop_timezone: IANA timezone string (e.g., 'Europe/Berlin')
+        """
         total_sales = 0.0
         total_quantity = 0
         processed_orders = set()
@@ -191,57 +207,77 @@ class ShopifyService:
             if not next_url:
                 break
 
-        # Calculate time-based metrics
+        # Calculate time-based metrics using shop timezone
         sales_first_7_days = 0
         sales_last_3_days = 0
         sales_last_7_days = 0
         sales_last_10_days = 0
         sales_last_14_days = 0
 
+        # Use shop timezone for all date calculations
+        try:
+            shop_tz = ZoneInfo(shop_timezone)
+        except Exception:
+            shop_tz = ZoneInfo('Europe/Berlin')
+
+        now = datetime.now(shop_tz)
+
+        # "Last X days" should EXCLUDE today
+        # End of yesterday = today at 00:00:00 minus 1 microsecond
+        end_of_yesterday = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(microseconds=1)
+        start_of_yesterday = end_of_yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # Last X days = from (yesterday - X + 1 days) at 00:00 to yesterday at 23:59:59
+        # Last 3 days: yesterday, day before yesterday, day before that
+        cutoff_3 = start_of_yesterday - timedelta(days=2)   # 3 days total including yesterday
+        cutoff_7 = start_of_yesterday - timedelta(days=6)   # 7 days total
+        cutoff_10 = start_of_yesterday - timedelta(days=9)  # 10 days total
+        cutoff_14 = start_of_yesterday - timedelta(days=13) # 14 days total
+
         if all_order_dates_with_quantities:
             # Sort by date
             all_order_dates_with_quantities.sort(key=lambda x: x[0])
 
-            # Get timezone from first order
-            tz = all_order_dates_with_quantities[0][0].tzinfo
-            now = datetime.now(tz)
-
             # First 7 days calculation
             if date_added_to_collection:
                 first_date = date_added_to_collection
-                if first_date.tzinfo is None and tz is not None:
-                    first_date = first_date.replace(tzinfo=tz)
+                if first_date.tzinfo is None:
+                    first_date = first_date.replace(tzinfo=shop_tz)
+                else:
+                    first_date = first_date.astimezone(shop_tz)
                 cutoff_date_first = first_date + timedelta(days=7)
 
                 for order_date, quantity in all_order_dates_with_quantities:
-                    if first_date <= order_date <= cutoff_date_first:
+                    order_date_local = order_date.astimezone(shop_tz)
+                    if first_date <= order_date_local <= cutoff_date_first:
                         sales_first_7_days += quantity
             else:
                 # Fallback: from oldest order
-                first_order_date = all_order_dates_with_quantities[0][0]
+                first_order_date = all_order_dates_with_quantities[0][0].astimezone(shop_tz)
                 cutoff_date_first = first_order_date + timedelta(days=7)
 
                 for order_date, quantity in all_order_dates_with_quantities:
-                    if order_date <= cutoff_date_first:
+                    order_date_local = order_date.astimezone(shop_tz)
+                    if order_date_local <= cutoff_date_first:
                         sales_first_7_days += quantity
 
-            # Last X days calculations
-            cutoff_3 = now - timedelta(days=3)
-            cutoff_7 = now - timedelta(days=7)
-            cutoff_10 = now - timedelta(days=10)
-            cutoff_14 = now - timedelta(days=14)
-
+            # Last X days calculations - only count orders up to end of yesterday
             for order_date, quantity in all_order_dates_with_quantities:
-                if order_date >= cutoff_3:
-                    sales_last_3_days += quantity
-                if order_date >= cutoff_7:
-                    sales_last_7_days += quantity
-                if order_date >= cutoff_10:
-                    sales_last_10_days += quantity
-                if order_date >= cutoff_14:
-                    sales_last_14_days += quantity
+                order_date_local = order_date.astimezone(shop_tz)
+
+                # Only count if order is before end of yesterday (exclude today)
+                if order_date_local <= end_of_yesterday:
+                    if order_date_local >= cutoff_3:
+                        sales_last_3_days += quantity
+                    if order_date_local >= cutoff_7:
+                        sales_last_7_days += quantity
+                    if order_date_local >= cutoff_10:
+                        sales_last_10_days += quantity
+                    if order_date_local >= cutoff_14:
+                        sales_last_14_days += quantity
 
         print(f"    Found {len(processed_orders)} orders, {total_quantity} items, ${total_sales:.2f} total")
+        print(f"    Last 3/7/10/14 days: {sales_last_3_days}/{sales_last_7_days}/{sales_last_10_days}/{sales_last_14_days}")
 
         return SalesData(
             product_id=product_id,
@@ -253,6 +289,6 @@ class ShopifyService:
             sales_last_7_days=sales_last_7_days,
             sales_last_10_days=sales_last_10_days,
             sales_last_14_days=sales_last_14_days,
-            last_update=datetime.now(),
+            last_update=datetime.now(shop_tz),
             date_added_to_collection=date_added_to_collection
         )

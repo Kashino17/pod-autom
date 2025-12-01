@@ -43,6 +43,10 @@ def process_shop(supabase: SupabaseService, shop: Shop,
 
     print(f"  Connected to Shopify successfully")
 
+    # Get shop timezone from Shopify
+    shop_timezone = shopify.get_shop_timezone()
+    print(f"  Shop timezone: {shop_timezone}")
+
     # Get unique collections from assignments
     collection_ids = supabase.get_unique_collections(assignments)
     print(f"  Found {len(collection_ids)} unique collections to process")
@@ -76,11 +80,12 @@ def process_shop(supabase: SupabaseService, shop: Shop,
                     if since_date.tzinfo is None:
                         since_date = since_date.replace(tzinfo=timezone.utc)
 
-                    # Fetch comprehensive sales data
+                    # Fetch comprehensive sales data with shop timezone
                     sales_data = shopify.get_product_sales_comprehensive(
                         product.id,
                         since_date,
-                        date_added_to_collection=existing.date_added_to_collection if existing else product.created_at
+                        date_added_to_collection=existing.date_added_to_collection if existing else product.created_at,
+                        shop_timezone=shop_timezone
                     )
 
                     # Update with product title
