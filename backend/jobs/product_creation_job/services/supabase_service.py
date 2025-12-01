@@ -32,7 +32,7 @@ class SupabaseService:
             # Get shops with research tables from registry
             registry_response = self.client.table('shop_research_tables').select(
                 'shop_id, table_name'
-            ).eq('is_active', True).execute()
+            ).execute()
 
             shop_ids_with_tables = {r['shop_id']: r['table_name'] for r in registry_response.data}
 
