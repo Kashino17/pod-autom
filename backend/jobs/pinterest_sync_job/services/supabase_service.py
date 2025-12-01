@@ -221,20 +221,13 @@ class SupabaseService:
     def log_sync_result(self, shop_id: str, campaign_id: str,
                         shopify_product_id: str, pinterest_pin_id: Optional[str],
                         success: bool, error: Optional[str] = None):
-        """Log individual product sync result."""
-        try:
-            self.client.table('pinterest_sync_log').insert({
-                'shop_id': shop_id,
-                'campaign_id': campaign_id,
-                'shopify_product_id': shopify_product_id,
-                'pinterest_pin_id': pinterest_pin_id,
-                'success': success,
-                'error': error,
-                'synced_at': datetime.now(timezone.utc).isoformat()
-            }).execute()
-        except Exception as e:
-            # Sync log table might not exist, just print
-            print(f"Could not log sync result: {e}")
+        """Log individual product sync result.
+
+        Note: pinterest_sync_log table doesn't exist yet.
+        This is a no-op until the table is created.
+        """
+        # Table doesn't exist, skip logging for now
+        pass
 
     def update_pinterest_tokens(self, shop_id: str, access_token: str,
                                  refresh_token: Optional[str], expires_at: Optional[str]):

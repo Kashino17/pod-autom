@@ -75,7 +75,7 @@ Antworte NUR mit der fertigen Beschreibung, ohne Erklärungen."""
                         {"role": "system", "content": "Du bist ein Pinterest Marketing Experte für E-Commerce."},
                         {"role": "user", "content": prompt}
                     ],
-                    "max_tokens": 300,
+                    "max_completion_tokens": 300,
                     "temperature": 0.7
                 },
                 timeout=30
@@ -131,7 +131,7 @@ Antworte NUR mit dem optimierten Titel."""
                     "messages": [
                         {"role": "user", "content": prompt}
                     ],
-                    "max_tokens": 50,
+                    "max_completion_tokens": 50,
                     "temperature": 0.5
                 },
                 timeout=15
