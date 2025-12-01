@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Share2, Plus, Search, Layers, Save, Trash2, ChevronDown,
-  AlertTriangle, Info, Target, RefreshCw, Loader2, LogOut, Check, Filter
+  Share2, Plus, Search, Layers, Save, Trash2,
+  AlertTriangle, Target, RefreshCw, Loader2, LogOut, Check, Filter
 } from 'lucide-react';
 import {
   usePinterestAuth,
@@ -13,7 +13,6 @@ import {
   useSyncPinterestAdAccounts,
   useRefreshPinterestCampaigns,
   useSelectPinterestAdAccount,
-  useUpdatePinterestSettings,
   useCampaignBatchAssignments,
   useCreateCampaignBatchAssignment,
   useDeleteCampaignBatchAssignment,
@@ -48,7 +47,6 @@ interface PinterestCampaign {
 
 interface PinterestSettings {
   global_batch_size: number;
-  url_prefix?: string;
 }
 
 // Shopify API collection response
@@ -105,7 +103,6 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   const syncAdAccounts = useSyncPinterestAdAccounts();
   const refreshCampaigns = useRefreshPinterestCampaigns();
   const selectAdAccount = useSelectPinterestAdAccount();
-  const updateSettings = useUpdatePinterestSettings();
 
   // Sync assignments
   const { data: syncAssignmentsRaw = [] } = useCampaignBatchAssignments(shopId);
@@ -117,10 +114,6 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   // Local state
   const [searchQuery, setSearchQuery] = useState('');
   const [linkToDelete, setLinkToDelete] = useState<string | null>(null);
-  const [tempBatchSize, setTempBatchSize] = useState(settings?.global_batch_size || 10);
-  const [tempUrlPrefix, setTempUrlPrefix] = useState(settings?.url_prefix || '');
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [formState, setFormState] = useState({
     campaignMode: 'EXISTING' as 'EXISTING' | 'NEW',
     selectedCampaignId: '',
@@ -137,16 +130,6 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   console.log('[PinterestSync] selectedAdAccount:', selectedAdAccount);
   console.log('[PinterestSync] campaigns:', campaigns);
   console.log('[PinterestSync] collections:', collections);
-
-  // Update settings when they load
-  useEffect(() => {
-    if (settings?.global_batch_size) {
-      setTempBatchSize(settings.global_batch_size);
-    }
-    if (settings?.url_prefix !== undefined) {
-      setTempUrlPrefix(settings.url_prefix || '');
-    }
-  }, [settings]);
 
   // Auto-sync ad accounts when connected but no accounts loaded
   useEffect(() => {
@@ -165,10 +148,6 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   }, [adAccounts, selectedAdAccount]);
 
   // Campaigns are now automatically loaded by usePinterestCampaigns when adAccountId is set
-
-  const hasBatchSizeChanged = tempBatchSize !== (settings?.global_batch_size || 10);
-  const hasUrlPrefixChanged = tempUrlPrefix !== (settings?.url_prefix || '');
-  const hasSettingsChanged = hasBatchSizeChanged || hasUrlPrefixChanged;
 
   // Handlers
   const handleConnect = () => {
@@ -200,43 +179,6 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
 
   const handleRefreshCollections = () => {
     refetchCollections();
-  };
-
-  const saveSettings = async () => {
-    setSaveStatus('idle');
-    setSaveError(null);
-
-    try {
-      console.log('[PinterestSync] Saving settings:', {
-        shopId,
-        global_batch_size: tempBatchSize,
-        url_prefix: tempUrlPrefix
-      });
-
-      await updateSettings.mutateAsync({
-        shopId,
-        settings: {
-          global_batch_size: tempBatchSize,
-          url_prefix: tempUrlPrefix
-        }
-      });
-
-      console.log('[PinterestSync] Settings saved successfully');
-      setSaveStatus('success');
-
-      // Reset success status after 3 seconds
-      setTimeout(() => setSaveStatus('idle'), 3000);
-    } catch (error) {
-      console.error('[PinterestSync] Error saving settings:', error);
-      setSaveStatus('error');
-      setSaveError(error instanceof Error ? error.message : 'Unbekannter Fehler');
-
-      // Reset error status after 5 seconds
-      setTimeout(() => {
-        setSaveStatus('idle');
-        setSaveError(null);
-      }, 5000);
-    }
   };
 
   // Loading state
@@ -440,75 +382,6 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
             <LogOut className="w-4 h-4" />
           </button>
         </div>
-      </div>
-
-      {/* SETTINGS BAR */}
-      <div className="bg-zinc-900/30 border border-zinc-800 rounded-xl p-4 shrink-0 relative">
-        <div className="flex flex-wrap items-center gap-4">
-          {/* Label */}
-          <div className="flex items-center gap-2">
-            <Info className="w-4 h-4 text-zinc-500" />
-            <span className="text-xs font-medium text-zinc-400">Einstellungen</span>
-          </div>
-
-          {/* URL Prefix */}
-          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-            <span className="text-xs text-zinc-500 whitespace-nowrap">URL Prefix:</span>
-            <input
-              type="text"
-              value={tempUrlPrefix}
-              onChange={(e) => setTempUrlPrefix(e.target.value)}
-              placeholder="https://deinshop.de"
-              className={`flex-1 bg-zinc-950 border rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none transition-colors ${hasUrlPrefixChanged ? 'border-indigo-500/50' : 'border-zinc-800'}`}
-            />
-          </div>
-
-          {/* Batch Size */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-500 whitespace-nowrap">Batch Size:</span>
-            <input
-              type="number"
-              min="1"
-              max="500"
-              value={tempBatchSize}
-              onChange={(e) => setTempBatchSize(Math.max(1, parseInt(e.target.value) || 10))}
-              className={`w-16 bg-zinc-950 border rounded-lg py-1.5 px-3 text-xs text-white text-center focus:outline-none transition-colors ${hasBatchSizeChanged ? 'border-indigo-500/50' : 'border-zinc-800'}`}
-            />
-          </div>
-
-          {/* Save Button */}
-          <button
-            onClick={saveSettings}
-            disabled={!hasSettingsChanged || updateSettings.isPending}
-            className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 shrink-0 ${
-              saveStatus === 'success'
-                ? 'bg-emerald-600 text-white'
-                : saveStatus === 'error'
-                ? 'bg-red-600 text-white'
-                : hasSettingsChanged
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
-            }`}
-          >
-            {updateSettings.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : saveStatus === 'success' ? (
-              <Check className="w-3.5 h-3.5" />
-            ) : saveStatus === 'error' ? (
-              <AlertTriangle className="w-3.5 h-3.5" />
-            ) : (
-              <Save className="w-3.5 h-3.5" />
-            )}
-            {saveStatus === 'success' ? 'Gespeichert!' : saveStatus === 'error' ? 'Fehler!' : 'Speichern'}
-          </button>
-        </div>
-
-        {/* Error message tooltip */}
-        {saveStatus === 'error' && saveError && (
-          <div className="mt-2 p-2 bg-red-900/90 border border-red-700 rounded-lg text-xs text-red-200">
-            {saveError}
-          </div>
-        )}
       </div>
 
       {/* MAIN CONTENT */}
