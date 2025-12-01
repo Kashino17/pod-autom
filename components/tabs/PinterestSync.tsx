@@ -48,6 +48,7 @@ interface PinterestCampaign {
 
 interface PinterestSettings {
   global_batch_size: number;
+  url_prefix?: string;
 }
 
 // Shopify API collection response
@@ -117,6 +118,7 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [linkToDelete, setLinkToDelete] = useState<string | null>(null);
   const [tempBatchSize, setTempBatchSize] = useState(settings?.global_batch_size || 10);
+  const [tempUrlPrefix, setTempUrlPrefix] = useState(settings?.url_prefix || '');
   const [formState, setFormState] = useState({
     campaignMode: 'EXISTING' as 'EXISTING' | 'NEW',
     selectedCampaignId: '',
@@ -134,10 +136,13 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   console.log('[PinterestSync] campaigns:', campaigns);
   console.log('[PinterestSync] collections:', collections);
 
-  // Update batch size when settings load
+  // Update settings when they load
   useEffect(() => {
     if (settings?.global_batch_size) {
       setTempBatchSize(settings.global_batch_size);
+    }
+    if (settings?.url_prefix !== undefined) {
+      setTempUrlPrefix(settings.url_prefix || '');
     }
   }, [settings]);
 
@@ -160,6 +165,8 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   // Campaigns are now automatically loaded by usePinterestCampaigns when adAccountId is set
 
   const hasBatchSizeChanged = tempBatchSize !== (settings?.global_batch_size || 10);
+  const hasUrlPrefixChanged = tempUrlPrefix !== (settings?.url_prefix || '');
+  const hasSettingsChanged = hasBatchSizeChanged || hasUrlPrefixChanged;
 
   // Handlers
   const handleConnect = () => {
@@ -193,10 +200,13 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
     refetchCollections();
   };
 
-  const saveBatchSize = async () => {
+  const saveSettings = async () => {
     await updateSettings.mutateAsync({
       shopId,
-      settings: { global_batch_size: tempBatchSize }
+      settings: {
+        global_batch_size: tempBatchSize,
+        url_prefix: tempUrlPrefix
+      }
     });
   };
 
@@ -391,47 +401,6 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Info Tooltip */}
-          <div className="relative group">
-            <Info className="w-4 h-4 text-zinc-500 hover:text-zinc-300 cursor-help transition-colors" />
-            <div className="absolute right-0 top-full mt-2 w-64 p-4 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
-              <h4 className="text-xs font-bold text-white mb-1.5 flex items-center gap-2">
-                <Layers className="w-3.5 h-3.5" />
-                Batch Konfiguration
-              </h4>
-              <p className="text-[11px] text-zinc-400 leading-relaxed">
-                Anzahl der Produkte pro Synchronisierung.
-              </p>
-            </div>
-          </div>
-
-          {/* Batch Size Input */}
-          <div className="flex items-center gap-1">
-            <div className={`flex items-center gap-2 px-3 py-1.5 bg-zinc-950 rounded-lg border transition-colors ${hasBatchSizeChanged ? 'border-indigo-500/50 bg-indigo-500/5' : 'border-zinc-800'}`}>
-              <input
-                type="number"
-                min="1"
-                max="500"
-                value={tempBatchSize}
-                onChange={(e) => setTempBatchSize(Math.max(1, parseInt(e.target.value) || 0))}
-                className="w-12 bg-transparent text-right text-xs text-white focus:outline-none font-mono"
-              />
-              <span className="text-xs text-zinc-500 select-none">Produkte/Batch</span>
-            </div>
-
-            <button
-              onClick={saveBatchSize}
-              disabled={!hasBatchSizeChanged || updateSettings.isPending}
-              className={`p-1.5 rounded-lg border transition-all duration-200 flex items-center justify-center w-8 h-8 ${
-                hasBatchSizeChanged
-                  ? 'bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500'
-                  : 'bg-zinc-900 border-zinc-800 text-zinc-700 cursor-not-allowed opacity-50'
-              }`}
-            >
-              <Save className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
           {/* Disconnect Button */}
           <button
             onClick={handleDisconnect}
@@ -442,6 +411,59 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
             <LogOut className="w-4 h-4" />
           </button>
         </div>
+      </div>
+
+      {/* SETTINGS BAR */}
+      <div className="flex items-center gap-4 bg-zinc-900/30 border border-zinc-800 rounded-xl p-4 shrink-0">
+        <div className="flex items-center gap-2">
+          <Info className="w-4 h-4 text-zinc-500" />
+          <span className="text-xs font-medium text-zinc-400">Einstellungen</span>
+        </div>
+
+        <div className="flex-1 flex items-center gap-6">
+          {/* URL Prefix */}
+          <div className="flex items-center gap-2 flex-1 max-w-md">
+            <span className="text-xs text-zinc-500 whitespace-nowrap">URL Prefix:</span>
+            <input
+              type="text"
+              value={tempUrlPrefix}
+              onChange={(e) => setTempUrlPrefix(e.target.value)}
+              placeholder="https://deinshop.de"
+              className={`flex-1 bg-zinc-950 border rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none transition-colors ${hasUrlPrefixChanged ? 'border-indigo-500/50' : 'border-zinc-800'}`}
+            />
+          </div>
+
+          {/* Batch Size */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-500 whitespace-nowrap">Batch Size:</span>
+            <input
+              type="number"
+              min="1"
+              max="500"
+              value={tempBatchSize}
+              onChange={(e) => setTempBatchSize(Math.max(1, parseInt(e.target.value) || 10))}
+              className={`w-16 bg-zinc-950 border rounded-lg py-1.5 px-3 text-xs text-white text-center focus:outline-none transition-colors ${hasBatchSizeChanged ? 'border-indigo-500/50' : 'border-zinc-800'}`}
+            />
+          </div>
+        </div>
+
+        {/* Save Button */}
+        <button
+          onClick={saveSettings}
+          disabled={!hasSettingsChanged || updateSettings.isPending}
+          className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 ${
+            hasSettingsChanged
+              ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+              : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
+          }`}
+        >
+          {updateSettings.isPending ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Save className="w-3.5 h-3.5" />
+          )}
+          Speichern
+        </button>
       </div>
 
       {/* MAIN CONTENT */}

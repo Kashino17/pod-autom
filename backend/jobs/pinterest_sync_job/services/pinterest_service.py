@@ -1,9 +1,9 @@
 """
 Pinterest API Service for Pinterest Sync Job
 Handles pin creation and token refresh
-Uses GPT-5.1 for optimized pin descriptions
 """
 import os
+import re
 import time
 import requests
 from typing import Dict, List, Optional
@@ -12,7 +12,6 @@ from datetime import datetime, timezone, timedelta
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import ShopifyProduct, PinterestPin, SyncResult
-from services.openai_service import OpenAIService
 
 
 class PinterestAPIClient:
@@ -20,8 +19,12 @@ class PinterestAPIClient:
 
     BASE_URL = "https://api.pinterest.com/v5"
 
+    # Pinterest limits
+    MAX_TITLE_LENGTH = 100
+    MAX_DESCRIPTION_LENGTH = 500
+
     def __init__(self, access_token: str, refresh_token: Optional[str] = None,
-                 expires_at: Optional[str] = None, use_gpt: bool = True):
+                 expires_at: Optional[str] = None):
         self.access_token = access_token
         self.refresh_token = refresh_token
         self.expires_at = expires_at
@@ -31,10 +34,6 @@ class PinterestAPIClient:
         # App credentials for token refresh
         self.app_id = os.environ.get('PINTEREST_APP_ID', '')
         self.app_secret = os.environ.get('PINTEREST_APP_SECRET', '')
-
-        # GPT-5.1 Service for optimized descriptions
-        self.use_gpt = use_gpt
-        self.openai_service = OpenAIService() if use_gpt else None
 
     @property
     def headers(self) -> Dict:
@@ -199,29 +198,51 @@ class PinterestAPIClient:
         print(f"  Total boards found: {len(boards)}")
         return boards
 
-    def create_pin(self, pin: PinterestPin, board_id: str) -> Optional[Dict]:
-        """Create an organic pin on a board.
+    def _clean_html(self, text: str) -> str:
+        """Remove HTML tags from text."""
+        if not text:
+            return ''
+        return re.sub(r'<[^>]+>', '', text).strip()
 
-        This creates a regular pin (not an ad pin).
-        For Shopping Ads, pins are created through the Ads API.
-        """
+    def _truncate_text(self, text: str, max_length: int) -> str:
+        """Truncate text to max length, trying to break at word boundary."""
+        if not text or len(text) <= max_length:
+            return text or ''
+
+        # Try to break at word boundary
+        truncated = text[:max_length]
+        last_space = truncated.rfind(' ')
+        if last_space > max_length * 0.7:  # Only if we don't lose too much
+            truncated = truncated[:last_space]
+
+        return truncated.rstrip() + '...'
+
+    def create_pin(self, pin: PinterestPin, board_id: str) -> Optional[Dict]:
+        """Create an organic pin on a board."""
         data = {
             "board_id": board_id,
-            "title": pin.title[:100],  # Pinterest max title length
-            "description": pin.description[:500] if pin.description else '',
-            "link": pin.link,
+            "title": self._truncate_text(pin.title, self.MAX_TITLE_LENGTH),
+            "description": self._truncate_text(pin.description, self.MAX_DESCRIPTION_LENGTH),
             "media_source": {
                 "source_type": "image_url",
                 "url": pin.media_source_url
             }
         }
 
+        # Only add link if it's not empty
+        if pin.link:
+            data["link"] = pin.link
+
         result = self._make_request("POST", "pins", data)
         return result
 
     def create_product_pin(self, product: ShopifyProduct, board_id: str,
                            product_url: str) -> SyncResult:
-        """Create a pin from a Shopify product using GPT-5.1 for descriptions."""
+        """Create a pin from a Shopify product.
+
+        Uses the original Shopify product title and description,
+        only cleaning HTML and truncating to Pinterest limits.
+        """
         if not product.primary_image_url:
             return SyncResult(
                 success=False,
@@ -229,38 +250,17 @@ class PinterestAPIClient:
                 error="Product has no images"
             )
 
-        # Use GPT-5.1 to generate optimized description
-        description = None
-        title = product.title[:100]
+        # Use original Shopify title (truncate if needed)
+        title = self._truncate_text(product.title, self.MAX_TITLE_LENGTH)
 
-        if self.use_gpt and self.openai_service:
-            # Try to generate optimized description with GPT-5.1
-            gpt_description = self.openai_service.generate_pin_description(
-                product_title=product.title,
-                product_description=product.description,
-                product_tags=product.tags
-            )
-            if gpt_description:
-                description = gpt_description
-                print(f"        [GPT-5.1] Generated optimized description")
-
-            # Optionally optimize title too
-            gpt_title = self.openai_service.generate_pin_title(product.title)
-            if gpt_title:
-                title = gpt_title
-
-        # Fallback: Clean up description manually (remove HTML)
-        if not description:
-            description = product.description
-            if description:
-                import re
-                description = re.sub(r'<[^>]+>', '', description)
-                description = description[:500]
+        # Use original Shopify description (clean HTML, truncate if needed)
+        description = self._clean_html(product.description)
+        description = self._truncate_text(description, self.MAX_DESCRIPTION_LENGTH)
 
         pin = PinterestPin(
             title=title,
-            description=description or '',
-            link=product_url,
+            description=description,
+            link=product_url if product_url else '',
             media_source_url=product.primary_image_url
         )
 
@@ -283,60 +283,6 @@ class PinterestAPIClient:
         """Get user's ad accounts."""
         result = self._make_request("GET", "ad_accounts")
         return result.get('items', []) if result else []
-
-    def create_ad_pin(self, ad_account_id: str, product: ShopifyProduct,
-                      product_url: str) -> SyncResult:
-        """Create a product pin for advertising.
-
-        Note: For Shopping Ads, you typically need to:
-        1. Have a product catalog synced
-        2. Create a campaign with shopping objective
-        3. Create ad groups targeting the catalog
-
-        This creates a simple promoted pin for now.
-        """
-        if not product.primary_image_url:
-            return SyncResult(
-                success=False,
-                shopify_product_id=product.id,
-                error="Product has no images"
-            )
-
-        # Clean description
-        description = product.description or ''
-        if description:
-            import re
-            description = re.sub(r'<[^>]+>', '', description)
-            description = description[:500]
-
-        # Create pin for ads
-        data = {
-            "ad_account_id": ad_account_id,
-            "title": product.title[:100],
-            "description": description,
-            "link": product_url,
-            "media_source": {
-                "source_type": "image_url",
-                "url": product.primary_image_url
-            }
-        }
-
-        result = self._make_request("POST", f"ad_accounts/{ad_account_id}/pins", data)
-
-        if result and result.get('id'):
-            return SyncResult(
-                success=True,
-                shopify_product_id=product.id,
-                pinterest_pin_id=result.get('id')
-            )
-        else:
-            # Try creating as organic pin if ad pin fails
-            print(f"    Ad pin creation failed, this may require catalog setup")
-            return SyncResult(
-                success=False,
-                shopify_product_id=product.id,
-                error="Ad pin creation requires catalog setup"
-            )
 
     def get_campaigns(self, ad_account_id: str) -> List[Dict]:
         """Get campaigns for an ad account."""
