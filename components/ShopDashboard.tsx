@@ -236,7 +236,7 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
                metaLinks={metaConfig.activeLinks}
             />
           ) : activeTab === 'limits' ? (
-            <RateLimits config={limitsConfig} onChange={setLimitsConfig} />
+            <RateLimits config={limitsConfig} onChange={setLimitsConfig} shop={shop} />
           ) : activeTab === 'product-creation' ? (
             <ProductCreation config={productCreationConfig} onChange={setProductCreationConfig} shop={shop} />
           ) : (
