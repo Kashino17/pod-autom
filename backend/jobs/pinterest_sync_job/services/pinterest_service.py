@@ -448,7 +448,9 @@ class PinterestAPIClient:
             }
         ]
 
+        print(f"        [DEBUG] Creating ad with data: {data}")
         result = self._make_request("POST", f"ad_accounts/{ad_account_id}/ads", data)
+        print(f"        [DEBUG] Create ad result: {result}")
 
         # API returns {"items": [...]} - extract first item
         if result and 'items' in result and len(result['items']) > 0:
