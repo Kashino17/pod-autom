@@ -443,15 +443,16 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
       </div>
 
       {/* SETTINGS BAR */}
-      <div className="flex items-center gap-4 bg-zinc-900/30 border border-zinc-800 rounded-xl p-4 shrink-0 relative">
-        <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-zinc-500" />
-          <span className="text-xs font-medium text-zinc-400">Einstellungen</span>
-        </div>
+      <div className="bg-zinc-900/30 border border-zinc-800 rounded-xl p-4 shrink-0 relative">
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Label */}
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-zinc-500" />
+            <span className="text-xs font-medium text-zinc-400">Einstellungen</span>
+          </div>
 
-        <div className="flex-1 flex items-center gap-6">
           {/* URL Prefix */}
-          <div className="flex items-center gap-2 flex-1 max-w-md">
+          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
             <span className="text-xs text-zinc-500 whitespace-nowrap">URL Prefix:</span>
             <input
               type="text"
@@ -474,37 +475,37 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
               className={`w-16 bg-zinc-950 border rounded-lg py-1.5 px-3 text-xs text-white text-center focus:outline-none transition-colors ${hasBatchSizeChanged ? 'border-indigo-500/50' : 'border-zinc-800'}`}
             />
           </div>
-        </div>
 
-        {/* Save Button */}
-        <button
-          onClick={saveSettings}
-          disabled={!hasSettingsChanged || updateSettings.isPending}
-          className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 ${
-            saveStatus === 'success'
-              ? 'bg-emerald-600 text-white'
-              : saveStatus === 'error'
-              ? 'bg-red-600 text-white'
-              : hasSettingsChanged
-              ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-              : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
-          }`}
-        >
-          {updateSettings.isPending ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : saveStatus === 'success' ? (
-            <Check className="w-3.5 h-3.5" />
-          ) : saveStatus === 'error' ? (
-            <AlertTriangle className="w-3.5 h-3.5" />
-          ) : (
-            <Save className="w-3.5 h-3.5" />
-          )}
-          {saveStatus === 'success' ? 'Gespeichert!' : saveStatus === 'error' ? 'Fehler!' : 'Speichern'}
-        </button>
+          {/* Save Button */}
+          <button
+            onClick={saveSettings}
+            disabled={!hasSettingsChanged || updateSettings.isPending}
+            className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 shrink-0 ${
+              saveStatus === 'success'
+                ? 'bg-emerald-600 text-white'
+                : saveStatus === 'error'
+                ? 'bg-red-600 text-white'
+                : hasSettingsChanged
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
+            }`}
+          >
+            {updateSettings.isPending ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : saveStatus === 'success' ? (
+              <Check className="w-3.5 h-3.5" />
+            ) : saveStatus === 'error' ? (
+              <AlertTriangle className="w-3.5 h-3.5" />
+            ) : (
+              <Save className="w-3.5 h-3.5" />
+            )}
+            {saveStatus === 'success' ? 'Gespeichert!' : saveStatus === 'error' ? 'Fehler!' : 'Speichern'}
+          </button>
+        </div>
 
         {/* Error message tooltip */}
         {saveStatus === 'error' && saveError && (
-          <div className="absolute top-full right-0 mt-2 p-2 bg-red-900/90 border border-red-700 rounded-lg text-xs text-red-200 max-w-xs z-50">
+          <div className="mt-2 p-2 bg-red-900/90 border border-red-700 rounded-lg text-xs text-red-200">
             {saveError}
           </div>
         )}
