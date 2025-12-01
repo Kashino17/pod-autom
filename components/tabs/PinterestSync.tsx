@@ -129,6 +129,11 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   // Get selected ad account
   const selectedAdAccount = adAccounts.find(a => a.is_selected);
 
+  // Debug logging
+  console.log('[PinterestSync] adAccounts:', adAccounts);
+  console.log('[PinterestSync] selectedAdAccount:', selectedAdAccount);
+  console.log('[PinterestSync] campaigns:', campaigns);
+
   // Update batch size when settings load
   useEffect(() => {
     if (settings?.global_batch_size) {
@@ -139,6 +144,7 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   // Auto-sync ad accounts when connected but no accounts loaded
   useEffect(() => {
     if (pinterestAuth?.is_connected && !accountsLoading && adAccounts.length === 0 && !syncAdAccounts.isPending) {
+      console.log('[PinterestSync] Auto-syncing ad accounts...');
       syncAdAccounts.mutate(shopId);
     }
   }, [pinterestAuth?.is_connected, accountsLoading, adAccounts.length]);
@@ -146,6 +152,7 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   // Auto-select first ad account if none selected
   useEffect(() => {
     if (adAccounts.length > 0 && !selectedAdAccount && !selectAdAccount.isPending) {
+      console.log('[PinterestSync] Auto-selecting first ad account:', adAccounts[0].pinterest_account_id);
       selectAdAccount.mutate({ shopId, adAccountId: adAccounts[0].pinterest_account_id });
     }
   }, [adAccounts, selectedAdAccount]);

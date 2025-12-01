@@ -17,9 +17,9 @@ export function usePinterestAuth(shopId: string | null) {
         .from('pinterest_auth')
         .select('*')
         .eq('shop_id', shopId)
-        .single()
+        .maybeSingle()
 
-      if (error && error.code !== 'PGRST116') throw error
+      if (error) throw error
       return data
     },
     enabled: !!shopId
@@ -187,9 +187,9 @@ export function usePinterestSettings(shopId: string | null) {
         .from('pinterest_settings')
         .select('*')
         .eq('shop_id', shopId)
-        .single()
+        .maybeSingle()
 
-      if (error && error.code !== 'PGRST116') throw error
+      if (error) throw error
       return data
     },
     enabled: !!shopId
