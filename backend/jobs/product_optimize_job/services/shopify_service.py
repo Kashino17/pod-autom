@@ -103,57 +103,54 @@ class ShopifyRESTClient:
         return result is not None
 
     def get_products_by_tag(self, tag: str, limit: int = 50) -> List[ShopifyProduct]:
-        """Get products with a specific tag."""
+        """Get products with a specific tag (searches draft products first, then all)."""
         products = []
-        since_id = 0
-        total_checked = 0
 
-        print(f"  Searching for products with tag: '{tag}'")
-
-        while len(products) < limit:
-            # Use status=any to include draft products
-            endpoint = f"products.json?limit=250&status=any"
-            if since_id:
-                endpoint += f"&since_id={since_id}"
-
-            result = self._make_request("GET", endpoint)
-            if not result or 'products' not in result:
-                print(f"  No results from API")
+        # Search draft products first (most likely to have NEW_SET tag)
+        for status in ['draft', 'active', 'archived']:
+            if len(products) >= limit:
                 break
 
-            batch = result['products']
-            if not batch:
-                print(f"  Empty batch")
-                break
+            since_id = 0
+            while len(products) < limit:
+                endpoint = f"products.json?limit=250&status={status}"
+                if since_id:
+                    endpoint += f"&since_id={since_id}"
 
-            print(f"  Checking batch of {len(batch)} products...")
+                print(f"    Fetching {status} products (since_id={since_id})...")
+                result = self._make_request("GET", endpoint)
 
-            # Filter by tag
-            for product_data in batch:
-                product = ShopifyProduct.from_api(product_data)
-                total_checked += 1
+                if not result or 'products' not in result:
+                    print(f"    No result for {status}")
+                    break
 
-                # Debug: Show first few products' tags
-                if total_checked <= 5:
-                    print(f"    Product '{product.title[:30]}' has tags: {product.tags}")
+                batch = result['products']
+                if not batch:
+                    print(f"    No {status} products found")
+                    break
 
-                # Check if tag exists in product tags (case-insensitive)
-                has_target_tag = any(t.upper() == tag.upper() for t in product.tags)
-                has_optimized_tag = any(t.upper() == self.OPTIMIZED_TAG.upper() for t in product.tags)
+                print(f"    Got {len(batch)} {status} products, checking for tag '{tag}'...")
 
-                if has_target_tag and not has_optimized_tag:
-                    products.append(product)
-                    print(f"    MATCH: '{product.title[:40]}' (status: {product.status})")
-                    if len(products) >= limit:
-                        break
+                # Filter by tag
+                for product_data in batch:
+                    product = ShopifyProduct.from_api(product_data)
+                    # Debug: Show first few products
+                    if len(products) == 0 and batch.index(product_data) < 3:
+                        print(f"      Product: {product.title[:40]}, tags: {product.tags}, status: {product.status}")
 
-            since_id = batch[-1]['id']
+                    if tag in product.tags and self.OPTIMIZED_TAG not in product.tags:
+                        products.append(product)
+                        print(f"    Found matching product: {product.title[:50]}")
+                        if len(products) >= limit:
+                            break
 
-            # If we got less than 250, we're at the end
-            if len(batch) < 250:
-                break
+                since_id = batch[-1]['id']
 
-        print(f"  Total products checked: {total_checked}, matches found: {len(products)}")
+                # If we got less than 250, we're at the end of this status
+                if len(batch) < 250:
+                    break
+
+        print(f"    Total found: {len(products)} products with tag '{tag}'")
         return products
 
     def update_product(self, product_id: str, updates: Dict) -> Optional[Dict]:
