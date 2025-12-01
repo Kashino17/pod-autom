@@ -35,7 +35,8 @@ class ShopifyRESTClient:
         if elapsed < self.min_request_interval:
             time.sleep(self.min_request_interval - elapsed)
 
-    def _make_request(self, method: str, endpoint: str, data: Dict = None) -> Optional[Dict]:
+    def _make_request(self, method: str, endpoint: str, data: Dict = None,
+                       silent_404: bool = False) -> Optional[Dict]:
         """Make HTTP request with error handling."""
         self._rate_limit()
 
@@ -62,7 +63,9 @@ class ShopifyRESTClient:
                     continue
 
                 if response.status_code >= 400:
-                    print(f"API Error {response.status_code}: {response.text[:200]}")
+                    # Don't log 404 errors when silent_404 is True (expected fallback behavior)
+                    if not (silent_404 and response.status_code == 404):
+                        print(f"API Error {response.status_code}: {response.text[:200]}")
                     if response.status_code in [500, 502, 503, 504]:
                         retry_count += 1
                         time.sleep(2 ** retry_count)
@@ -284,18 +287,18 @@ class ShopifyRESTClient:
         if cache_key in self._collection_cache:
             return self._collection_cache[cache_key]
 
-        # Try custom collection first
+        # Try custom collection first (silent 404 - expected fallback to smart collection)
         endpoint = f"custom_collections/{collection_id}.json"
-        result = self._make_request("GET", endpoint)
+        result = self._make_request("GET", endpoint, silent_404=True)
 
         if result and 'custom_collection' in result:
             handle = result['custom_collection'].get('handle')
             self._collection_cache[cache_key] = handle
             return handle
 
-        # Try smart collection
+        # Try smart collection (silent 404 - will warn below if both fail)
         endpoint = f"smart_collections/{collection_id}.json"
-        result = self._make_request("GET", endpoint)
+        result = self._make_request("GET", endpoint, silent_404=True)
 
         if result and 'smart_collection' in result:
             handle = result['smart_collection'].get('handle')
