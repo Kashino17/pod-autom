@@ -83,8 +83,8 @@ export interface Database {
         Row: {
           id: string
           shop_id: string
-          min_sales_day7_delete: number
-          min_sales_day7_replace: number
+          start_phase_replace_threshold: number
+          start_phase_keep_threshold: number
           avg3_ok: number
           avg7_ok: number
           avg10_ok: number
@@ -105,8 +105,8 @@ export interface Database {
         Insert: {
           id?: string
           shop_id: string
-          min_sales_day7_delete?: number
-          min_sales_day7_replace?: number
+          start_phase_replace_threshold?: number
+          start_phase_keep_threshold?: number
           avg3_ok?: number
           avg7_ok?: number
           avg10_ok?: number
@@ -127,8 +127,8 @@ export interface Database {
         Update: {
           id?: string
           shop_id?: string
-          min_sales_day7_delete?: number
-          min_sales_day7_replace?: number
+          start_phase_replace_threshold?: number
+          start_phase_keep_threshold?: number
           avg3_ok?: number
           avg7_ok?: number
           avg10_ok?: number

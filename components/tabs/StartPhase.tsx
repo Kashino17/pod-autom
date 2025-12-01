@@ -27,8 +27,8 @@ export const StartPhase: React.FC<StartPhaseProps> = ({ config, onChange, onOpen
         .from('shop_rules')
         .upsert({
           shop_id: shopId,
-          min_sales_day7_delete: config.deleteThreshold,
-          min_sales_day7_replace: config.keepThreshold,
+          start_phase_replace_threshold: config.deleteThreshold,
+          start_phase_keep_threshold: config.keepThreshold,
           updated_at: new Date().toISOString()
         }, {
           onConflict: 'shop_id'

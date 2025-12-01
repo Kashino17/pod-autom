@@ -82,8 +82,8 @@ class SupabaseService:
 
                     # Build initial phase rules from shop_rules
                     initial_phase_rules = {
-                        'min_sales_day7_delete': rules_data.get('min_sales_day7_delete', 0),
-                        'min_sales_day7_replace': rules_data.get('min_sales_day7_replace', 1)
+                        'min_sales_day7_delete': rules_data.get('start_phase_replace_threshold', 0),
+                        'min_sales_day7_replace': rules_data.get('start_phase_keep_threshold', 1)
                     }
 
                     # Build post phase rules from shop_rules

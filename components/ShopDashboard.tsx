@@ -152,8 +152,8 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
           // Update Start Phase config
           setStartConfig(prev => ({
             ...prev,
-            deleteThreshold: data.min_sales_day7_delete ?? prev.deleteThreshold,
-            keepThreshold: data.min_sales_day7_replace ?? prev.keepThreshold,
+            deleteThreshold: data.start_phase_replace_threshold ?? prev.deleteThreshold,
+            keepThreshold: data.start_phase_keep_threshold ?? prev.keepThreshold,
           }));
 
           // Update Post Phase config
