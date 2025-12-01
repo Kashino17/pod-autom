@@ -220,14 +220,83 @@ class SupabaseService:
 
     def log_sync_result(self, shop_id: str, campaign_id: str,
                         shopify_product_id: str, pinterest_pin_id: Optional[str],
-                        success: bool, error: Optional[str] = None):
-        """Log individual product sync result.
+                        pinterest_board_id: Optional[str], success: bool,
+                        error: Optional[str] = None):
+        """Log individual product sync result to pinterest_sync_log table."""
+        try:
+            self.client.table('pinterest_sync_log').upsert({
+                'shop_id': shop_id,
+                'campaign_id': campaign_id,
+                'shopify_product_id': shopify_product_id,
+                'pinterest_pin_id': pinterest_pin_id,
+                'pinterest_board_id': pinterest_board_id,
+                'status': 'active' if success else 'failed',
+                'success': success,
+                'error': error,
+                'synced_at': datetime.now(timezone.utc).isoformat()
+            }, on_conflict='shop_id,campaign_id,shopify_product_id').execute()
+        except Exception as e:
+            print(f"    [WARNING] Failed to log sync result: {e}")
 
-        Note: pinterest_sync_log table doesn't exist yet.
-        This is a no-op until the table is created.
-        """
-        # Table doesn't exist, skip logging for now
-        pass
+    def is_product_already_synced(self, shop_id: str, campaign_id: str,
+                                   shopify_product_id: str) -> bool:
+        """Check if a product has already been synced to this campaign."""
+        try:
+            result = self.client.table('pinterest_sync_log').select(
+                'id, status'
+            ).eq('shop_id', shop_id).eq(
+                'campaign_id', campaign_id
+            ).eq('shopify_product_id', shopify_product_id).eq(
+                'status', 'active'
+            ).execute()
+
+            return len(result.data) > 0
+        except Exception as e:
+            print(f"    [WARNING] Failed to check sync status: {e}")
+            return False
+
+    def get_synced_products_for_campaign(self, shop_id: str, campaign_id: str) -> List[Dict]:
+        """Get all synced products for a campaign."""
+        try:
+            result = self.client.table('pinterest_sync_log').select(
+                'id, shopify_product_id, pinterest_pin_id, pinterest_board_id, status, synced_at'
+            ).eq('shop_id', shop_id).eq('campaign_id', campaign_id).execute()
+
+            return result.data or []
+        except Exception as e:
+            print(f"Error getting synced products: {e}")
+            return []
+
+    def mark_pin_as_replaced(self, shop_id: str, campaign_id: str,
+                              shopify_product_id: str) -> Optional[str]:
+        """Mark a pin as replaced and return the pinterest_pin_id for deactivation."""
+        try:
+            # First get the pin ID
+            result = self.client.table('pinterest_sync_log').select(
+                'pinterest_pin_id'
+            ).eq('shop_id', shop_id).eq(
+                'campaign_id', campaign_id
+            ).eq('shopify_product_id', shopify_product_id).eq(
+                'status', 'active'
+            ).execute()
+
+            if not result.data:
+                return None
+
+            pin_id = result.data[0].get('pinterest_pin_id')
+
+            # Update status to replaced
+            self.client.table('pinterest_sync_log').update({
+                'status': 'replaced',
+                'replaced_at': datetime.now(timezone.utc).isoformat()
+            }).eq('shop_id', shop_id).eq(
+                'campaign_id', campaign_id
+            ).eq('shopify_product_id', shopify_product_id).execute()
+
+            return pin_id
+        except Exception as e:
+            print(f"Error marking pin as replaced: {e}")
+            return None
 
     def update_pinterest_tokens(self, shop_id: str, access_token: str,
                                  refresh_token: Optional[str], expires_at: Optional[str]):

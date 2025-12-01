@@ -72,6 +72,15 @@ class PinterestSyncJob:
                 print(f"      Batch {batch_index}: {len(products)} products")
 
                 for product in products:
+                    # Check if product is already synced to this campaign
+                    if self.db.is_product_already_synced(
+                        shop_id=config.shop_id,
+                        campaign_id=campaign.id,
+                        shopify_product_id=str(product.id)
+                    ):
+                        print(f"        [SKIP] {product.title[:40]}... (already synced)")
+                        continue
+
                     # Generate product URL
                     product_url = shopify.get_product_url(
                         handle=product.handle,
@@ -93,8 +102,9 @@ class PinterestSyncJob:
                         self.db.log_sync_result(
                             shop_id=config.shop_id,
                             campaign_id=campaign.id,
-                            shopify_product_id=product.id,
+                            shopify_product_id=str(product.id),
                             pinterest_pin_id=result.pinterest_pin_id,
+                            pinterest_board_id=board_id,
                             success=True
                         )
                     else:
@@ -104,8 +114,9 @@ class PinterestSyncJob:
                         self.db.log_sync_result(
                             shop_id=config.shop_id,
                             campaign_id=campaign.id,
-                            shopify_product_id=product.id,
+                            shopify_product_id=str(product.id),
                             pinterest_pin_id=None,
+                            pinterest_board_id=board_id,
                             success=False,
                             error=result.error
                         )
