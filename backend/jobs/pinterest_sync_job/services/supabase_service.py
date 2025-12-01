@@ -90,7 +90,7 @@ class SupabaseService:
 
                 # Get Pinterest settings
                 settings_response = self.client.table('pinterest_settings').select(
-                    'url_prefix, global_batch_size, default_board_id'
+                    'url_prefix, global_batch_size'
                 ).eq('shop_id', shop_id).execute()
 
                 url_prefix = ''
@@ -99,6 +99,7 @@ class SupabaseService:
                 if settings_response.data:
                     url_prefix = settings_response.data[0].get('url_prefix') or ''
                     global_batch_size = settings_response.data[0].get('global_batch_size') or 50
+                    # default_board_id is optional - try to get it if column exists
                     default_board_id = settings_response.data[0].get('default_board_id')
 
                 config = ShopPinterestConfig(
