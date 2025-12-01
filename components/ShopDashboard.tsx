@@ -218,7 +218,7 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
               onOpenCalculator={() => setIsCalculatorOpen(true)}
             />
           ) : activeTab === 'general' ? (
-            <GeneralSettings config={generalConfig} onChange={setGeneralConfig} />
+            <GeneralSettings config={generalConfig} onChange={setGeneralConfig} shopId={shop.id} />
           ) : activeTab === 'pinterest' ? (
             <PinterestSync shopId={shop.id} />
           ) : activeTab === 'meta-ads' ? (

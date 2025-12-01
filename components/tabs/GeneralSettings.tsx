@@ -1,25 +1,73 @@
 
-
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { GeneralConfig } from '../../types';
-import { Settings, Tag, Hash, Package, Link, CalendarClock, Database, AlertTriangle, CheckCircle, Loader2, Store } from 'lucide-react';
+import { Settings, Tag, Hash, Package, Link, CalendarClock, Database, AlertTriangle, CheckCircle, Loader2, Store, Save, Check } from 'lucide-react';
 import { useAllShopsResearchStatus, useInitializeAllMissingResearchTables } from '../../src/hooks/useFastFashionResearch';
+import { usePinterestSettings, useUpdatePinterestSettings } from '../../src/hooks/usePinterest';
 
 interface GeneralSettingsProps {
   config: GeneralConfig;
   onChange: (newConfig: GeneralConfig) => void;
+  shopId?: string;
 }
 
-export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ config, onChange }) => {
+export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ config, onChange, shopId }) => {
   // Fast Fashion Research Table Status Hooks
   const { data: researchStatus, isLoading: statusLoading } = useAllShopsResearchStatus();
   const initializeAllMutation = useInitializeAllMissingResearchTables();
+
+  // Pinterest Settings (for url_prefix)
+  const { data: pinterestSettings } = usePinterestSettings(shopId || null);
+  const updatePinterestSettings = useUpdatePinterestSettings();
+
+  // Save status
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Sync urlPrefix from Pinterest settings
+  useEffect(() => {
+    if (pinterestSettings?.url_prefix !== undefined && pinterestSettings.url_prefix !== config.urlPrefix) {
+      onChange({ ...config, urlPrefix: pinterestSettings.url_prefix || '' });
+    }
+  }, [pinterestSettings?.url_prefix]);
 
   const handleInitializeAll = async () => {
     try {
       await initializeAllMutation.mutateAsync();
     } catch (error) {
       console.error('Failed to initialize research tables:', error);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    if (!shopId) {
+      setSaveError('Shop ID fehlt');
+      setSaveStatus('error');
+      return;
+    }
+
+    setSaveStatus('saving');
+    setSaveError(null);
+
+    try {
+      // Save url_prefix to pinterest_settings
+      await updatePinterestSettings.mutateAsync({
+        shopId,
+        settings: {
+          url_prefix: config.urlPrefix
+        }
+      });
+
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+      setSaveStatus('error');
+      setSaveError(error instanceof Error ? error.message : 'Unbekannter Fehler');
+      setTimeout(() => {
+        setSaveStatus('idle');
+        setSaveError(null);
+      }, 5000);
     }
   };
 
@@ -252,6 +300,49 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ config, onChan
                           </div>
                        </div>
                     </div>
+                 </div>
+
+                 {/* Save Button */}
+                 <div className="pt-4 border-t border-zinc-800">
+                    <button
+                       onClick={handleSaveSettings}
+                       disabled={saveStatus === 'saving' || !shopId}
+                       className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-sm font-medium transition-all ${
+                          saveStatus === 'success'
+                             ? 'bg-emerald-600 text-white'
+                             : saveStatus === 'error'
+                             ? 'bg-red-600 text-white'
+                             : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                       } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                       {saveStatus === 'saving' ? (
+                          <>
+                             <Loader2 className="w-4 h-4 animate-spin" />
+                             Speichern...
+                          </>
+                       ) : saveStatus === 'success' ? (
+                          <>
+                             <Check className="w-4 h-4" />
+                             Gespeichert!
+                          </>
+                       ) : saveStatus === 'error' ? (
+                          <>
+                             <AlertTriangle className="w-4 h-4" />
+                             Fehler!
+                          </>
+                       ) : (
+                          <>
+                             <Save className="w-4 h-4" />
+                             Einstellungen speichern
+                          </>
+                       )}
+                    </button>
+                    {saveStatus === 'error' && saveError && (
+                       <p className="mt-2 text-xs text-red-400 text-center">{saveError}</p>
+                    )}
+                    {!shopId && (
+                       <p className="mt-2 text-xs text-zinc-500 text-center">Shop ID fehlt - Speichern nicht möglich</p>
+                    )}
                  </div>
 
               </div>
