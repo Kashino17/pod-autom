@@ -346,6 +346,7 @@ export function useSyncShopifyCollections() {
     },
     onSuccess: (_, { shopId }) => {
       queryClient.invalidateQueries({ queryKey: ['collections', shopId] })
+      queryClient.invalidateQueries({ queryKey: ['stored-shopify-collections', shopId] })
       queryClient.invalidateQueries({ queryKey: ['shops', shopId] })
     }
   })

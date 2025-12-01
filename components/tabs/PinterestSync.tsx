@@ -20,7 +20,7 @@ import {
   useStoredShopifyCollections,
   useUpsertPinterestCampaign
 } from '../../src/hooks/usePinterest';
-import { useShop } from '../../src/hooks/useShops';
+import { useShop, useSyncShopifyCollections } from '../../src/hooks/useShops';
 
 interface PinterestSyncProps {
   shopId: string;
@@ -53,9 +53,11 @@ interface PinterestSettings {
 
 interface ShopifyCollection {
   id: string;
-  shopify_id: string;
+  shopify_id?: string;
+  shopify_collection_id?: string;
   title: string;
-  product_count: number;
+  product_count?: number;
+  products_count?: number;
 }
 
 // Joined assignment data from Supabase
@@ -74,8 +76,10 @@ interface SyncAssignmentJoined {
   shopify_collections: {
     id: string;
     title: string;
-    shopify_id: string;
-    product_count: number;
+    shopify_id?: string;
+    shopify_collection_id?: string;
+    product_count?: number;
+    products_count?: number;
   } | null;
 }
 
@@ -106,6 +110,7 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   const refreshCampaigns = useRefreshPinterestCampaigns();
   const selectAdAccount = useSelectPinterestAdAccount();
   const updateSettings = useUpdatePinterestSettings();
+  const syncCollections = useSyncShopifyCollections();
 
   // Sync assignments
   const { data: syncAssignmentsRaw = [] } = useCampaignBatchAssignments(shopId);
@@ -133,6 +138,7 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   console.log('[PinterestSync] adAccounts:', adAccounts);
   console.log('[PinterestSync] selectedAdAccount:', selectedAdAccount);
   console.log('[PinterestSync] campaigns:', campaigns);
+  console.log('[PinterestSync] collections:', collections);
 
   // Update batch size when settings load
   useEffect(() => {
@@ -189,6 +195,16 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
     }
   };
 
+  const handleSyncCollections = async () => {
+    if (shop?.shop_domain && shop?.access_token) {
+      await syncCollections.mutateAsync({
+        shopId,
+        shopDomain: shop.shop_domain,
+        accessToken: shop.access_token
+      });
+    }
+  };
+
   const saveBatchSize = async () => {
     await updateSettings.mutateAsync({
       shopId,
@@ -232,10 +248,13 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
     );
   }
 
+  // Helper to get product count (handles both field names)
+  const getProductCount = (col: ShopifyCollection) => col.products_count || col.product_count || 0;
+
   // Selected collection for batch calculation
   const selectedCollection = collections.find(c => c.id === formState.selectedCollectionId);
   const batchSize = settings?.global_batch_size || 10;
-  const maxBatches = selectedCollection ? Math.ceil((selectedCollection.product_count || 0) / batchSize) : 1;
+  const maxBatches = selectedCollection ? Math.ceil(getProductCount(selectedCollection) / batchSize) : 1;
 
   // Filter sync assignments for search
   const filteredAssignments = syncAssignments.filter(a =>
@@ -566,9 +585,19 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
 
               {/* SECTION 2: COLLECTION */}
               <div className="space-y-4">
-                <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-                  <Layers className="w-3.5 h-3.5" /> 2. Kollektion wählen
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                    <Layers className="w-3.5 h-3.5" /> 2. Kollektion wählen
+                  </label>
+                  <button
+                    onClick={handleSyncCollections}
+                    disabled={syncCollections.isPending || !shop?.shop_domain || !shop?.access_token}
+                    className="p-1.5 hover:bg-zinc-800 rounded text-zinc-500 hover:text-white transition-colors disabled:opacity-50"
+                    title="Kollektionen von Shopify laden"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncCollections.isPending ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
 
                 <select
                   value={formState.selectedCollectionId}
@@ -577,12 +606,13 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
                     selectedCollectionId: e.target.value,
                     selectedBatch: 1
                   })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-3 px-4 text-sm text-white focus:outline-none focus:border-zinc-600 appearance-none"
+                  disabled={collections.length === 0}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-3 px-4 text-sm text-white focus:outline-none focus:border-zinc-600 appearance-none disabled:opacity-50"
                 >
-                  <option value="">-- Kollektion auswählen --</option>
+                  <option value="">-- Kollektion auswählen ({collections.length} verfügbar) --</option>
                   {collections.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.title} ({c.product_count || 0} Produkte)
+                      {c.title} ({getProductCount(c)} Produkte)
                     </option>
                   ))}
                 </select>
@@ -601,7 +631,7 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
                 >
                   {Array.from({ length: maxBatches }, (_, i) => i + 1).map(num => {
                     const startItem = (num - 1) * batchSize + 1;
-                    const endItem = Math.min(num * batchSize, selectedCollection?.product_count || 0);
+                    const endItem = Math.min(num * batchSize, selectedCollection ? getProductCount(selectedCollection) : 0);
                     return (
                       <option key={num} value={num}>
                         Batch {num} (Produkte {startItem} - {endItem})
