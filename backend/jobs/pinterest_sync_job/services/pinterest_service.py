@@ -448,13 +448,15 @@ class PinterestAPIClient:
             }
         ]
 
-        print(f"        [DEBUG] Creating ad with data: {data}")
         result = self._make_request("POST", f"ad_accounts/{ad_account_id}/ads", data)
-        print(f"        [DEBUG] Create ad result: {result}")
 
-        # API returns {"items": [...]} - extract first item
+        # API returns {"items": [{"data": {...}}]} - extract the data object
         if result and 'items' in result and len(result['items']) > 0:
-            return result['items'][0]
+            item = result['items'][0]
+            # Pinterest wraps the response in a 'data' key
+            if 'data' in item:
+                return item['data']
+            return item
         return result
 
     def get_or_create_ad_group_for_campaign(self, ad_account_id: str,
