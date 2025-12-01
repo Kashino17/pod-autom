@@ -34,18 +34,21 @@ class ShopifyService:
         if elapsed < self.min_request_interval:
             time.sleep(self.min_request_interval - elapsed)
 
-    def _make_request(self, method: str, endpoint: str, params: Dict = None) -> Optional[Dict]:
-        """Make HTTP request with error handling."""
+    def _make_request(self, method: str, endpoint: str, params: Dict = None,
+                       full_url: str = None) -> tuple[Optional[Dict], Optional[str]]:
+        """Make HTTP request with error handling.
+        Returns: (json_response, next_page_url)
+        """
         self._rate_limit()
 
-        url = f"{self.base_url}/{endpoint}"
+        url = full_url if full_url else f"{self.base_url}/{endpoint}"
         max_retries = 3
         retry_count = 0
 
         while retry_count < max_retries:
             try:
                 if method == "GET":
-                    response = requests.get(url, headers=self.headers, params=params, timeout=60)
+                    response = requests.get(url, headers=self.headers, params=params if not full_url else None, timeout=60)
                 else:
                     raise ValueError(f"Unsupported method: {method}")
 
@@ -64,29 +67,42 @@ class ShopifyService:
                         retry_count += 1
                         time.sleep(2 ** retry_count)
                         continue
-                    return None
+                    return None, None
 
-                return response.json()
+                # Parse Link header for cursor-based pagination
+                next_url = None
+                link_header = response.headers.get('Link', '')
+                if link_header:
+                    for link in link_header.split(','):
+                        if 'rel="next"' in link:
+                            # Extract URL between < and >
+                            start = link.find('<') + 1
+                            end = link.find('>')
+                            if start > 0 and end > start:
+                                next_url = link[start:end]
+                                break
+
+                return response.json(), next_url
 
             except requests.exceptions.RequestException as e:
                 retry_count += 1
                 if retry_count >= max_retries:
                     print(f"    Request failed after {max_retries} retries: {e}")
-                    return None
+                    return None, None
                 time.sleep(2 ** retry_count)
 
-        return None
+        return None, None
 
     def test_connection(self) -> bool:
         """Test connection to Shopify store."""
-        result = self._make_request("GET", "shop.json")
+        result, _ = self._make_request("GET", "shop.json")
         return result is not None
 
     def get_collection_products(self, collection_id: str) -> List[Product]:
         """Get all products from a collection."""
         products = []
 
-        result = self._make_request("GET", f"collections/{collection_id}/products.json", {'limit': 250})
+        result, _ = self._make_request("GET", f"collections/{collection_id}/products.json", {'limit': 250})
 
         if result and 'products' in result:
             for product_data in result['products']:
@@ -119,19 +135,22 @@ class ShopifyService:
 
         print(f"    Fetching orders for product {product_id} since {since_date.date()}")
 
-        # Fetch all orders since the date
-        page = 1
-        has_more = True
+        # Fetch all orders since the date using cursor-based pagination
+        params = {
+            'status': 'any',
+            'limit': 250,
+            'created_at_min': since_date.strftime("%Y-%m-%dT%H:%M:%S-00:00")
+        }
 
-        while has_more:
-            params = {
-                'status': 'any',
-                'limit': 250,
-                'page': page,
-                'created_at_min': since_date.strftime("%Y-%m-%dT%H:%M:%S-00:00")
-            }
+        next_url = None
+        is_first_request = True
 
-            result = self._make_request("GET", "orders.json", params)
+        while True:
+            if is_first_request:
+                result, next_url = self._make_request("GET", "orders.json", params)
+                is_first_request = False
+            else:
+                result, next_url = self._make_request("GET", "", full_url=next_url)
 
             if not result or 'orders' not in result:
                 break
@@ -168,11 +187,9 @@ class ShopifyService:
                         total_quantity += quantity
                         total_sales += (price * quantity)
 
-            page += 1
-
-            # Shopify page-based pagination limit
-            if page > 100 or len(orders) < 250:
-                has_more = False
+            # If no next page, stop
+            if not next_url:
+                break
 
         # Calculate time-based metrics
         sales_first_7_days = 0
