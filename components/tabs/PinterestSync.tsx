@@ -17,10 +17,9 @@ import {
   useCampaignBatchAssignments,
   useCreateCampaignBatchAssignment,
   useDeleteCampaignBatchAssignment,
-  useStoredShopifyCollections,
   useUpsertPinterestCampaign
 } from '../../src/hooks/usePinterest';
-import { useShop, useSyncShopifyCollections } from '../../src/hooks/useShops';
+import { useShop, useShopifyCollections } from '../../src/hooks/useShops';
 
 interface PinterestSyncProps {
   shopId: string;
@@ -51,20 +50,21 @@ interface PinterestSettings {
   global_batch_size: number;
 }
 
+// Shopify API collection response
 interface ShopifyCollection {
-  id: string;
-  shopify_id?: string;
-  shopify_collection_id?: string;
+  id: number | string;  // Shopify returns numeric IDs
   title: string;
-  product_count?: number;
+  handle: string;
   products_count?: number;
+  type?: string;
 }
 
 // Joined assignment data from Supabase
 interface SyncAssignmentJoined {
   id: string;
   campaign_id: string;
-  collection_id: string;
+  shopify_collection_id: string;  // Shopify Collection ID stored directly
+  collection_title: string;        // Collection title stored directly
   batch_indices: number[];
   created_at: string;
   pinterest_campaigns: {
@@ -72,14 +72,6 @@ interface SyncAssignmentJoined {
     name: string;
     status: string;
     pinterest_campaign_id: string;
-  } | null;
-  shopify_collections: {
-    id: string;
-    title: string;
-    shopify_id?: string;
-    shopify_collection_id?: string;
-    product_count?: number;
-    products_count?: number;
   } | null;
 }
 
@@ -99,8 +91,11 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   const campaigns = campaignsRaw as PinterestCampaign[];
   const { data: settingsRaw } = usePinterestSettings(shopId);
   const settings = settingsRaw as PinterestSettings | null;
-  // Load collections from Supabase (synced from Shopify)
-  const { data: collectionsRaw = [] } = useStoredShopifyCollections(shopId);
+  // Load collections directly from Shopify API
+  const { data: collectionsRaw = [], isLoading: collectionsLoading, refetch: refetchCollections } = useShopifyCollections(
+    shop?.shop_domain || null,
+    shop?.access_token || null
+  );
   const collections = collectionsRaw as ShopifyCollection[];
 
   // Mutations
@@ -110,7 +105,6 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   const refreshCampaigns = useRefreshPinterestCampaigns();
   const selectAdAccount = useSelectPinterestAdAccount();
   const updateSettings = useUpdatePinterestSettings();
-  const syncCollections = useSyncShopifyCollections();
 
   // Sync assignments
   const { data: syncAssignmentsRaw = [] } = useCampaignBatchAssignments(shopId);
@@ -195,14 +189,8 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
     }
   };
 
-  const handleSyncCollections = async () => {
-    if (shop?.shop_domain && shop?.access_token) {
-      await syncCollections.mutateAsync({
-        shopId,
-        shopDomain: shop.shop_domain,
-        accessToken: shop.access_token
-      });
-    }
+  const handleRefreshCollections = () => {
+    refetchCollections();
   };
 
   const saveBatchSize = async () => {
@@ -248,18 +236,18 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
     );
   }
 
-  // Helper to get product count (handles both field names)
-  const getProductCount = (col: ShopifyCollection) => col.products_count || col.product_count || 0;
+  // Helper to get product count from Shopify API response
+  const getProductCount = (col: ShopifyCollection) => col.products_count || 0;
 
-  // Selected collection for batch calculation
-  const selectedCollection = collections.find(c => c.id === formState.selectedCollectionId);
+  // Selected collection for batch calculation (compare as string since Shopify IDs are numeric)
+  const selectedCollection = collections.find(c => String(c.id) === String(formState.selectedCollectionId));
   const batchSize = settings?.global_batch_size || 10;
   const maxBatches = selectedCollection ? Math.ceil(getProductCount(selectedCollection) / batchSize) : 1;
 
   // Filter sync assignments for search
   const filteredAssignments = syncAssignments.filter(a =>
     (a.pinterest_campaigns?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (a.shopify_collections?.title || '').toLowerCase().includes(searchQuery.toLowerCase())
+    (a.collection_title || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Get campaign name and collection name for an assignment
@@ -268,7 +256,7 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   };
 
   const getCollectionName = (assignment: SyncAssignmentJoined) => {
-    return assignment.shopify_collections?.title || 'Unbekannte Kollektion';
+    return assignment.collection_title || 'Unbekannte Kollektion';
   };
 
   // Handle creating a sync assignment
@@ -277,7 +265,8 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
 
     // Find the selected campaign from Pinterest API data
     const selectedCampaign = campaigns.find(c => c.id === formState.selectedCampaignId);
-    const selectedCol = collections.find(c => c.id === formState.selectedCollectionId);
+    // Collection ID from Shopify can be numeric, so compare as string
+    const selectedCol = collections.find(c => String(c.id) === String(formState.selectedCollectionId));
 
     if (!selectedCampaign || !selectedCol) return;
 
@@ -292,11 +281,12 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
         daily_budget: selectedCampaign.daily_budget
       });
 
-      // Step 2: Create the assignment using the Supabase UUIDs
+      // Step 2: Create the assignment - store Shopify Collection ID and title directly
       await createAssignment.mutateAsync({
         shop_id: shopId,
         campaign_id: savedCampaign.id,  // UUID from pinterest_campaigns table
-        collection_id: selectedCol.id,   // UUID from shopify_collections table
+        shopify_collection_id: String(selectedCol.id),  // Shopify Collection ID (from API)
+        collection_title: selectedCol.title,  // Store title for display
         batch_indices: [formState.selectedBatch]
       });
 
@@ -590,12 +580,12 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
                     <Layers className="w-3.5 h-3.5" /> 2. Kollektion wählen
                   </label>
                   <button
-                    onClick={handleSyncCollections}
-                    disabled={syncCollections.isPending || !shop?.shop_domain || !shop?.access_token}
+                    onClick={handleRefreshCollections}
+                    disabled={collectionsLoading || !shop?.shop_domain || !shop?.access_token}
                     className="p-1.5 hover:bg-zinc-800 rounded text-zinc-500 hover:text-white transition-colors disabled:opacity-50"
-                    title="Kollektionen von Shopify laden"
+                    title="Kollektionen neu laden"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${syncCollections.isPending ? 'animate-spin' : ''}`} />
+                    <RefreshCw className={`w-3.5 h-3.5 ${collectionsLoading ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
 
@@ -606,10 +596,10 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
                     selectedCollectionId: e.target.value,
                     selectedBatch: 1
                   })}
-                  disabled={collections.length === 0}
+                  disabled={collectionsLoading || collections.length === 0}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-3 px-4 text-sm text-white focus:outline-none focus:border-zinc-600 appearance-none disabled:opacity-50"
                 >
-                  <option value="">-- Kollektion auswählen ({collections.length} verfügbar) --</option>
+                  <option value="">{collectionsLoading ? 'Lade Kollektionen...' : `-- Kollektion auswählen (${collections.length} verfügbar) --`}</option>
                   {collections.map(c => (
                     <option key={c.id} value={c.id}>
                       {c.title} ({getProductCount(c)} Produkte)

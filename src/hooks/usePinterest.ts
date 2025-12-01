@@ -333,18 +333,19 @@ export function useCampaignBatchAssignments(shopId: string | null) {
 
       const campaignIds = (campaigns as any[]).map(c => c.id)
 
-      // Then get assignments for these campaigns with joined data
+      // Then get assignments for these campaigns with joined campaign data
+      // Collection info is now stored directly in the assignment (shopify_collection_id, collection_title)
       const { data, error } = await supabase
         .from('campaign_batch_assignments')
         .select(`
           id,
           campaign_id,
-          collection_id,
+          shopify_collection_id,
+          collection_title,
           batch_indices,
           created_at,
           updated_at,
-          pinterest_campaigns(id, name, status, pinterest_campaign_id),
-          shopify_collections(id, title, shopify_id, product_count)
+          pinterest_campaigns(id, name, status, pinterest_campaign_id)
         `)
         .in('campaign_id', campaignIds)
         .order('created_at', { ascending: false })
@@ -363,14 +364,16 @@ export function useCreateCampaignBatchAssignment() {
     mutationFn: async (assignment: {
       shop_id: string
       campaign_id: string  // UUID from pinterest_campaigns table
-      collection_id: string  // UUID from shopify_collections table
+      shopify_collection_id: string  // Shopify Collection ID (from API)
+      collection_title: string  // Collection title for display
       batch_indices: number[]
     }) => {
       const { data, error } = await supabase
         .from('campaign_batch_assignments')
         .insert({
           campaign_id: assignment.campaign_id,
-          collection_id: assignment.collection_id,
+          shopify_collection_id: assignment.shopify_collection_id,
+          collection_title: assignment.collection_title,
           batch_indices: assignment.batch_indices
         } as any)
         .select()
