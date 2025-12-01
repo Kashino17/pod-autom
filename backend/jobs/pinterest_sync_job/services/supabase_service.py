@@ -142,26 +142,22 @@ class SupabaseService:
                 campaign_id = campaign_data['id']
 
                 # Get batch assignments for this campaign
+                # Note: shopify_collection_id and collection_title are stored directly in the assignment
                 assignments_response = self.client.table('campaign_batch_assignments').select(
-                    'collection_id, batch_indices'
+                    'shopify_collection_id, collection_title, batch_indices'
                 ).eq('campaign_id', campaign_id).execute()
 
                 batch_assignments = []
                 if assignments_response.data:
                     for assignment in assignments_response.data:
-                        collection_id = assignment['collection_id']
+                        shopify_collection_id = assignment.get('shopify_collection_id')
+                        collection_title = assignment.get('collection_title', '')
                         batch_indices = assignment.get('batch_indices', [])
 
-                        # Get collection info
-                        collection_response = self.client.table('shopify_collections').select(
-                            'shopify_id, title'
-                        ).eq('id', collection_id).single().execute()
-
-                        if collection_response.data:
+                        if shopify_collection_id:
                             batch_assignments.append({
-                                'collection_id': collection_id,
-                                'collection_shopify_id': collection_response.data.get('shopify_id'),
-                                'collection_title': collection_response.data.get('title'),
+                                'collection_shopify_id': shopify_collection_id,
+                                'collection_title': collection_title,
                                 'batch_indices': batch_indices
                             })
 
