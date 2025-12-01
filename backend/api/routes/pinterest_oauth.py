@@ -336,24 +336,39 @@ def get_campaigns():
 
         access_token = auth_result.data['access_token']
 
-        # Fetch campaigns from Pinterest API
-        response = requests.get(
-            f'https://api.pinterest.com/v5/ad_accounts/{pinterest_account_id}/campaigns',
-            headers={'Authorization': f'Bearer {access_token}'},
-            timeout=15
-        )
+        # Fetch ALL campaigns from Pinterest API with pagination
+        all_campaigns = []
+        bookmark = None
 
-        if not response.ok:
-            return jsonify({'error': f'Pinterest API error: {response.status_code}'}), response.status_code
+        while True:
+            params = {'page_size': 100}  # Max page size
+            if bookmark:
+                params['bookmark'] = bookmark
 
-        pinterest_data = response.json()
-        campaigns = pinterest_data.get('items', [])
+            response = requests.get(
+                f'https://api.pinterest.com/v5/ad_accounts/{pinterest_account_id}/campaigns',
+                headers={'Authorization': f'Bearer {access_token}'},
+                params=params,
+                timeout=15
+            )
 
-        # Return campaigns directly - don't store in Supabase
+            if not response.ok:
+                return jsonify({'error': f'Pinterest API error: {response.status_code}'}), response.status_code
+
+            pinterest_data = response.json()
+            campaigns = pinterest_data.get('items', [])
+            all_campaigns.extend(campaigns)
+
+            # Check for next page
+            bookmark = pinterest_data.get('bookmark')
+            if not bookmark:
+                break
+
+        # Return all campaigns directly - don't store in Supabase
         # Only linked campaigns will be stored when user creates a sync assignment
         return jsonify({
             'success': True,
-            'campaigns': campaigns
+            'campaigns': all_campaigns
         })
 
     except Exception as e:
