@@ -1,17 +1,26 @@
 Tabelle campaign_batch_assignments:
 
+-- NEUE STRUKTUR: Collections werden direkt von Shopify API geladen, nicht aus Supabase
+-- Daher wird shopify_collection_id und collection_title direkt gespeichert (kein FK)
+
 create table public.campaign_batch_assignments (
   id uuid not null default gen_random_uuid (),
   campaign_id uuid not null,
-  collection_id uuid not null,
+  shopify_collection_id text not null,  -- Shopify Collection ID (von API)
+  collection_title text not null,        -- Collection Name für Anzeige
   batch_indices integer[] null default '{}'::integer[],
   created_at timestamp with time zone null default now(),
   updated_at timestamp with time zone null default now(),
   constraint campaign_batch_assignments_pkey primary key (id),
-  constraint campaign_batch_assignments_campaign_id_collection_id_key unique (campaign_id, collection_id),
-  constraint campaign_batch_assignments_campaign_id_fkey foreign KEY (campaign_id) references pinterest_campaigns (id) on delete CASCADE,
-  constraint campaign_batch_assignments_collection_id_fkey foreign KEY (collection_id) references shopify_collections (id) on delete CASCADE
+  constraint campaign_batch_assignments_campaign_id_collection_id_key unique (campaign_id, shopify_collection_id),
+  constraint campaign_batch_assignments_campaign_id_fkey foreign KEY (campaign_id) references pinterest_campaigns (id) on delete CASCADE
 ) TABLESPACE pg_default;
+
+-- Migration von alter zu neuer Struktur:
+-- ALTER TABLE campaign_batch_assignments DROP CONSTRAINT IF EXISTS campaign_batch_assignments_collection_id_fkey;
+-- ALTER TABLE campaign_batch_assignments DROP COLUMN IF EXISTS collection_id;
+-- ALTER TABLE campaign_batch_assignments ADD COLUMN shopify_collection_id text NOT NULL;
+-- ALTER TABLE campaign_batch_assignments ADD COLUMN collection_title text NOT NULL;
 
 
 ______________________

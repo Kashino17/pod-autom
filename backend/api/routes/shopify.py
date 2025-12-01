@@ -4,6 +4,7 @@ Handles all Shopify Admin API calls to avoid CORS issues
 """
 from flask import Blueprint, request, jsonify
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 shopify_bp = Blueprint('shopify', __name__)
 
@@ -100,9 +101,24 @@ def test_connection():
         }), 500
 
 
+def get_collection_product_count(shop_domain: str, headers: dict, collection_id: int) -> int:
+    """Get product count for a collection using the count endpoint"""
+    try:
+        response = requests.get(
+            f'https://{shop_domain}/admin/api/{SHOPIFY_API_VERSION}/products/count.json?collection_id={collection_id}',
+            headers=headers,
+            timeout=10
+        )
+        if response.ok:
+            return response.json().get('count', 0)
+    except Exception:
+        pass
+    return 0
+
+
 @shopify_bp.route('/api/shopify/get-collections', methods=['POST'])
 def get_collections():
-    """Get all collections from Shopify store"""
+    """Get all collections from Shopify store with product counts"""
     try:
         data = request.json
         shop_domain = data.get('shop_domain')
@@ -120,7 +136,7 @@ def get_collections():
             'Content-Type': 'application/json'
         }
 
-        collections = []
+        raw_collections = []
 
         # Get Custom Collections
         custom_response = requests.get(
@@ -132,12 +148,11 @@ def get_collections():
         if custom_response.ok:
             custom_collections = custom_response.json().get('custom_collections', [])
             for col in custom_collections:
-                collections.append({
+                raw_collections.append({
                     'id': col.get('id'),
                     'title': col.get('title'),
                     'handle': col.get('handle'),
                     'type': 'custom',
-                    'products_count': col.get('products_count', 0),
                     'published_at': col.get('published_at')
                 })
 
@@ -151,14 +166,35 @@ def get_collections():
         if smart_response.ok:
             smart_collections = smart_response.json().get('smart_collections', [])
             for col in smart_collections:
-                collections.append({
+                raw_collections.append({
                     'id': col.get('id'),
                     'title': col.get('title'),
                     'handle': col.get('handle'),
                     'type': 'smart',
-                    'products_count': col.get('products_count', 0),
                     'published_at': col.get('published_at')
                 })
+
+        # Get product counts in parallel (max 5 concurrent to respect Shopify rate limits)
+        collections = []
+
+        def fetch_count(col):
+            """Fetch product count for a single collection"""
+            count = get_collection_product_count(clean_shop_domain, headers, col['id'])
+            return {**col, 'products_count': count}
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {executor.submit(fetch_count, col): col for col in raw_collections}
+            for future in as_completed(futures):
+                try:
+                    result = future.result()
+                    collections.append(result)
+                except Exception:
+                    # On error, add collection with 0 count
+                    col = futures[future]
+                    collections.append({**col, 'products_count': 0})
+
+        # Sort by title for consistent ordering
+        collections.sort(key=lambda x: x.get('title', '').lower())
 
         return jsonify({
             'success': True,
