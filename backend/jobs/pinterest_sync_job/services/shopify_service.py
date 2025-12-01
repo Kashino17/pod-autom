@@ -1,6 +1,7 @@
 """
 Shopify REST Client for Pinterest Sync Job
 Fetches products from collections for Pinterest sync
+IMPORTANT: Uses /collections/{id}/products.json to preserve product order
 """
 import time
 import requests
@@ -15,8 +16,6 @@ from models import ShopifyProduct
 class ShopifyRESTClient:
     """REST Client for Shopify Admin API - Product Fetching."""
 
-    BATCH_SIZE = 10  # Products per batch
-
     def __init__(self, shop_domain: str, access_token: str):
         self.shop_domain = shop_domain
         self.access_token = access_token
@@ -27,6 +26,8 @@ class ShopifyRESTClient:
         }
         self.last_request_time = 0
         self.min_request_interval = 0.5
+        # Cache for collection products to avoid re-fetching
+        self._collection_cache: Dict[str, List[ShopifyProduct]] = {}
 
     def _rate_limit(self):
         """Implement rate limiting."""
@@ -85,10 +86,61 @@ class ShopifyRESTClient:
         return result is not None
 
     def get_collection_products(self, collection_id: str) -> List[ShopifyProduct]:
-        """Get all products from a collection."""
+        """
+        Get all products from a collection IN ORDER.
+
+        IMPORTANT: Uses /collections/{id}/products.json endpoint which
+        preserves the manual sort order set in Shopify admin.
+        This is different from using collects.json which does NOT preserve order.
+
+        Args:
+            collection_id: Shopify collection ID
+
+        Returns:
+            List of products in the correct order as displayed in the collection
+        """
+        # Check cache first
+        if collection_id in self._collection_cache:
+            return self._collection_cache[collection_id]
+
         products = []
 
-        # First, get product IDs in the collection via collects
+        # Use the collection products endpoint - this preserves order!
+        # This endpoint returns products in the same order as they appear in the collection
+        endpoint = f"collections/{collection_id}/products.json?limit=250"
+        result = self._make_request("GET", endpoint)
+
+        if result and 'products' in result:
+            for product_data in result['products']:
+                # Only include active products with images
+                if product_data.get('status') == 'active':
+                    product = ShopifyProduct.from_api(product_data)
+                    if product.primary_image_url:
+                        products.append(product)
+
+            print(f"  Found {len(products)} active products with images in collection (order preserved)")
+
+            # Handle pagination if needed (collections rarely have > 250 products)
+            # Shopify uses link headers for pagination
+            # For now, 250 should be sufficient for most use cases
+
+        else:
+            # Fallback to collects endpoint if collection products endpoint fails
+            print(f"  Collection products endpoint failed, trying fallback...")
+            products = self._get_collection_products_fallback(collection_id)
+
+        # Cache the results
+        self._collection_cache[collection_id] = products
+        return products
+
+    def _get_collection_products_fallback(self, collection_id: str) -> List[ShopifyProduct]:
+        """
+        Fallback method using collects endpoint.
+        WARNING: This does NOT preserve the manual sort order!
+        """
+        products = []
+
+        # Get product IDs via collects (order may not be preserved)
         collects_endpoint = f"collects.json?collection_id={collection_id}&limit=250"
         result = self._make_request("GET", collects_endpoint)
 
@@ -96,10 +148,14 @@ class ShopifyRESTClient:
             print(f"  No products found in collection {collection_id}")
             return []
 
-        product_ids = [c['product_id'] for c in result['collects']]
-        print(f"  Found {len(product_ids)} products in collection")
+        # Collects are ordered by position, so we need to sort by position
+        collects = sorted(result['collects'], key=lambda x: x.get('position', 0))
+        product_ids = [c['product_id'] for c in collects]
 
-        # Fetch product details in batches
+        print(f"  Found {len(product_ids)} products in collection (via collects)")
+
+        # Fetch product details - need to maintain order
+        # Fetch in smaller batches to maintain order
         batch_size = 50
         for i in range(0, len(product_ids), batch_size):
             batch_ids = product_ids[i:i + batch_size]
@@ -109,25 +165,33 @@ class ShopifyRESTClient:
             result = self._make_request("GET", products_endpoint)
 
             if result and 'products' in result:
-                for product_data in result['products']:
-                    product = ShopifyProduct.from_api(product_data)
-                    # Only include products with images
-                    if product.primary_image_url:
-                        products.append(product)
+                # Create a map for quick lookup
+                product_map = {str(p['id']): p for p in result['products']}
+
+                # Add products in the order they appear in batch_ids
+                for pid in batch_ids:
+                    if str(pid) in product_map:
+                        product_data = product_map[str(pid)]
+                        product = ShopifyProduct.from_api(product_data)
+                        if product.primary_image_url:
+                            products.append(product)
 
         return products
 
     def get_products_batch(self, collection_id: str, batch_index: int,
-                           batch_size: int = 10) -> List[ShopifyProduct]:
-        """Get a specific batch of products from a collection.
+                           batch_size: int = 50) -> List[ShopifyProduct]:
+        """
+        Get a specific batch of products from a collection.
+
+        Uses dynamic batch_size from pinterest_settings.global_batch_size.
 
         Args:
             collection_id: Shopify collection ID
             batch_index: 0-based batch index
-            batch_size: Number of products per batch (default 10)
+            batch_size: Number of products per batch (from global_batch_size)
 
         Returns:
-            List of products in the requested batch
+            List of products in the requested batch (order preserved)
         """
         all_products = self.get_collection_products(collection_id)
 
@@ -137,13 +201,70 @@ class ShopifyRESTClient:
         if start_idx >= len(all_products):
             return []
 
-        return all_products[start_idx:end_idx]
+        batch = all_products[start_idx:end_idx]
+        print(f"    Batch {batch_index}: Products {start_idx + 1}-{start_idx + len(batch)} of {len(all_products)}")
+
+        return batch
+
+    def get_total_batches(self, collection_id: str, batch_size: int = 50) -> int:
+        """
+        Calculate total number of batches for a collection.
+
+        Args:
+            collection_id: Shopify collection ID
+            batch_size: Products per batch
+
+        Returns:
+            Total number of batches
+        """
+        all_products = self.get_collection_products(collection_id)
+        import math
+        return math.ceil(len(all_products) / batch_size) if all_products else 0
 
     def get_product_url(self, handle: str, url_prefix: str = '') -> str:
-        """Generate product URL."""
-        base_url = f"https://{self.shop_domain}/products/{handle}"
+        """
+        Generate product URL.
 
+        Args:
+            handle: Product handle/slug
+            url_prefix: Custom domain prefix (e.g., 'www.mystore.com')
+
+        Returns:
+            Full product URL
+        """
         if url_prefix:
-            return f"{base_url}?{url_prefix}"
+            # Clean up url_prefix
+            prefix = url_prefix.strip().rstrip('/')
+            if not prefix.startswith('http'):
+                prefix = f"https://{prefix}"
+            return f"{prefix}/products/{handle}"
 
-        return base_url
+        # Default: use shop domain, replacing .myshopify.com with .com
+        domain = self.shop_domain.replace('.myshopify.com', '.com')
+        return f"https://{domain}/products/{handle}"
+
+    def get_collection_url(self, collection_handle: str, page: int = 1,
+                           url_prefix: str = '') -> str:
+        """
+        Generate collection URL with page parameter.
+
+        Args:
+            collection_handle: Collection handle/slug
+            page: Page number (1-based)
+            url_prefix: Custom domain prefix
+
+        Returns:
+            Collection URL with page parameter
+        """
+        if url_prefix:
+            prefix = url_prefix.strip().rstrip('/')
+            if not prefix.startswith('http'):
+                prefix = f"https://{prefix}"
+            return f"{prefix}/collections/{collection_handle}?page={page}"
+
+        domain = self.shop_domain.replace('.myshopify.com', '.com')
+        return f"https://{domain}/collections/{collection_handle}?page={page}"
+
+    def clear_cache(self):
+        """Clear the collection products cache."""
+        self._collection_cache.clear()

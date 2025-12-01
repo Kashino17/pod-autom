@@ -1,6 +1,7 @@
 """
 Pinterest API Service for Pinterest Sync Job
 Handles pin creation and token refresh
+Uses GPT-5.1 for optimized pin descriptions
 """
 import os
 import time
@@ -11,6 +12,7 @@ from datetime import datetime, timezone, timedelta
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import ShopifyProduct, PinterestPin, SyncResult
+from services.openai_service import OpenAIService
 
 
 class PinterestAPIClient:
@@ -19,7 +21,7 @@ class PinterestAPIClient:
     BASE_URL = "https://api.pinterest.com/v5"
 
     def __init__(self, access_token: str, refresh_token: Optional[str] = None,
-                 expires_at: Optional[str] = None):
+                 expires_at: Optional[str] = None, use_gpt: bool = True):
         self.access_token = access_token
         self.refresh_token = refresh_token
         self.expires_at = expires_at
@@ -29,6 +31,10 @@ class PinterestAPIClient:
         # App credentials for token refresh
         self.app_id = os.environ.get('PINTEREST_APP_ID', '')
         self.app_secret = os.environ.get('PINTEREST_APP_SECRET', '')
+
+        # GPT-5.1 Service for optimized descriptions
+        self.use_gpt = use_gpt
+        self.openai_service = OpenAIService() if use_gpt else None
 
     @property
     def headers(self) -> Dict:
@@ -204,7 +210,7 @@ class PinterestAPIClient:
 
     def create_product_pin(self, product: ShopifyProduct, board_id: str,
                            product_url: str) -> SyncResult:
-        """Create a pin from a Shopify product."""
+        """Create a pin from a Shopify product using GPT-5.1 for descriptions."""
         if not product.primary_image_url:
             return SyncResult(
                 success=False,
@@ -212,16 +218,37 @@ class PinterestAPIClient:
                 error="Product has no images"
             )
 
-        # Clean up description (remove HTML)
-        description = product.description
-        if description:
-            import re
-            description = re.sub(r'<[^>]+>', '', description)
-            description = description[:500]
+        # Use GPT-5.1 to generate optimized description
+        description = None
+        title = product.title[:100]
+
+        if self.use_gpt and self.openai_service:
+            # Try to generate optimized description with GPT-5.1
+            gpt_description = self.openai_service.generate_pin_description(
+                product_title=product.title,
+                product_description=product.description,
+                product_tags=product.tags
+            )
+            if gpt_description:
+                description = gpt_description
+                print(f"        [GPT-5.1] Generated optimized description")
+
+            # Optionally optimize title too
+            gpt_title = self.openai_service.generate_pin_title(product.title)
+            if gpt_title:
+                title = gpt_title
+
+        # Fallback: Clean up description manually (remove HTML)
+        if not description:
+            description = product.description
+            if description:
+                import re
+                description = re.sub(r'<[^>]+>', '', description)
+                description = description[:500]
 
         pin = PinterestPin(
-            title=product.title[:100],
-            description=description,
+            title=title,
+            description=description or '',
             link=product_url,
             media_source_url=product.primary_image_url
         )
