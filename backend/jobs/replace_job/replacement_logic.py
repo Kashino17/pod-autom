@@ -66,7 +66,12 @@ class ReplacementLogic:
 
     def evaluate_product_action(self, phase: ProductPhase, sales_data: Dict,
                                 days_in_collection: int) -> Tuple[ProductAction, str]:
-        """Determine action for a product based on phase and sales."""
+        """Determine action for a product based on phase and sales.
+
+        NOTE: There is no DELETE action anymore. All underperforming products
+        are REPLACED. The distinction between LOSER and REPLACED happens
+        during execute_replacements() based on total_sales.
+        """
         if phase == ProductPhase.TOO_NEW:
             return ProductAction.KEEP, f"Too new ({days_in_collection} days < {self.config.start_phase_days})"
 
@@ -76,8 +81,9 @@ class ReplacementLogic:
             delete_threshold = self.config.initial_phase_rules.get('min_sales_day7_delete', 0)
             replace_threshold = self.config.initial_phase_rules.get('min_sales_day7_replace', 1)
 
+            # Both old DELETE and REPLACE thresholds now lead to REPLACE
             if sales <= delete_threshold:
-                return ProductAction.DELETE, f"Initial: {sales} sales <= {delete_threshold} (delete)"
+                return ProductAction.REPLACE, f"Initial: {sales} sales <= {delete_threshold} (replace)"
             elif sales <= replace_threshold:
                 return ProductAction.REPLACE, f"Initial: {sales} sales <= {replace_threshold} (replace)"
             else:
@@ -125,8 +131,7 @@ class ReplacementLogic:
         analyses = []
         action_counts = {
             ProductAction.KEEP: 0,
-            ProductAction.REPLACE: 0,
-            ProductAction.DELETE: 0
+            ProductAction.REPLACE: 0
         }
 
         now = datetime.now(timezone.utc)
@@ -174,9 +179,8 @@ class ReplacementLogic:
             'total_products': len(products),
             'to_keep': action_counts[ProductAction.KEEP],
             'to_replace': action_counts[ProductAction.REPLACE],
-            'to_delete': action_counts[ProductAction.DELETE],
             'summary': f"{len(products)} products: {action_counts[ProductAction.KEEP]} keep, "
-                       f"{action_counts[ProductAction.REPLACE]} replace, {action_counts[ProductAction.DELETE]} delete"
+                       f"{action_counts[ProductAction.REPLACE]} replace"
         }
 
     def get_available_qk_products(self, needed: int) -> List[Dict]:
@@ -192,18 +196,25 @@ class ReplacementLogic:
     def execute_replacements(self, collection_id: str, collection_tag: str,
                              sort_order: str, analysis_result: Dict,
                              test_mode: bool = False) -> Dict:
-        """Execute replacements (2-phase process)."""
+        """Execute replacements (2-phase process).
+
+        NEW LOGIC (No Archive/Delete):
+        - All products marked for REPLACE are processed
+        - Based on total_sales vs loser_threshold:
+          - total_sales <= loser_threshold: LOSER (Stock=0, Tag=LOSER_DD_MM_YYYY)
+          - total_sales > loser_threshold: REPLACED (Stock unchanged, Tag=Replaced_DD_MM_YYYY)
+        - Products are NEVER archived, they remain ACTIVE
+        """
         analyses = analysis_result['analyses']
         to_replace = [a for a in analyses if a.action == ProductAction.REPLACE]
-        to_delete = [a for a in analyses if a.action == ProductAction.DELETE]
 
-        needed = len(to_replace) + len(to_delete)
+        needed = len(to_replace)
 
         if needed == 0:
             return {
                 'kept': analysis_result['to_keep'],
                 'replaced': 0,
-                'deleted': 0,
+                'losers': 0,
                 'positions_maintained': 0,
                 'summary': "No replacements needed"
             }
@@ -215,7 +226,7 @@ class ReplacementLogic:
             positions_before = self.shopify.get_collection_products_with_positions(collection_id)
             original_positions = {gid: pos for gid, pos in positions_before}
 
-        # Phase 1: Tag changes
+        # Phase 1: Tag changes and LOSER/REPLACED processing
         print(f"=== PHASE 1: TAG CHANGES ({needed} products) ===")
 
         qk_products = self.get_available_qk_products(needed)
@@ -224,12 +235,13 @@ class ReplacementLogic:
             print(f"WARNING: Not enough QK products! Have: {len(qk_products)}, Need: {needed}")
 
         qk_index = 0
-        replaced = 0
-        deleted = 0
+        replaced_count = 0
+        loser_count = 0
         position_swaps = []
         now = datetime.now(timezone.utc)
+        date_str = now.strftime('%d_%m_%Y')
 
-        # Process replacements
+        # Process all replacements
         for analysis in to_replace:
             if qk_index >= len(qk_products):
                 print("No more QK products available")
@@ -237,20 +249,39 @@ class ReplacementLogic:
 
             new_product = qk_products[qk_index]
 
+            # Get total_sales from sales_data
+            total_sales = 0
+            if analysis.sales_data:
+                total_sales = analysis.sales_data.get('total_quantity', 0) or analysis.sales_data.get('total_sales', 0)
+
+            # Determine if LOSER or REPLACED based on total_sales
+            is_loser = total_sales <= self.config.loser_threshold
+
             if test_mode:
-                print(f"[TEST] Would replace '{analysis.title}' with '{new_product['title']}'")
+                if is_loser:
+                    print(f"[TEST] LOSER: '{analysis.title}' (total_sales={total_sales} <= {self.config.loser_threshold}) -> Stock=0, Tag=LOSER_{date_str}")
+                    loser_count += 1
+                else:
+                    print(f"[TEST] REPLACED: '{analysis.title}' (total_sales={total_sales} > {self.config.loser_threshold}) -> Tag=Replaced_{date_str}")
+                    replaced_count += 1
+                print(f"[TEST] Would replace with '{new_product['title']}'")
                 if analysis.position is not None:
                     position_swaps.append((new_product['id'], analysis.position))
-                replaced += 1
                 qk_index += 1
             else:
-                # Remove collection tag from old product
+                # Prepare old product tags
                 old_tags = list(analysis.tags)
                 if collection_tag in old_tags:
                     old_tags.remove(collection_tag)
-                archive_tag = f"{self.config.replace_tag_prefix}{now.strftime('%d-%m-%Y')}"
-                if archive_tag not in old_tags:
-                    old_tags.append(archive_tag)
+
+                # Add appropriate tag based on LOSER or REPLACED
+                if is_loser:
+                    replacement_tag = f"LOSER_{date_str}"
+                else:
+                    replacement_tag = f"Replaced_{date_str}"
+
+                if replacement_tag not in old_tags:
+                    old_tags.append(replacement_tag)
 
                 # Add collection tag to new product, remove QK tag
                 new_tags = new_product.get('tags', [])
@@ -262,8 +293,16 @@ class ReplacementLogic:
                 if collection_tag not in new_tags:
                     new_tags.append(collection_tag)
 
-                # Update tags
+                # Update tags on old product
                 old_success = self.shopify.update_product_tags(analysis.product_id, old_tags)
+
+                # For LOSER products: Set stock to 0
+                if is_loser and old_success:
+                    inventory_success = self.shopify.set_product_inventory_zero(analysis.product_id)
+                    if not inventory_success:
+                        print(f"WARNING: Failed to set inventory to 0 for LOSER product '{analysis.title}'")
+
+                # Update tags on new product
                 new_success = self.shopify.update_product_tags(new_product['id'], new_tags)
 
                 if old_success and new_success:
@@ -280,67 +319,17 @@ class ReplacementLogic:
                     if original_pos is not None:
                         position_swaps.append((new_product['id'], original_pos))
 
-                    replaced += 1
+                    if is_loser:
+                        loser_count += 1
+                        print(f"LOSER: '{analysis.title}' (total_sales={total_sales}) -> Stock=0, Tag={replacement_tag}")
+                    else:
+                        replaced_count += 1
+                        print(f"REPLACED: '{analysis.title}' (total_sales={total_sales}) -> Tag={replacement_tag}")
+
+                    print(f"  -> Replaced with '{new_product['title']}'")
                     qk_index += 1
-                    print(f"Replaced '{analysis.title}' with '{new_product['title']}'")
                 else:
                     print(f"Failed to replace '{analysis.title}'")
-
-        # Process deletions
-        for analysis in to_delete:
-            if qk_index >= len(qk_products):
-                print("No more QK products available")
-                break
-
-            new_product = qk_products[qk_index]
-
-            if test_mode:
-                print(f"[TEST] Would archive '{analysis.title}' and replace with '{new_product['title']}'")
-                if analysis.position is not None:
-                    position_swaps.append((new_product['id'], analysis.position))
-                deleted += 1
-                qk_index += 1
-            else:
-                # Remove tags and archive
-                old_tags = list(analysis.tags)
-                if collection_tag in old_tags:
-                    old_tags.remove(collection_tag)
-                archive_tag = f"{self.config.replace_tag_prefix}{now.strftime('%d-%m-%Y')}"
-                if archive_tag not in old_tags:
-                    old_tags.append(archive_tag)
-
-                # New product tags
-                new_tags = new_product.get('tags', [])
-                if isinstance(new_tags, str):
-                    new_tags = [t.strip() for t in new_tags.split(',') if t]
-                else:
-                    new_tags = list(new_tags)
-                new_tags = [t for t in new_tags if t != self.config.qk_tag]
-                if collection_tag not in new_tags:
-                    new_tags.append(collection_tag)
-
-                # Execute updates
-                old_tag_success = self.shopify.update_product_tags(analysis.product_id, old_tags)
-                archive_success = self.shopify.archive_product(analysis.product_id)
-                new_success = self.shopify.update_product_tags(new_product['id'], new_tags)
-
-                if old_tag_success and archive_success and new_success:
-                    self.update_collection_tracking(collection_id, analysis.product_id, removed=now)
-                    self.update_collection_tracking(collection_id, new_product['id'], added=now)
-
-                    old_product_gid = analysis.product_id
-                    if not old_product_gid.startswith('gid://'):
-                        old_product_gid = f'gid://shopify/Product/{old_product_gid}'
-
-                    original_pos = original_positions.get(old_product_gid)
-                    if original_pos is not None:
-                        position_swaps.append((new_product['id'], original_pos))
-
-                    deleted += 1
-                    qk_index += 1
-                    print(f"Archived '{analysis.title}' and replaced with '{new_product['title']}'")
-                else:
-                    print(f"Failed to archive '{analysis.title}'")
 
         # Phase 2: Position maintenance (manual sorting only)
         positions_maintained = 0
@@ -390,8 +379,8 @@ class ReplacementLogic:
 
         return {
             'kept': analysis_result['to_keep'],
-            'replaced': replaced,
-            'deleted': deleted,
+            'replaced': replaced_count,
+            'losers': loser_count,
             'positions_maintained': positions_maintained,
-            'summary': f"Replaced: {replaced}, Archived: {deleted}, Positions maintained: {positions_maintained}"
+            'summary': f"Replaced: {replaced_count}, Losers: {loser_count}, Positions maintained: {positions_maintained}"
         }

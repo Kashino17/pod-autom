@@ -98,6 +98,7 @@ export interface Database {
           url_prefix: string
           sheet_id: string | null
           openai_api_key: string | null
+          loser_threshold: number
           created_at: string
           updated_at: string
         }
@@ -119,6 +120,7 @@ export interface Database {
           url_prefix?: string
           sheet_id?: string | null
           openai_api_key?: string | null
+          loser_threshold?: number
           created_at?: string
           updated_at?: string
         }
@@ -140,6 +142,7 @@ export interface Database {
           url_prefix?: string
           sheet_id?: string | null
           openai_api_key?: string | null
+          loser_threshold?: number
           created_at?: string
           updated_at?: string
         }

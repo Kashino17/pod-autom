@@ -1,12 +1,14 @@
 
 import React, { useState, useMemo } from 'react';
 import { PostPhaseConfig } from '../../types';
-import { RefreshCw, Calculator, CheckCircle2, XCircle, Info, Target, BarChart3, AlertCircle } from 'lucide-react';
+import { RefreshCw, Calculator, CheckCircle2, XCircle, Info, Target, BarChart3, AlertCircle, Save, Loader2, Check } from 'lucide-react';
+import { supabase } from '../../src/lib/supabase';
 
 interface PostPhaseProps {
   config: PostPhaseConfig;
   onChange: (newConfig: PostPhaseConfig) => void;
   onOpenCalculator: () => void;
+  shopId: string;
 }
 
 // Mock data for the simulator
@@ -18,8 +20,43 @@ const SIMULATION_PRODUCTS = [
   { id: 5, name: 'Denim Jacket', img: 'bg-zinc-500', avgs: { day3: 0, day7: 0, day10: 0, day14: 1 } },
 ];
 
-export const PostPhase: React.FC<PostPhaseProps> = ({ config, onChange, onOpenCalculator }) => {
-  
+export const PostPhase: React.FC<PostPhaseProps> = ({ config, onChange, onOpenCalculator, shopId }) => {
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+
+    try {
+      const { error } = await supabase
+        .from('shop_rules')
+        .upsert({
+          shop_id: shopId,
+          min_ok_buckets: config.minBuckets,
+          avg3_ok: config.averageSettings.day3,
+          avg7_ok: config.averageSettings.day7,
+          avg10_ok: config.averageSettings.day10,
+          avg14_ok: config.averageSettings.day14,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'shop_id'
+        });
+
+      if (error) throw error;
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } catch (err: any) {
+      console.error('Error saving post phase config:', err);
+      setSaveError(err.message || 'Failed to save');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Helper to update specific nested settings
   const updateAvg = (key: keyof PostPhaseConfig['averageSettings'], value: number) => {
     onChange({
@@ -65,13 +102,38 @@ export const PostPhase: React.FC<PostPhaseProps> = ({ config, onChange, onOpenCa
            <h1 className="text-2xl font-bold text-white">Post Phase Logic</h1>
         </div>
 
-        <button 
-           onClick={onOpenCalculator}
-           className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-300 transition-colors border border-zinc-700 hover:text-white group"
-         >
-            <Calculator className="w-3.5 h-3.5 text-zinc-500 group-hover:text-primary transition-colors" />
-            Open Calculator
-         </button>
+        <div className="flex items-center gap-3">
+          <button
+             onClick={onOpenCalculator}
+             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-300 transition-colors border border-zinc-700 hover:text-white group"
+           >
+              <Calculator className="w-3.5 h-3.5 text-zinc-500 group-hover:text-primary transition-colors" />
+              Open Calculator
+           </button>
+
+          <button
+             onClick={handleSave}
+             disabled={isSaving}
+             className={`
+               flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-medium transition-all border
+               ${saveSuccess
+                 ? 'bg-emerald-600 border-emerald-500 text-white'
+                 : saveError
+                   ? 'bg-red-600 border-red-500 text-white'
+                   : 'bg-primary hover:bg-primary/90 border-primary text-white'}
+               ${isSaving ? 'opacity-70 cursor-not-allowed' : ''}
+             `}
+           >
+              {isSaving ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : saveSuccess ? (
+                <Check className="w-3.5 h-3.5" />
+              ) : (
+                <Save className="w-3.5 h-3.5" />
+              )}
+              {saveSuccess ? 'Saved!' : saveError ? 'Error' : 'Save'}
+           </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-12 gap-6">

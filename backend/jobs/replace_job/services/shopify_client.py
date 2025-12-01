@@ -316,17 +316,99 @@ class ShopifyGraphQLClient:
 
         return True
 
-    def archive_product(self, product_id: str) -> bool:
-        """Archive a product."""
+    def set_product_inventory_zero(self, product_id: str) -> bool:
+        """Set all inventory levels for a product to 0.
+
+        This is used for LOSER products that should no longer be sold.
+        The product remains ACTIVE but with 0 stock.
+        """
         if not product_id.startswith("gid://"):
             product_id = f"gid://shopify/Product/{product_id}"
 
+        # First, get all variants and their inventory items
+        query = """
+        query getProductInventory($id: ID!) {
+            product(id: $id) {
+                variants(first: 100) {
+                    edges {
+                        node {
+                            id
+                            inventoryItem {
+                                id
+                                inventoryLevels(first: 10) {
+                                    edges {
+                                        node {
+                                            id
+                                            location {
+                                                id
+                                            }
+                                            quantities(names: ["available"]) {
+                                                name
+                                                quantity
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        """
+
+        result = self.execute(query, {"id": product_id})
+        product = result.get("product")
+
+        if not product:
+            print(f"Product {product_id} not found")
+            return False
+
+        variants = product.get("variants", {}).get("edges", [])
+        all_success = True
+
+        for variant_edge in variants:
+            variant = variant_edge.get("node", {})
+            inventory_item = variant.get("inventoryItem", {})
+            inventory_levels = inventory_item.get("inventoryLevels", {}).get("edges", [])
+
+            for level_edge in inventory_levels:
+                level = level_edge.get("node", {})
+                location_id = level.get("location", {}).get("id")
+                inventory_item_id = inventory_item.get("id")
+
+                if location_id and inventory_item_id:
+                    # Get current quantity
+                    current_qty = 0
+                    quantities = level.get("quantities", [])
+                    for q in quantities:
+                        if q.get("name") == "available":
+                            current_qty = q.get("quantity", 0)
+                            break
+
+                    if current_qty > 0:
+                        # Set to 0 by adjusting
+                        success = self._adjust_inventory(
+                            inventory_item_id,
+                            location_id,
+                            -current_qty
+                        )
+                        if not success:
+                            all_success = False
+
+        return all_success
+
+    def _adjust_inventory(self, inventory_item_id: str, location_id: str, delta: int) -> bool:
+        """Adjust inventory by a delta amount."""
         mutation = """
-        mutation archiveProduct($input: ProductInput!) {
-            productUpdate(input: $input) {
-                product {
+        mutation adjustInventory($input: InventoryAdjustQuantityInput!) {
+            inventoryAdjustQuantity(input: $input) {
+                inventoryLevel {
                     id
-                    status
+                    quantities(names: ["available"]) {
+                        name
+                        quantity
+                    }
                 }
                 userErrors {
                     field
@@ -338,17 +420,24 @@ class ShopifyGraphQLClient:
 
         variables = {
             "input": {
-                "id": product_id,
-                "status": "ARCHIVED"
+                "inventoryItemId": inventory_item_id,
+                "locationId": location_id,
+                "delta": delta,
+                "reason": "correction",
+                "name": "available"
             }
         }
 
-        result = self.execute(mutation, variables)
-        update_result = result.get("productUpdate", {})
+        try:
+            result = self.execute(mutation, variables)
+            adjust_result = result.get("inventoryAdjustQuantity", {})
 
-        user_errors = update_result.get("userErrors", [])
-        if user_errors:
-            print(f"Failed to archive {product_id}: {user_errors}")
+            user_errors = adjust_result.get("userErrors", [])
+            if user_errors:
+                print(f"Failed to adjust inventory: {user_errors}")
+                return False
+
+            return True
+        except Exception as e:
+            print(f"Error adjusting inventory: {e}")
             return False
-
-        return True

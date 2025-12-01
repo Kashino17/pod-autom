@@ -16,9 +16,10 @@ export interface Shop {
 export type TabId = 'dashboard' | 'automation-roi' | 'pod-intelligence' | 'marketing-analytics' | 'start-phase' | 'post-phase' | 'general' | 'pinterest' | 'meta-ads' | 'google-ads' | 'product-creation' | 'limits';
 
 export interface StartPhaseConfig {
-  deleteThreshold: number;   // <= X: Loser (Stock 0, Tag LOSER) -> Now called Replace Rule
+  deleteThreshold: number;   // <= X: Products below this get replaced
   keepThreshold: number;     // >= X: Move to Post Phase
   winnerThreshold: number;   // >= X: Tag WP
+  loserThreshold: number;    // Total sales <= X: LOSER (Stock 0, Tag LOSER_DD_MM_YYYY), else REPLACED tag
   isActive: boolean;
 }
 

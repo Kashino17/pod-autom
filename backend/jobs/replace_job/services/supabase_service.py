@@ -1,5 +1,9 @@
 """
 Supabase Service for Replace Job - Database operations
+Updated to work with new ReBoss NextGen schema:
+- shop_rules table for phase configuration
+- product_sales table for sales data
+- campaign_batch_assignments for collection tracking
 """
 import os
 import json
@@ -25,66 +29,102 @@ class SupabaseService:
         print(f"Connected to Supabase: {supabase_url}")
 
     def get_enabled_shops(self) -> List[ShopConfig]:
-        """Get all shops with enabled collections for replacement."""
+        """
+        Get all shops with campaign batch assignments.
+        Uses the new schema with shop_rules table.
+        """
         configs = []
 
         try:
-            response = self.client.table('shops').select('*').execute()
-            shops_data = response.data
+            # Get shops with active campaign assignments
+            assignments_response = self.client.table('campaign_batch_assignments').select(
+                'id, campaign_id, shopify_collection_id, collection_title, batch_indices, assigned_shop'
+            ).not_.is_('assigned_shop', 'null').execute()
 
-            print(f"Found {len(shops_data)} total shops")
+            if not assignments_response.data:
+                print("No campaign batch assignments found")
+                return []
 
-            for data in shops_data:
-                rules = data.get('rules', {})
-                if isinstance(rules, str):
-                    rules = json.loads(rules)
+            # Group assignments by shop
+            shop_assignments: Dict[str, List[dict]] = {}
+            for assignment in assignments_response.data:
+                shop_id = assignment.get('assigned_shop')
+                if shop_id:
+                    if shop_id not in shop_assignments:
+                        shop_assignments[shop_id] = []
+                    shop_assignments[shop_id].append(assignment)
 
-                # Check if collections are enabled
-                collections_config = rules.get('collections', {})
-                if not collections_config.get('enabled', False):
-                    print(f"  Shop {data.get('internal_name')}: Collections disabled")
+            print(f"Found {len(shop_assignments)} shops with assignments")
+
+            # Get shop details and rules for each shop
+            for shop_id, assignments in shop_assignments.items():
+                try:
+                    # Get shop details
+                    shop_response = self.client.table('shops').select(
+                        'id, internal_name, shop_domain, access_token, is_active'
+                    ).eq('id', shop_id).single().execute()
+
+                    if not shop_response.data or not shop_response.data.get('is_active'):
+                        print(f"  Shop {shop_id} not found or inactive, skipping")
+                        continue
+
+                    shop_data = shop_response.data
+                    if not shop_data.get('access_token'):
+                        print(f"  Shop {shop_data.get('internal_name')} has no Shopify access token")
+                        continue
+
+                    # Get shop rules
+                    rules_response = self.client.table('shop_rules').select('*').eq(
+                        'shop_id', shop_id
+                    ).single().execute()
+
+                    rules_data = rules_response.data if rules_response.data else {}
+
+                    # Build initial phase rules from shop_rules
+                    initial_phase_rules = {
+                        'min_sales_day7_delete': rules_data.get('min_sales_day7_delete', 0),
+                        'min_sales_day7_replace': rules_data.get('min_sales_day7_replace', 1)
+                    }
+
+                    # Build post phase rules from shop_rules
+                    post_phase_rules = {
+                        'avg3_ok': rules_data.get('avg3_ok', 2),
+                        'avg7_ok': rules_data.get('avg7_ok', 3),
+                        'avg10_ok': rules_data.get('avg10_ok', 4),
+                        'avg14_ok': rules_data.get('avg14_ok', 6),
+                        'min_ok_thresholds': rules_data.get('min_ok_buckets', 2)
+                    }
+
+                    # Convert assignments to collection format
+                    selected_collections = []
+                    for a in assignments:
+                        selected_collections.append({
+                            'id': a.get('shopify_collection_id'),
+                            'title': a.get('collection_title', '')
+                        })
+
+                    config = ShopConfig(
+                        shop_id=shop_id,
+                        shop_domain=shop_data.get('shop_domain'),
+                        access_token=shop_data.get('access_token'),
+                        test_mode=rules_data.get('test_mode', False),
+                        qk_tag=rules_data.get('qk_tag', 'QK'),
+                        replace_tag_prefix=rules_data.get('replace_tag_prefix', 'replaced_'),
+                        start_phase_days=rules_data.get('start_phase_days', 7),
+                        nach_phase_days=rules_data.get('nach_phase_days', 14),
+                        initial_phase_rules=initial_phase_rules,
+                        post_phase_rules=post_phase_rules,
+                        selected_collections=selected_collections,
+                        maintain_positions=True,  # Always maintain positions
+                        loser_threshold=rules_data.get('loser_threshold', 5)  # Products with total_sales <= this get LOSER tag
+                    )
+
+                    configs.append(config)
+                    print(f"  Shop {shop_data.get('internal_name')}: {len(selected_collections)} collections")
+
+                except Exception as e:
+                    print(f"Error loading config for shop {shop_id}: {e}")
                     continue
-
-                selected_collections = collections_config.get('selected_collections', [])
-                if not selected_collections:
-                    print(f"  Shop {data.get('internal_name')}: No collections selected")
-                    continue
-
-                # Extract configuration
-                general = rules.get('general', {})
-                phase_timeline = rules.get('phase_timeline', {})
-                initial_phase = rules.get('initial_phase', {})
-                post_phase = rules.get('post_phase', {})
-
-                # Set defaults for post_phase
-                if not post_phase.get('avg3_ok'):
-                    post_phase['avg3_ok'] = 5
-                if not post_phase.get('avg7_ok'):
-                    post_phase['avg7_ok'] = 6
-                if not post_phase.get('avg10_ok'):
-                    post_phase['avg10_ok'] = 10
-                if not post_phase.get('avg14_ok'):
-                    post_phase['avg14_ok'] = 14
-                if not post_phase.get('min_ok_thresholds'):
-                    post_phase['min_ok_thresholds'] = 2
-
-                config = ShopConfig(
-                    shop_id=data['id'],
-                    shop_domain=data.get('shop_domain'),
-                    access_token=data.get('access_token'),
-                    test_mode=general.get('test_mode', False),
-                    qk_tag=general.get('qk_tag', 'QK'),
-                    replace_tag_prefix=general.get('replace_tag_prefix', 'replaced_'),
-                    start_phase_days=phase_timeline.get('start_phase_days', 7),
-                    nach_phase_days=phase_timeline.get('nach_phase_days', 14),
-                    initial_phase_rules=initial_phase,
-                    post_phase_rules=post_phase,
-                    selected_collections=selected_collections,
-                    maintain_positions=collections_config.get('maintain_positions', True)
-                )
-
-                configs.append(config)
-                print(f"  Shop {data.get('internal_name')}: {len(selected_collections)} collections")
 
         except Exception as e:
             print(f"Error loading shop configs: {e}")
@@ -93,13 +133,16 @@ class SupabaseService:
         return configs
 
     def get_sales_data(self, shop_id: str, collection_id: str, product_id: str) -> Dict:
-        """Get sales data for a product from sales_data table."""
+        """
+        Get sales data for a product from product_sales table.
+        This table is populated by the sales_tracker_job.
+        """
         try:
             # Clean product ID
             if product_id.startswith('gid://'):
                 product_id = product_id.split('/')[-1]
 
-            response = self.client.table('sales_data').select('*').eq(
+            response = self.client.table('product_sales').select('*').eq(
                 'shop_id', shop_id
             ).eq(
                 'collection_id', collection_id
@@ -110,9 +153,9 @@ class SupabaseService:
             if response.data and len(response.data) > 0:
                 return response.data[0]
             else:
-                # New product - initialize with empty data
+                # New product - return empty data (will be picked up by sales_tracker_job)
                 return {
-                    'date_added_to_collection': datetime.now(timezone.utc).isoformat(),
+                    'date_added_to_collection': None,
                     'sales_first_7_days': 0,
                     'sales_last_3_days': 0,
                     'sales_last_7_days': 0,
@@ -141,10 +184,10 @@ class SupabaseService:
             if added:
                 update_data['date_added_to_collection'] = added.isoformat()
             if removed:
-                # Store removal date in metadata or a separate field
+                # Store removal date in last_update field
                 update_data['last_update'] = datetime.now(timezone.utc).isoformat()
 
-            self.client.table('sales_data').upsert(
+            self.client.table('product_sales').upsert(
                 update_data,
                 on_conflict='shop_id,collection_id,product_id'
             ).execute()
@@ -163,7 +206,8 @@ class SupabaseService:
                 'shops_processed': shops_processed,
                 'shops_failed': shops_failed,
                 'error_log': error_log or [],
-                'metadata': metadata or {}
+                'metadata': metadata or {},
+                'started_at': datetime.now(timezone.utc).isoformat()
             }
 
             if status in ['completed', 'failed']:
@@ -194,7 +238,7 @@ class SupabaseService:
                 data['error_log'] = error_log
             if metadata is not None:
                 data['metadata'] = metadata
-            if status in ['completed', 'failed']:
+            if status in ['completed', 'completed_with_errors', 'failed']:
                 data['completed_at'] = datetime.now(timezone.utc).isoformat()
 
             self.client.table('job_runs').update(data).eq('id', job_id).execute()

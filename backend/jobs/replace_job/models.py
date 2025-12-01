@@ -17,9 +17,8 @@ class ProductPhase(Enum):
 
 class ProductAction(Enum):
     """Possible actions for a product"""
-    KEEP = "keep"           # Keep product
-    REPLACE = "replace"     # Replace product
-    DELETE = "delete"       # Archive product
+    KEEP = "keep"           # Keep product in collection
+    REPLACE = "replace"     # Replace product (LOSER or REPLACED based on total_sales)
 
 
 @dataclass
@@ -51,6 +50,7 @@ class ShopConfig:
     post_phase_rules: Dict
     selected_collections: List[Dict]
     maintain_positions: bool
+    loser_threshold: int = 5  # Products with total_sales <= this get LOSER tag and stock=0
 
 
 class Shop(BaseModel):

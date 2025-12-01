@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { Shop, StartPhaseConfig, PostPhaseConfig, GeneralConfig, PinterestConfig, MetaAdsConfig, GoogleAdsConfig, LimitsConfig, ProductCreationConfig, TabId } from '../types';
 import { RefreshCw, Settings, ChevronRight } from 'lucide-react';
@@ -16,6 +15,7 @@ import { AnalyticsDashboard } from './tabs/AnalyticsDashboard';
 import { AutomationRoi } from './tabs/AutomationRoi';
 import { PodIntelligence } from './tabs/PodIntelligence';
 import { MarketingAnalytics } from './tabs/MarketingAnalytics';
+import { supabase } from '../src/lib/supabase';
 
 interface ShopDashboardProps {
   shop: Shop;
@@ -32,6 +32,7 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
     deleteThreshold: 1,
     keepThreshold: 4,
     winnerThreshold: 10,
+    loserThreshold: 5,
     isActive: true
   });
 
@@ -131,6 +132,63 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
     activeLinks: []
   });
 
+  // Load shop rules from Supabase on mount
+  useEffect(() => {
+    const loadShopRules = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('shop_rules')
+          .select('*')
+          .eq('shop_id', shop.id)
+          .single();
+
+        if (error && error.code !== 'PGRST116') {
+          // PGRST116 = no rows found - that's okay, use defaults
+          console.error('Error loading shop rules:', error);
+          return;
+        }
+
+        if (data) {
+          // Update Start Phase config
+          setStartConfig(prev => ({
+            ...prev,
+            deleteThreshold: data.min_sales_day7_delete ?? prev.deleteThreshold,
+            keepThreshold: data.min_sales_day7_replace ?? prev.keepThreshold,
+            loserThreshold: data.loser_threshold ?? prev.loserThreshold,
+          }));
+
+          // Update Post Phase config
+          setPostConfig(prev => ({
+            ...prev,
+            minBuckets: data.min_ok_buckets ?? prev.minBuckets,
+            averageSettings: {
+              day3: data.avg3_ok ?? prev.averageSettings.day3,
+              day7: data.avg7_ok ?? prev.averageSettings.day7,
+              day10: data.avg10_ok ?? prev.averageSettings.day10,
+              day14: data.avg14_ok ?? prev.averageSettings.day14,
+            }
+          }));
+
+          // Update General config if available
+          setGeneralConfig(prev => ({
+            ...prev,
+            qkTag: data.qk_tag ?? prev.qkTag,
+            replaceTagPrefix: data.replace_tag_prefix ?? prev.replaceTagPrefix,
+            urlPrefix: data.url_prefix ?? prev.urlPrefix,
+            startPhaseDays: data.start_phase_days ?? prev.startPhaseDays,
+            postPhaseDays: data.nach_phase_days ?? prev.postPhaseDays,
+          }));
+        }
+      } catch (err) {
+        console.error('Error loading shop rules:', err);
+      }
+    };
+
+    if (shop.id) {
+      loadShopRules();
+    }
+  }, [shop.id]);
+
   // Mock Sync Simulation
   useEffect(() => {
     if (isProcessing) {
@@ -207,16 +265,18 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
           ) : activeTab === 'marketing-analytics' ? (
             <MarketingAnalytics />
           ) : activeTab === 'start-phase' ? (
-            <StartPhase 
-              config={startConfig} 
-              onChange={setStartConfig} 
+            <StartPhase
+              config={startConfig}
+              onChange={setStartConfig}
               onOpenCalculator={() => setIsCalculatorOpen(true)}
+              shopId={shop.id}
             />
           ) : activeTab === 'post-phase' ? (
-            <PostPhase 
-              config={postConfig} 
-              onChange={setPostConfig} 
+            <PostPhase
+              config={postConfig}
+              onChange={setPostConfig}
               onOpenCalculator={() => setIsCalculatorOpen(true)}
+              shopId={shop.id}
             />
           ) : activeTab === 'general' ? (
             <GeneralSettings config={generalConfig} onChange={setGeneralConfig} shopId={shop.id} />
