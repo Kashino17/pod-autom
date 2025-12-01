@@ -50,6 +50,17 @@ class PinterestSyncJob:
             print(f"    No batch assignments for this campaign")
             return {'synced': 0, 'failed': 0, 'skipped': 0}
 
+        # Get or create ad group for this campaign
+        ad_group_id = None
+        if config.pinterest_account_id and campaign.pinterest_campaign_id:
+            ad_group_id = pinterest.get_or_create_ad_group_for_campaign(
+                ad_account_id=config.pinterest_account_id,
+                pinterest_campaign_id=campaign.pinterest_campaign_id,
+                campaign_name=campaign.name
+            )
+            if not ad_group_id:
+                print(f"    [WARNING] Could not get/create ad group - pins will not be added to campaign")
+
         synced = 0
         failed = 0
 
@@ -111,6 +122,21 @@ class PinterestSyncJob:
                     if result.success:
                         synced += 1
                         print(f"        [OK] {product.title[:40]}... -> Pin {result.pinterest_pin_id}")
+
+                        # Create promoted pin (ad) to add to campaign
+                        ad_created = False
+                        if ad_group_id and config.pinterest_account_id:
+                            ad_result = pinterest.create_ad(
+                                ad_account_id=config.pinterest_account_id,
+                                ad_group_id=ad_group_id,
+                                pin_id=result.pinterest_pin_id,
+                                name=f"{product.title[:50]} - Ad"
+                            )
+                            if ad_result and ad_result.get('id'):
+                                ad_created = True
+                                print(f"        [AD] Added to campaign -> Ad {ad_result.get('id')}")
+                            else:
+                                print(f"        [WARN] Pin created but failed to add to campaign")
 
                         # Log sync result
                         self.db.log_sync_result(

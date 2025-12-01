@@ -385,3 +385,101 @@ class PinterestAPIClient:
         """Get campaigns for an ad account."""
         result = self._make_request("GET", f"ad_accounts/{ad_account_id}/campaigns")
         return result.get('items', []) if result else []
+
+    def get_ad_groups(self, ad_account_id: str, campaign_id: str) -> List[Dict]:
+        """Get ad groups for a campaign."""
+        result = self._make_request(
+            "GET",
+            f"ad_accounts/{ad_account_id}/ad_groups?campaign_ids={campaign_id}"
+        )
+        return result.get('items', []) if result else []
+
+    def create_ad_group(self, ad_account_id: str, campaign_id: str, name: str,
+                        budget_in_micro_currency: int = 1000000) -> Optional[Dict]:
+        """
+        Create an ad group within a campaign.
+
+        Args:
+            ad_account_id: Pinterest ad account ID
+            campaign_id: Pinterest campaign ID
+            name: Name for the ad group
+            budget_in_micro_currency: Budget in micro currency (1000000 = 1 EUR/USD)
+
+        Returns:
+            Created ad group data or None
+        """
+        data = {
+            "ad_account_id": ad_account_id,
+            "campaign_id": campaign_id,
+            "name": name,
+            "status": "ACTIVE",
+            "budget_in_micro_currency": budget_in_micro_currency,
+            "bid_strategy_type": "AUTOMATIC_BID",
+            "billable_event": "CLICKTHROUGH"
+        }
+
+        result = self._make_request("POST", f"ad_accounts/{ad_account_id}/ad_groups", data)
+        return result
+
+    def create_ad(self, ad_account_id: str, ad_group_id: str, pin_id: str,
+                  name: str) -> Optional[Dict]:
+        """
+        Create a promoted pin (ad) from an organic pin.
+
+        Args:
+            ad_account_id: Pinterest ad account ID
+            ad_group_id: Pinterest ad group ID
+            pin_id: The organic pin ID to promote
+            name: Name for the ad
+
+        Returns:
+            Created ad data or None
+        """
+        data = {
+            "ad_account_id": ad_account_id,
+            "ad_group_id": ad_group_id,
+            "creative_type": "REGULAR",
+            "pin_id": pin_id,
+            "name": name,
+            "status": "ACTIVE"
+        }
+
+        result = self._make_request("POST", f"ad_accounts/{ad_account_id}/ads", data)
+        return result
+
+    def get_or_create_ad_group_for_campaign(self, ad_account_id: str,
+                                             pinterest_campaign_id: str,
+                                             campaign_name: str) -> Optional[str]:
+        """
+        Get existing ad group for campaign or create one if none exists.
+
+        Returns ad_group_id or None.
+        """
+        # First try to get existing ad groups
+        ad_groups = self.get_ad_groups(ad_account_id, pinterest_campaign_id)
+
+        if ad_groups:
+            # Use first active ad group
+            for ag in ad_groups:
+                if ag.get('status') == 'ACTIVE':
+                    print(f"        Using existing ad group: {ag.get('name')} ({ag.get('id')})")
+                    return ag.get('id')
+
+            # If no active, use first one
+            print(f"        Using existing ad group: {ad_groups[0].get('name')} ({ad_groups[0].get('id')})")
+            return ad_groups[0].get('id')
+
+        # No ad groups exist, create one
+        print(f"        Creating new ad group for campaign...")
+        new_ad_group = self.create_ad_group(
+            ad_account_id=ad_account_id,
+            campaign_id=pinterest_campaign_id,
+            name=f"{campaign_name} - Auto Generated"
+        )
+
+        if new_ad_group and new_ad_group.get('id'):
+            print(f"        Created ad group: {new_ad_group.get('id')}")
+            return new_ad_group.get('id')
+
+        print(f"        Failed to create ad group")
+        return None
