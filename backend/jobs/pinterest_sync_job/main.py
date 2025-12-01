@@ -124,7 +124,7 @@ class PinterestSyncJob:
                         print(f"        [OK] {product.title[:40]}... -> Pin {result.pinterest_pin_id}")
 
                         # Create promoted pin (ad) to add to campaign
-                        ad_created = False
+                        ad_id = None
                         if ad_group_id and config.pinterest_account_id:
                             ad_result = pinterest.create_ad(
                                 ad_account_id=config.pinterest_account_id,
@@ -133,19 +133,21 @@ class PinterestSyncJob:
                                 name=f"{product.title[:50]} - Ad"
                             )
                             if ad_result and ad_result.get('id'):
-                                ad_created = True
-                                print(f"        [AD] Added to campaign -> Ad {ad_result.get('id')}")
+                                ad_id = ad_result.get('id')
+                                print(f"        [AD] Added to campaign -> Ad {ad_id}")
                             else:
                                 print(f"        [WARN] Pin created but failed to add to campaign")
 
-                        # Log sync result
+                        # Log sync result with ad info for future deactivation
                         self.db.log_sync_result(
                             shop_id=config.shop_id,
                             campaign_id=campaign.id,
                             shopify_product_id=str(product.id),
                             pinterest_pin_id=result.pinterest_pin_id,
                             pinterest_board_id=board_id,
-                            success=True
+                            success=True,
+                            pinterest_ad_id=ad_id,
+                            pinterest_ad_group_id=ad_group_id
                         )
                     else:
                         failed += 1

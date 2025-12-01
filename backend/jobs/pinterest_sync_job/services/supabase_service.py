@@ -240,10 +240,12 @@ class SupabaseService:
     def log_sync_result(self, shop_id: str, campaign_id: str,
                         shopify_product_id: str, pinterest_pin_id: Optional[str],
                         pinterest_board_id: Optional[str], success: bool,
-                        error: Optional[str] = None):
+                        error: Optional[str] = None,
+                        pinterest_ad_id: Optional[str] = None,
+                        pinterest_ad_group_id: Optional[str] = None):
         """Log individual product sync result to pinterest_sync_log table."""
         try:
-            self.client.table('pinterest_sync_log').upsert({
+            data = {
                 'shop_id': shop_id,
                 'campaign_id': campaign_id,
                 'shopify_product_id': shopify_product_id,
@@ -253,7 +255,17 @@ class SupabaseService:
                 'success': success,
                 'error': error,
                 'synced_at': datetime.now(timezone.utc).isoformat()
-            }, on_conflict='shop_id,campaign_id,shopify_product_id').execute()
+            }
+
+            # Add ad info if provided (for campaign linking)
+            if pinterest_ad_id:
+                data['pinterest_ad_id'] = pinterest_ad_id
+            if pinterest_ad_group_id:
+                data['pinterest_ad_group_id'] = pinterest_ad_group_id
+
+            self.client.table('pinterest_sync_log').upsert(
+                data, on_conflict='shop_id,campaign_id,shopify_product_id'
+            ).execute()
         except Exception as e:
             print(f"    [WARNING] Failed to log sync result: {e}")
 

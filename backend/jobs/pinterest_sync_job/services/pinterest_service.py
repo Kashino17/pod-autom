@@ -157,7 +157,7 @@ class PinterestAPIClient:
                     return None
 
                 if response.status_code >= 400:
-                    print(f"    Pinterest API Error {response.status_code}: {response.text[:200]}")
+                    print(f"    Pinterest API Error {response.status_code}: {response.text}")
                     if response.status_code in [500, 502, 503, 504]:
                         retry_count += 1
                         time.sleep(2 ** retry_count)
@@ -435,16 +435,24 @@ class PinterestAPIClient:
         Returns:
             Created ad data or None
         """
-        data = {
-            "ad_account_id": ad_account_id,
-            "ad_group_id": ad_group_id,
-            "creative_type": "REGULAR",
-            "pin_id": pin_id,
-            "name": name,
-            "status": "ACTIVE"
-        }
+        # Pinterest API expects an array of ad objects
+        # Required fields: ad_group_id, creative_type, pin_id
+        # Optional: name, status
+        data = [
+            {
+                "ad_group_id": ad_group_id,
+                "creative_type": "REGULAR",
+                "pin_id": pin_id,
+                "name": name,
+                "status": "ACTIVE"
+            }
+        ]
 
         result = self._make_request("POST", f"ad_accounts/{ad_account_id}/ads", data)
+
+        # API returns {"items": [...]} - extract first item
+        if result and 'items' in result and len(result['items']) > 0:
+            return result['items'][0]
         return result
 
     def get_or_create_ad_group_for_campaign(self, ad_account_id: str,
