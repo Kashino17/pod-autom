@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 // Components from /components/ (outside src)
 import { Sidebar } from '@components/Sidebar'
 import { WelcomeView } from '@components/WelcomeView'
@@ -8,6 +8,7 @@ import { AddShopDialog } from '../components/AddShopDialog'
 import { useShops } from '../hooks/useShops'
 import { useAppStore } from '../lib/store'
 import { Loader2 } from 'lucide-react'
+import { Shop } from '../lib/database.types'
 
 export function Dashboard() {
   const { data: shops, isLoading, error } = useShops()
@@ -19,6 +20,9 @@ export function Dashboard() {
     isAddShopDialogOpen,
     setAddShopDialogOpen
   } = useAppStore()
+
+  // State for editing a shop
+  const [editingShop, setEditingShop] = useState<Shop | null>(null)
 
   // Find active shop
   const activeShop = activeShopId
@@ -110,6 +114,12 @@ export function Dashboard() {
         onSelectShop={setActiveShopId}
         onSelectTab={setActiveTabId}
         onAddShop={() => setAddShopDialogOpen(true)}
+        onEditShop={(shopId) => {
+          const shopToEdit = shops?.find(s => s.id === shopId)
+          if (shopToEdit) {
+            setEditingShop(shopToEdit)
+          }
+        }}
       />
 
       {/* Main Content */}
@@ -133,6 +143,16 @@ export function Dashboard() {
           setActiveShopId(shopId)
           setAddShopDialogOpen(false)
         }}
+      />
+
+      {/* Edit Shop Dialog */}
+      <AddShopDialog
+        isOpen={!!editingShop}
+        onClose={() => setEditingShop(null)}
+        onSuccess={() => {
+          setEditingShop(null)
+        }}
+        editShop={editingShop}
       />
     </div>
   )

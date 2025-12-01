@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  ChevronsUpDown, 
-  Plus, 
-  Check, 
-  Zap, 
-  RefreshCw, 
-  Shirt, 
-  Share2, 
-  Gauge, 
-  Settings, 
+import {
+  ChevronsUpDown,
+  Plus,
+  Check,
+  Zap,
+  RefreshCw,
+  Shirt,
+  Share2,
+  Gauge,
+  Settings,
   LogOut,
   LayoutGrid,
   Search,
@@ -16,7 +16,8 @@ import {
   LayoutDashboard,
   PiggyBank,
   BrainCircuit,
-  BarChart2
+  BarChart2,
+  Pencil
 } from 'lucide-react';
 import { Shop, TabId } from '../types';
 
@@ -27,15 +28,17 @@ interface SidebarProps {
   onSelectShop: (id: string) => void;
   onSelectTab: (id: TabId) => void;
   onAddShop: () => void;
+  onEditShop?: (shopId: string) => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ 
-  shops, 
-  activeShopId, 
+export const Sidebar: React.FC<SidebarProps> = ({
+  shops,
+  activeShopId,
   activeTabId,
-  onSelectShop, 
+  onSelectShop,
   onSelectTab,
-  onAddShop 
+  onAddShop,
+  onEditShop
 }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -117,25 +120,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
               
               <div className="max-h-60 overflow-y-auto py-1">
                 {shops.map(shop => (
-                  <button
+                  <div
                     key={shop.id}
-                    onClick={() => {
-                      onSelectShop(shop.id);
-                      setIsDropdownOpen(false);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-zinc-800 transition-colors group"
+                    className="flex items-center justify-between px-3 py-2 hover:bg-zinc-800 transition-colors group"
                   >
-                    <div className="flex items-center gap-2.5">
-                       <span className="w-2 h-2 rounded-full" style={{ 
-                         backgroundColor: shop.status === 'connected' ? '#10b981' : 
-                                          shop.status === 'syncing' ? '#fbbf24' : '#ef4444' 
+                    <button
+                      onClick={() => {
+                        onSelectShop(shop.id);
+                        setIsDropdownOpen(false);
+                      }}
+                      className="flex-1 flex items-center gap-2.5 text-left"
+                    >
+                       <span className="w-2 h-2 rounded-full" style={{
+                         backgroundColor: shop.status === 'connected' ? '#10b981' :
+                                          shop.status === 'syncing' ? '#fbbf24' : '#ef4444'
                        }} />
                        <span className={`text-sm ${shop.id === activeShopId ? 'text-white font-medium' : 'text-zinc-400 group-hover:text-zinc-200'}`}>
                          {shop.name}
                        </span>
+                    </button>
+                    <div className="flex items-center gap-1">
+                      {onEditShop && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditShop(shop.id);
+                            setIsDropdownOpen(false);
+                          }}
+                          className="p-1 rounded hover:bg-zinc-700 text-zinc-500 hover:text-zinc-300 transition-colors opacity-0 group-hover:opacity-100"
+                          title="Shop bearbeiten"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
+                      {shop.id === activeShopId && <Check className="w-3.5 h-3.5 text-white" />}
                     </div>
-                    {shop.id === activeShopId && <Check className="w-3.5 h-3.5 text-white" />}
-                  </button>
+                  </div>
                 ))}
               </div>
 

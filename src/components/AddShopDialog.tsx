@@ -1,14 +1,17 @@
-import React, { useState } from 'react'
-import { X, Store, Key, AlertCircle, Loader2, CheckCircle, ExternalLink } from 'lucide-react'
-import { useCreateShop, useTestShopifyConnection } from '../hooks/useShops'
+import React, { useState, useEffect } from 'react'
+import { X, Store, Key, AlertCircle, Loader2, CheckCircle, ExternalLink, Pencil } from 'lucide-react'
+import { useCreateShop, useUpdateShop, useTestShopifyConnection } from '../hooks/useShops'
+import { Shop } from '../lib/database.types'
 
 interface AddShopDialogProps {
   isOpen: boolean
   onClose: () => void
   onSuccess?: (shopId: string) => void
+  editShop?: Shop | null  // If provided, dialog will be in edit mode
 }
 
-export function AddShopDialog({ isOpen, onClose, onSuccess }: AddShopDialogProps) {
+export function AddShopDialog({ isOpen, onClose, onSuccess, editShop }: AddShopDialogProps) {
+  const isEditMode = !!editShop
   const [step, setStep] = useState<'form' | 'testing' | 'success'>('form')
   const [shopName, setShopName] = useState('')
   const [shopDomain, setShopDomain] = useState('')
@@ -16,7 +19,17 @@ export function AddShopDialog({ isOpen, onClose, onSuccess }: AddShopDialogProps
   const [error, setError] = useState<string | null>(null)
 
   const createShop = useCreateShop()
+  const updateShop = useUpdateShop()
   const testConnection = useTestShopifyConnection()
+
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editShop) {
+      setShopName(editShop.internal_name || '')
+      setShopDomain(editShop.shop_domain || '')
+      setAccessToken(editShop.access_token || '')
+    }
+  }, [editShop])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,21 +53,42 @@ export function AddShopDialog({ isOpen, onClose, onSuccess }: AddShopDialogProps
         accessToken: accessToken.trim()
       })
 
-      // Create shop in database
-      const newShop = await createShop.mutateAsync({
-        internal_name: shopName.trim(),
-        shop_domain: cleanDomain,
-        access_token: accessToken.trim(),
-        connection_status: 'connected'
-      })
+      if (isEditMode && editShop) {
+        // Update existing shop
+        await updateShop.mutateAsync({
+          shopId: editShop.id,
+          updates: {
+            internal_name: shopName.trim(),
+            shop_domain: cleanDomain,
+            access_token: accessToken.trim(),
+            connection_status: 'connected'
+          }
+        })
 
-      setStep('success')
+        setStep('success')
 
-      // Auto close after success
-      setTimeout(() => {
-        onSuccess?.(newShop.id)
-        handleClose()
-      }, 1500)
+        // Auto close after success
+        setTimeout(() => {
+          onSuccess?.(editShop.id)
+          handleClose()
+        }, 1500)
+      } else {
+        // Create new shop in database
+        const newShop = await createShop.mutateAsync({
+          internal_name: shopName.trim(),
+          shop_domain: cleanDomain,
+          access_token: accessToken.trim(),
+          connection_status: 'connected'
+        })
+
+        setStep('success')
+
+        // Auto close after success
+        setTimeout(() => {
+          onSuccess?.(newShop.id)
+          handleClose()
+        }, 1500)
+      }
 
     } catch (err: any) {
       setError(err.message || 'Verbindung fehlgeschlagen')
@@ -86,12 +120,20 @@ export function AddShopDialog({ isOpen, onClose, onSuccess }: AddShopDialogProps
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-zinc-800">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-              <Store className="w-5 h-5 text-emerald-400" />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isEditMode ? 'bg-blue-500/20' : 'bg-emerald-500/20'}`}>
+              {isEditMode ? (
+                <Pencil className="w-5 h-5 text-blue-400" />
+              ) : (
+                <Store className="w-5 h-5 text-emerald-400" />
+              )}
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Shop hinzufügen</h2>
-              <p className="text-sm text-zinc-400">Verbinde deinen Shopify Store</p>
+              <h2 className="text-lg font-semibold text-white">
+                {isEditMode ? 'Shop bearbeiten' : 'Shop hinzufügen'}
+              </h2>
+              <p className="text-sm text-zinc-400">
+                {isEditMode ? 'Ändere die Shop-Einstellungen' : 'Verbinde deinen Shopify Store'}
+              </p>
             </div>
           </div>
           <button
@@ -117,7 +159,9 @@ export function AddShopDialog({ isOpen, onClose, onSuccess }: AddShopDialogProps
               <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mb-4">
                 <CheckCircle className="w-8 h-8 text-emerald-400" />
               </div>
-              <p className="text-white font-medium">Shop erfolgreich verbunden!</p>
+              <p className="text-white font-medium">
+                {isEditMode ? 'Shop erfolgreich aktualisiert!' : 'Shop erfolgreich verbunden!'}
+              </p>
               <p className="text-zinc-400 text-sm mt-1">Du wirst weitergeleitet...</p>
             </div>
           )}
@@ -249,7 +293,7 @@ export function AddShopDialog({ isOpen, onClose, onSuccess }: AddShopDialogProps
                 </div>
 
                 {/* Publishing */}
-                <div>
+                <div className="mb-3">
                   <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1.5">Veröffentlichung</p>
                   <div className="flex flex-wrap gap-1.5">
                     {['read_publications', 'write_publications'].map((scope) => (
@@ -263,8 +307,23 @@ export function AddShopDialog({ isOpen, onClose, onSuccess }: AddShopDialogProps
                   </div>
                 </div>
 
+                {/* Locales */}
+                <div>
+                  <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1.5">Lokalisierung</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['read_locales', 'write_locales'].map((scope) => (
+                      <span
+                        key={scope}
+                        className="px-2 py-1 text-xs font-mono bg-pink-500/20 text-pink-300 rounded border border-pink-500/30"
+                      >
+                        {scope}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
                 <p className="mt-3 text-xs text-zinc-500">
-                  Diese Scopes sind erforderlich für Produktverwaltung, Inventar-Tracking, Verkaufsanalysen und Multi-Channel-Publishing.
+                  Diese Scopes sind erforderlich für Produktverwaltung, Inventar-Tracking, Verkaufsanalysen, Multi-Channel-Publishing und Übersetzungen.
                 </p>
               </div>
 
@@ -280,9 +339,13 @@ export function AddShopDialog({ isOpen, onClose, onSuccess }: AddShopDialogProps
                 <button
                   type="submit"
                   disabled={!shopName || !shopDomain || !accessToken}
-                  className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+                  className={`flex-1 px-4 py-3 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors ${
+                    isEditMode
+                      ? 'bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50'
+                      : 'bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/50'
+                  }`}
                 >
-                  Shop verbinden
+                  {isEditMode ? 'Speichern' : 'Shop verbinden'}
                 </button>
               </div>
             </form>
