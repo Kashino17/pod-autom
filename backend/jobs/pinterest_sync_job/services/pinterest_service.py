@@ -1,13 +1,23 @@
 """
 Pinterest API Service for Pinterest Sync Job
-Handles pin creation and token refresh
+Handles pin creation, token refresh, and image processing
 """
 import os
 import re
 import time
 import requests
+import base64
+import tempfile
+from io import BytesIO
 from typing import Dict, List, Optional
 from datetime import datetime, timezone, timedelta
+
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    print("WARNING: Pillow not installed. Image resizing will be skipped.")
 
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,6 +32,10 @@ class PinterestAPIClient:
     # Pinterest limits
     MAX_TITLE_LENGTH = 100
     MAX_DESCRIPTION_LENGTH = 500
+
+    # Pinterest optimal image size (2:3 ratio)
+    PIN_WIDTH = 1000
+    PIN_HEIGHT = 1500
 
     def __init__(self, access_token: str, refresh_token: Optional[str] = None,
                  expires_at: Optional[str] = None):
@@ -217,17 +231,100 @@ class PinterestAPIClient:
 
         return truncated.rstrip() + '...'
 
+    def _download_and_resize_image(self, image_url: str) -> Optional[str]:
+        """
+        Download image from URL and resize to Pinterest optimal format (1000x1500px).
+        Returns base64 encoded image string or None on failure.
+
+        The image is cropped/fitted to 2:3 ratio (Pinterest optimal).
+        """
+        if not PIL_AVAILABLE:
+            return None
+
+        try:
+            # Download image
+            response = requests.get(image_url, timeout=30)
+            if not response.ok:
+                print(f"    Failed to download image: {response.status_code}")
+                return None
+
+            # Open image
+            img = Image.open(BytesIO(response.content))
+
+            # Convert to RGB if necessary (handle RGBA, P mode etc.)
+            if img.mode in ('RGBA', 'P', 'LA'):
+                # Create white background
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                img = background
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+
+            # Calculate target dimensions maintaining aspect ratio
+            # Pinterest prefers 2:3 ratio (1000x1500)
+            target_ratio = self.PIN_WIDTH / self.PIN_HEIGHT  # 0.667
+
+            orig_width, orig_height = img.size
+            orig_ratio = orig_width / orig_height
+
+            if orig_ratio > target_ratio:
+                # Image is wider - crop sides
+                new_width = int(orig_height * target_ratio)
+                offset = (orig_width - new_width) // 2
+                img = img.crop((offset, 0, offset + new_width, orig_height))
+            elif orig_ratio < target_ratio:
+                # Image is taller - crop top/bottom
+                new_height = int(orig_width / target_ratio)
+                offset = (orig_height - new_height) // 2
+                img = img.crop((0, offset, orig_width, offset + new_height))
+
+            # Resize to target dimensions
+            img = img.resize((self.PIN_WIDTH, self.PIN_HEIGHT), Image.Resampling.LANCZOS)
+
+            # Save to buffer as JPEG
+            buffer = BytesIO()
+            img.save(buffer, format='JPEG', quality=90, optimize=True)
+            buffer.seek(0)
+
+            # Encode as base64
+            return base64.b64encode(buffer.read()).decode('utf-8')
+
+        except Exception as e:
+            print(f"    Error processing image: {e}")
+            return None
+
     def create_pin(self, pin: PinterestPin, board_id: str) -> Optional[Dict]:
-        """Create an organic pin on a board."""
-        data = {
-            "board_id": board_id,
-            "title": self._truncate_text(pin.title, self.MAX_TITLE_LENGTH),
-            "description": self._truncate_text(pin.description, self.MAX_DESCRIPTION_LENGTH),
-            "media_source": {
-                "source_type": "image_url",
-                "url": pin.media_source_url
+        """Create an organic pin on a board with resized image."""
+        # Try to resize image to Pinterest optimal format (1000x1500)
+        resized_image_b64 = self._download_and_resize_image(pin.media_source_url)
+
+        if resized_image_b64:
+            # Use base64 encoded resized image
+            data = {
+                "board_id": board_id,
+                "title": self._truncate_text(pin.title, self.MAX_TITLE_LENGTH),
+                "description": self._truncate_text(pin.description, self.MAX_DESCRIPTION_LENGTH),
+                "media_source": {
+                    "source_type": "image_base64",
+                    "content_type": "image/jpeg",
+                    "data": resized_image_b64
+                }
             }
-        }
+            print(f"        Using resized image (1000x1500)")
+        else:
+            # Fallback to original URL if resizing fails
+            data = {
+                "board_id": board_id,
+                "title": self._truncate_text(pin.title, self.MAX_TITLE_LENGTH),
+                "description": self._truncate_text(pin.description, self.MAX_DESCRIPTION_LENGTH),
+                "media_source": {
+                    "source_type": "image_url",
+                    "url": pin.media_source_url
+                }
+            }
+            print(f"        Using original image URL (resize failed)")
 
         # Only add link if it's not empty
         if pin.link:

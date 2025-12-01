@@ -39,6 +39,7 @@ export interface GeneralConfig {
   urlPrefix: string;
   startPhaseDays: number;
   postPhaseDays: number;
+  productsPerPage: number; // Products per page in collection (for Pinterest URL calculation)
 }
 
 export interface LimitsConfig {

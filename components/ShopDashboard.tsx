@@ -51,7 +51,8 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
     replaceTagPrefix: 'replace_',
     urlPrefix: '',
     startPhaseDays: 3,
-    postPhaseDays: 12
+    postPhaseDays: 12,
+    productsPerPage: 10
   });
 
   const [limitsConfig, setLimitsConfig] = useState<LimitsConfig>({

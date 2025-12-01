@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { GeneralConfig } from '../../types';
-import { Settings, Tag, Hash, Package, Link, CalendarClock, Database, AlertTriangle, CheckCircle, Loader2, Store, Save, Check } from 'lucide-react';
+import { Settings, Tag, Hash, Package, Link, CalendarClock, Database, AlertTriangle, CheckCircle, Loader2, Store, Save, Check, LayoutGrid } from 'lucide-react';
 import { useAllShopsResearchStatus, useInitializeAllMissingResearchTables } from '../../src/hooks/useFastFashionResearch';
 import { usePinterestSettings, useUpdatePinterestSettings } from '../../src/hooks/usePinterest';
 
@@ -24,12 +24,24 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ config, onChan
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Sync urlPrefix from Pinterest settings
+  // Sync urlPrefix and productsPerPage from Pinterest settings
   useEffect(() => {
-    if (pinterestSettings?.url_prefix !== undefined && pinterestSettings.url_prefix !== config.urlPrefix) {
-      onChange({ ...config, urlPrefix: pinterestSettings.url_prefix || '' });
+    if (pinterestSettings) {
+      const updates: Partial<GeneralConfig> = {};
+
+      if (pinterestSettings.url_prefix !== undefined && pinterestSettings.url_prefix !== config.urlPrefix) {
+        updates.urlPrefix = pinterestSettings.url_prefix || '';
+      }
+
+      if (pinterestSettings.products_per_page !== undefined && pinterestSettings.products_per_page !== config.productsPerPage) {
+        updates.productsPerPage = pinterestSettings.products_per_page || 10;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        onChange({ ...config, ...updates });
+      }
     }
-  }, [pinterestSettings?.url_prefix]);
+  }, [pinterestSettings?.url_prefix, pinterestSettings?.products_per_page]);
 
   const handleInitializeAll = async () => {
     try {
@@ -50,11 +62,12 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ config, onChan
     setSaveError(null);
 
     try {
-      // Save url_prefix to pinterest_settings
+      // Save url_prefix and products_per_page to pinterest_settings
       await updatePinterestSettings.mutateAsync({
         shopId,
         settings: {
-          url_prefix: config.urlPrefix
+          url_prefix: config.urlPrefix,
+          products_per_page: config.productsPerPage
         }
       });
 
@@ -243,16 +256,44 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ config, onChan
                        URL Prefix
                     </label>
                     <div className="relative group">
-                       <input 
-                          type="text" 
+                       <input
+                          type="text"
                           value={config.urlPrefix}
                           onChange={(e) => onChange({...config, urlPrefix: e.target.value})}
                           className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-3 px-4 text-sm text-white focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 transition-all placeholder:text-zinc-700 font-mono"
-                          placeholder="https://myshop.com/products/"
+                          placeholder="https://myshop.com"
                        />
                     </div>
                     <p className="text-[11px] text-zinc-500">
-                       Base URL used for constructing external product links and tracking.
+                       Base URL used for constructing collection page links (e.g., https://myshop.com).
+                    </p>
+                 </div>
+
+                 <div className="h-px bg-zinc-800 w-full" />
+
+                 {/* Products per Page Input */}
+                 <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-medium text-zinc-400 uppercase tracking-wider">
+                       <LayoutGrid className="w-3 h-3" />
+                       Products per Page (Collection)
+                    </label>
+                    <div className="relative group">
+                       <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={config.productsPerPage}
+                          onChange={(e) => onChange({...config, productsPerPage: Math.max(1, parseInt(e.target.value) || 10)})}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-3 px-4 text-sm text-white focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 transition-all placeholder:text-zinc-700 font-mono"
+                          placeholder="10"
+                       />
+                    </div>
+                    <p className="text-[11px] text-zinc-500">
+                       Number of products displayed per page in your Shopify collection. Used to calculate correct Pinterest pin links.
+                       <br />
+                       <span className="text-zinc-600">
+                          Example: If set to 10, products 1-10 link to page 1, products 11-20 link to page 2, etc.
+                       </span>
                     </p>
                  </div>
 

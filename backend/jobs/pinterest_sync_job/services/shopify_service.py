@@ -268,3 +268,65 @@ class ShopifyRESTClient:
     def clear_cache(self):
         """Clear the collection products cache."""
         self._collection_cache.clear()
+
+    def get_collection_handle(self, collection_id: str) -> Optional[str]:
+        """
+        Get the handle (URL slug) for a collection.
+
+        Args:
+            collection_id: Shopify collection ID
+
+        Returns:
+            Collection handle/slug or None if not found
+        """
+        # Check cache first
+        cache_key = f"handle_{collection_id}"
+        if cache_key in self._collection_cache:
+            return self._collection_cache[cache_key]
+
+        # Try custom collection first
+        endpoint = f"custom_collections/{collection_id}.json"
+        result = self._make_request("GET", endpoint)
+
+        if result and 'custom_collection' in result:
+            handle = result['custom_collection'].get('handle')
+            self._collection_cache[cache_key] = handle
+            return handle
+
+        # Try smart collection
+        endpoint = f"smart_collections/{collection_id}.json"
+        result = self._make_request("GET", endpoint)
+
+        if result and 'smart_collection' in result:
+            handle = result['smart_collection'].get('handle')
+            self._collection_cache[cache_key] = handle
+            return handle
+
+        print(f"  [WARNING] Could not find handle for collection {collection_id}")
+        return None
+
+    def get_collection_page_url(self, collection_id: str, product_index: int,
+                                 products_per_page: int, url_prefix: str = '') -> str:
+        """
+        Generate collection page URL for a product at a specific index.
+
+        Args:
+            collection_id: Shopify collection ID
+            product_index: 0-based index of the product within the collection
+            products_per_page: Number of products per page in the collection
+            url_prefix: Custom domain prefix
+
+        Returns:
+            Collection page URL with ?page= parameter
+        """
+        collection_handle = self.get_collection_handle(collection_id)
+
+        if not collection_handle:
+            # Fallback to product URL if we can't get collection handle
+            print(f"    [WARNING] Falling back to product URL - collection handle not found")
+            return ''
+
+        # Calculate page number (1-based)
+        page = (product_index // products_per_page) + 1
+
+        return self.get_collection_url(collection_handle, page=page, url_prefix=url_prefix)

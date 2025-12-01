@@ -28,6 +28,7 @@ class ShopPinterestConfig:
     url_prefix: str = ''
     global_batch_size: int = 50
     default_board_id: Optional[str] = None
+    products_per_page: int = 10  # Products per page in collection for URL calculation
 
 
 @dataclass

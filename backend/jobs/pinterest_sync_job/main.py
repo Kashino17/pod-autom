@@ -71,7 +71,7 @@ class PinterestSyncJob:
 
                 print(f"      Batch {batch_index}: {len(products)} products")
 
-                for product in products:
+                for product_idx_in_batch, product in enumerate(products):
                     # Check if product is already synced to this campaign
                     if self.db.is_product_already_synced(
                         shop_id=config.shop_id,
@@ -81,17 +81,31 @@ class PinterestSyncJob:
                         print(f"        [SKIP] {product.title[:40]}... (already synced)")
                         continue
 
-                    # Generate product URL
-                    product_url = shopify.get_product_url(
-                        handle=product.handle,
+                    # Calculate global product index in collection
+                    # batch_index * batch_size + position_in_batch
+                    product_index_in_collection = (batch_index * config.global_batch_size) + product_idx_in_batch
+
+                    # Generate collection page URL
+                    collection_url = shopify.get_collection_page_url(
+                        collection_id=collection_shopify_id,
+                        product_index=product_index_in_collection,
+                        products_per_page=config.products_per_page,
                         url_prefix=config.url_prefix
                     )
 
-                    # Create pin
+                    # Fallback to product URL if collection URL failed
+                    if not collection_url:
+                        collection_url = shopify.get_product_url(
+                            handle=product.handle,
+                            url_prefix=config.url_prefix
+                        )
+                        print(f"        [WARN] Using product URL fallback")
+
+                    # Create pin with collection URL
                     result = pinterest.create_product_pin(
                         product=product,
                         board_id=board_id,
-                        product_url=product_url
+                        product_url=collection_url
                     )
 
                     if result.success:
