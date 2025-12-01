@@ -104,29 +104,46 @@ class ShopifyRESTClient:
 
     def get_products_by_tag(self, tag: str, limit: int = 50) -> List[ShopifyProduct]:
         """Get products with a specific tag."""
-        # Note: Shopify REST API doesn't support tag filtering directly
-        # We need to get all products and filter by tag
         products = []
         since_id = 0
+        total_checked = 0
+
+        print(f"  Searching for products with tag: '{tag}'")
 
         while len(products) < limit:
+            # Use status=any to include draft products
             endpoint = f"products.json?limit=250&status=any"
             if since_id:
                 endpoint += f"&since_id={since_id}"
 
             result = self._make_request("GET", endpoint)
             if not result or 'products' not in result:
+                print(f"  No results from API")
                 break
 
             batch = result['products']
             if not batch:
+                print(f"  Empty batch")
                 break
+
+            print(f"  Checking batch of {len(batch)} products...")
 
             # Filter by tag
             for product_data in batch:
                 product = ShopifyProduct.from_api(product_data)
-                if tag in product.tags and self.OPTIMIZED_TAG not in product.tags:
+                total_checked += 1
+
+                # Debug: Show first few products' tags
+                if total_checked <= 5:
+                    print(f"    Product '{product.title[:30]}' has tags: {product.tags}")
+
+                # Check if tag exists in product tags (case-insensitive)
+                has_target_tag = any(t.upper() == tag.upper() for t in product.tags)
+                has_optimized_tag = any(t.upper() == self.OPTIMIZED_TAG.upper() for t in product.tags)
+
+                if has_target_tag and not has_optimized_tag:
                     products.append(product)
+                    print(f"    MATCH: '{product.title[:40]}' (status: {product.status})")
                     if len(products) >= limit:
                         break
 
@@ -136,6 +153,7 @@ class ShopifyRESTClient:
             if len(batch) < 250:
                 break
 
+        print(f"  Total products checked: {total_checked}, matches found: {len(products)}")
         return products
 
     def update_product(self, product_id: str, updates: Dict) -> Optional[Dict]:
