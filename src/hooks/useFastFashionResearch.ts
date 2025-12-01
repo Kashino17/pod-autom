@@ -13,6 +13,7 @@ export interface FastFashionResearchProduct {
   comparePrice: string | null
   images: string | null
   variants: string | null
+  synced_to_shopify: boolean
   created_at?: string
 }
 
@@ -165,6 +166,90 @@ export function useDeleteFastFashionResearchProduct() {
     onSuccess: (_, { shopId }) => {
       queryClient.invalidateQueries({ queryKey: ['fastfashion-research-products', shopId] })
       queryClient.invalidateQueries({ queryKey: ['fastfashion-research-count', shopId] })
+      queryClient.invalidateQueries({ queryKey: ['fastfashion-unsynced-products', shopId] })
+      queryClient.invalidateQueries({ queryKey: ['fastfashion-unsynced-count', shopId] })
+    }
+  })
+}
+
+// ==========================================
+// GET UNSYNCED PRODUCTS (for Shopify sync)
+// ==========================================
+
+export function useUnsyncedResearchProducts(shopId: string | null, options?: {
+  limit?: number
+}) {
+  return useQuery({
+    queryKey: ['fastfashion-unsynced-products', shopId, options],
+    queryFn: async () => {
+      if (!shopId) return { success: false, products: [] }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.rpc as any)('get_unsynced_research_products', {
+        target_shop_id: shopId,
+        limit_count: options?.limit ?? 100
+      })
+
+      if (error) throw error
+
+      const result = data as { success: boolean; products: FastFashionResearchProduct[]; table_name?: string; error?: string }
+      return result
+    },
+    enabled: !!shopId
+  })
+}
+
+// ==========================================
+// GET UNSYNCED PRODUCT COUNT
+// ==========================================
+
+export function useUnsyncedResearchCount(shopId: string | null) {
+  return useQuery({
+    queryKey: ['fastfashion-unsynced-count', shopId],
+    queryFn: async () => {
+      if (!shopId) return { success: false, count: 0 }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.rpc as any)('get_unsynced_research_count', {
+        target_shop_id: shopId
+      })
+
+      if (error) throw error
+
+      return data as { success: boolean; count: number; table_name?: string }
+    },
+    enabled: !!shopId
+  })
+}
+
+// ==========================================
+// MARK PRODUCT AS SYNCED
+// ==========================================
+
+export function useMarkProductSynced() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ shopId, productId }: { shopId: string; productId: number }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.rpc as any)('mark_product_synced', {
+        target_shop_id: shopId,
+        product_id: productId
+      })
+
+      if (error) throw error
+
+      const result = data as { success: boolean; updated: boolean; error?: string }
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to mark product as synced')
+      }
+
+      return result
+    },
+    onSuccess: (_, { shopId }) => {
+      queryClient.invalidateQueries({ queryKey: ['fastfashion-research-products', shopId] })
+      queryClient.invalidateQueries({ queryKey: ['fastfashion-unsynced-products', shopId] })
+      queryClient.invalidateQueries({ queryKey: ['fastfashion-unsynced-count', shopId] })
     }
   })
 }

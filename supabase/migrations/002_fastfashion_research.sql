@@ -126,6 +126,7 @@ BEGIN
       "comparePrice" TEXT NULL,
       images TEXT NULL,
       variants TEXT NULL,
+      synced_to_shopify BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       CONSTRAINT %I UNIQUE (title)
     )
@@ -331,6 +332,128 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =====================================================
+-- 7b. FUNCTION: Get UNSYNCED Products from Research Table
+-- =====================================================
+-- Holt nur Produkte die noch NICHT zu Shopify synchronisiert wurden
+
+CREATE OR REPLACE FUNCTION public.get_unsynced_research_products(
+  target_shop_id UUID,
+  limit_count INTEGER DEFAULT 100
+)
+RETURNS JSON AS $$
+DECLARE
+  table_info JSON;
+  table_name TEXT;
+  products JSON;
+BEGIN
+  -- Hole Tabellen-Info
+  table_info := public.check_fastfashion_research_table(target_shop_id);
+
+  IF NOT (table_info->>'exists')::boolean THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', 'Research table does not exist',
+      'products', '[]'::json
+    );
+  END IF;
+
+  table_name := table_info->>'table_name';
+
+  -- Hole nur unsynced Produkte (synced_to_shopify = FALSE)
+  EXECUTE format('
+    SELECT COALESCE(json_agg(row_to_json(t)), ''[]''::json)
+    FROM (
+      SELECT * FROM public.%I
+      WHERE synced_to_shopify = FALSE
+      ORDER BY id ASC
+      LIMIT %s
+    ) t
+  ', table_name, limit_count) INTO products;
+
+  RETURN json_build_object(
+    'success', true,
+    'table_name', table_name,
+    'products', products
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =====================================================
+-- 7c. FUNCTION: Mark Product as Synced to Shopify
+-- =====================================================
+-- Markiert ein Produkt als bereits zu Shopify synchronisiert
+
+CREATE OR REPLACE FUNCTION public.mark_product_synced(
+  target_shop_id UUID,
+  product_id INTEGER
+)
+RETURNS JSON AS $$
+DECLARE
+  table_info JSON;
+  table_name TEXT;
+  updated_count INTEGER;
+BEGIN
+  -- Hole Tabellen-Info
+  table_info := public.check_fastfashion_research_table(target_shop_id);
+
+  IF NOT (table_info->>'exists')::boolean THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', 'Research table does not exist'
+    );
+  END IF;
+
+  table_name := table_info->>'table_name';
+
+  -- Setze synced_to_shopify auf TRUE
+  EXECUTE format('
+    UPDATE public.%I SET synced_to_shopify = TRUE WHERE id = %s
+  ', table_name, product_id);
+
+  GET DIAGNOSTICS updated_count = ROW_COUNT;
+
+  RETURN json_build_object(
+    'success', true,
+    'updated', updated_count > 0
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =====================================================
+-- 7d. FUNCTION: Get Unsynced Product Count
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION public.get_unsynced_research_count(target_shop_id UUID)
+RETURNS JSON AS $$
+DECLARE
+  table_info JSON;
+  table_name TEXT;
+  unsynced_count INTEGER;
+BEGIN
+  -- Hole Tabellen-Info
+  table_info := public.check_fastfashion_research_table(target_shop_id);
+
+  IF NOT (table_info->>'exists')::boolean THEN
+    RETURN json_build_object(
+      'success', false,
+      'count', 0
+    );
+  END IF;
+
+  table_name := table_info->>'table_name';
+
+  -- Zähle unsynced Produkte
+  EXECUTE format('SELECT COUNT(*) FROM public.%I WHERE synced_to_shopify = FALSE', table_name) INTO unsynced_count;
+
+  RETURN json_build_object(
+    'success', true,
+    'count', unsynced_count,
+    'table_name', table_name
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =====================================================
 -- 8. TRIGGER: Auto-create Research Table when Shop is added
 -- =====================================================
 -- Automatisch eine Research-Tabelle erstellen wenn ein neuer Shop hinzugefügt wird
@@ -505,6 +628,9 @@ GRANT EXECUTE ON FUNCTION public.check_fastfashion_research_table(UUID) TO authe
 GRANT EXECUTE ON FUNCTION public.get_fastfashion_research_products(UUID, INTEGER, INTEGER) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.delete_fastfashion_research_product(UUID, INTEGER) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_fastfashion_research_count(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_unsynced_research_products(UUID, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.mark_product_synced(UUID, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_unsynced_research_count(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.auto_create_research_table_for_shop() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.check_all_shops_research_status() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.initialize_all_missing_research_tables() TO authenticated;
