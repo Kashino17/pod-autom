@@ -392,10 +392,17 @@ class ShopifyProductOptimizer:
             tags.append('QK')
         product['tags'] = ', '.join(tags)
 
+        # Save inventory quantities before update (they get lost in REST API response)
+        inventory_quantities = {}
+        if settings.get('set_global_quantity', False) and settings.get('global_quantity') is not None:
+            target_quantity = int(settings['global_quantity'])
+            for variant in product.get('variants', []):
+                inventory_quantities[variant['id']] = target_quantity
+
         # Update product in Shopify
         publish_to_all_channels = settings.get('publish_all_channels', False)
-        should_update_inventory = settings.get('set_global_quantity', False) and settings.get('global_quantity') is not None
-        self.update_product_in_shopify(product, shop_domain, access_token, publish_to_all_channels, should_update_inventory)
+        should_update_inventory = len(inventory_quantities) > 0
+        self.update_product_in_shopify(product, shop_domain, access_token, publish_to_all_channels, should_update_inventory, inventory_quantities)
 
     def generate_improved_description(self, product: Dict, settings: Dict) -> str:
         """Generate improved product description with GPT - exact port."""
@@ -688,7 +695,8 @@ Gib NUR die Tags als kommagetrennte Liste zurück, ohne weitere Erklärungen.
             return []
 
     def update_product_in_shopify(self, product: Dict, shop_domain: str, access_token: str,
-                                   publish_to_all_channels: bool = False, should_update_inventory: bool = False):
+                                   publish_to_all_channels: bool = False, should_update_inventory: bool = False,
+                                   inventory_quantities: Dict = None):
         """Update product in Shopify."""
         url = f"https://{shop_domain}/admin/api/2024-01/products/{product['id']}.json"
         headers = {
@@ -707,10 +715,10 @@ Gib NUR die Tags als kommagetrennte Liste zurück, ohne weitere Erklärungen.
             if publish_to_all_channels:
                 self.publish_to_all_sales_channels(product['id'], shop_domain, access_token)
 
-            # Update inventory if set_global_quantity is enabled OR inventory management was enabled
-            if should_update_inventory or any(v.get('inventory_management') == 'shopify' for v in product.get('variants', [])):
+            # Update inventory if set_global_quantity is enabled
+            if should_update_inventory and inventory_quantities:
                 logger.info(f"Updating inventory levels for product {product['id']}...")
-                self.update_inventory_levels(product, shop_domain, access_token)
+                self.update_inventory_levels(inventory_quantities, shop_domain, access_token)
         else:
             logger.error(f"Error updating product: {response.status_code} - {response.text}")
 
@@ -818,9 +826,17 @@ Gib NUR die Tags als kommagetrennte Liste zurück, ohne weitere Erklärungen.
         except Exception as e:
             logger.error(f"Error publishing to sales channels: {str(e)}")
 
-    def update_inventory_levels(self, product: Dict, shop_domain: str, access_token: str):
-        """Update inventory levels via Inventory API."""
-        logger.info(f"update_inventory_levels called for product {product.get('id')}")
+    def update_inventory_levels(self, inventory_quantities: Dict, shop_domain: str, access_token: str):
+        """Update inventory levels via Inventory API.
+
+        Args:
+            inventory_quantities: Dict mapping variant_id -> target_quantity
+        """
+        logger.info(f"update_inventory_levels called with {len(inventory_quantities)} variants")
+
+        if not inventory_quantities:
+            logger.warning("No inventory quantities provided")
+            return
 
         locations_url = f"https://{shop_domain}/admin/api/2024-01/locations.json"
         headers = {
@@ -828,34 +844,35 @@ Gib NUR die Tags als kommagetrennte Liste zurück, ohne weitere Erklärungen.
             "Content-Type": "application/json"
         }
 
-        response = requests.get(locations_url, headers=headers, timeout=30)
+        try:
+            response = requests.get(locations_url, headers=headers, timeout=30)
+            logger.info(f"Locations API response: {response.status_code}")
 
-        if response.status_code == 200:
-            locations = response.json().get('locations', [])
-            active_locations = [loc for loc in locations if loc.get('active') and not loc.get('legacy', False)]
+            if response.status_code == 200:
+                locations = response.json().get('locations', [])
+                logger.info(f"Found {len(locations)} locations total")
+                active_locations = [loc for loc in locations if loc.get('active') and not loc.get('legacy', False)]
 
-            if not active_locations:
-                logger.warning("No active locations found")
-                return
+                if not active_locations:
+                    logger.warning("No active locations found")
+                    return
 
-            location_id = active_locations[0]['id']
-            logger.info(f"Using location: {active_locations[0].get('name')} (ID: {location_id})")
+                location_id = active_locations[0]['id']
+                logger.info(f"Using location: {active_locations[0].get('name')} (ID: {location_id})")
 
-            variants_with_inventory = [v for v in product.get('variants', []) if 'inventory_quantity' in v]
-            logger.info(f"Found {len(variants_with_inventory)} variants with inventory_quantity set")
-
-            for variant in product.get('variants', []):
-                if 'inventory_quantity' in variant:
-                    logger.info(f"  Processing variant {variant['id']} with target quantity {variant['inventory_quantity']}")
+                for variant_id, target_quantity in inventory_quantities.items():
+                    logger.info(f"  Processing variant {variant_id} with target quantity {target_quantity}")
                     self.set_inventory_level(
-                        variant['id'],
+                        variant_id,
                         location_id,
-                        variant['inventory_quantity'],
+                        target_quantity,
                         shop_domain,
                         access_token
                     )
-                else:
-                    logger.warning(f"  Variant {variant.get('id')} has no inventory_quantity set")
+            else:
+                logger.error(f"Failed to get locations: {response.status_code} - {response.text}")
+        except Exception as e:
+            logger.error(f"Exception in update_inventory_levels: {str(e)}")
 
     def set_inventory_level(self, variant_id: int, location_id: int, quantity: int,
                             shop_domain: str, access_token: str):
