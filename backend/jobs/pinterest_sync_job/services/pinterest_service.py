@@ -172,6 +172,8 @@ class PinterestAPIClient:
         boards = []
         bookmark = None
 
+        print("  Fetching Pinterest boards...")
+
         while True:
             endpoint = "boards?page_size=100"
             if bookmark:
@@ -179,13 +181,22 @@ class PinterestAPIClient:
 
             result = self._make_request("GET", endpoint)
             if not result:
+                print("  [WARNING] Failed to fetch boards from Pinterest API")
+                print("  This might be due to missing 'boards:read' scope in the access token")
                 break
 
-            boards.extend(result.get('items', []))
+            items = result.get('items', [])
+            print(f"  Found {len(items)} boards in this page")
+
+            for board in items:
+                print(f"    - {board.get('name')} (ID: {board.get('id')})")
+
+            boards.extend(items)
             bookmark = result.get('bookmark')
             if not bookmark:
                 break
 
+        print(f"  Total boards found: {len(boards)}")
         return boards
 
     def create_pin(self, pin: PinterestPin, board_id: str) -> Optional[Dict]:
