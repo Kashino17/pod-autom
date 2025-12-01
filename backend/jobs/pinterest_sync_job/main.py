@@ -154,15 +154,34 @@ class PinterestSyncJob:
             if not pinterest.test_connection():
                 raise ValueError("Cannot connect to Pinterest API")
 
-            # Get boards (for organic pins)
-            boards = pinterest.get_boards()
-            if not boards:
-                raise ValueError("No Pinterest boards found. Create a board first.")
+            # Get board ID - prefer configured default_board_id
+            board_id = config.default_board_id
 
-            # Use first board for now (could be configurable)
-            default_board = boards[0]
-            board_id = default_board.get('id')
-            print(f"\nUsing board: {default_board.get('name')} ({board_id})")
+            if board_id:
+                print(f"\nUsing configured default board: {board_id}")
+            else:
+                # Fallback: Get boards from API
+                boards = pinterest.get_boards()
+                if not boards:
+                    # Skip this shop - no boards available
+                    print(f"  [SKIP] No Pinterest boards found for {config.internal_name}")
+                    print(f"  Please create a board on Pinterest or set default_board_id in pinterest_settings")
+                    return {
+                        'success': True,  # Not an error, just skipped
+                        'shop_id': config.shop_id,
+                        'shop_name': config.internal_name,
+                        'campaigns_processed': 0,
+                        'pins_created': 0,
+                        'pins_failed': 0,
+                        'errors': [],
+                        'skipped': True,
+                        'skip_reason': 'No Pinterest boards found'
+                    }
+
+                # Use first board
+                default_board = boards[0]
+                board_id = default_board.get('id')
+                print(f"\nUsing board: {default_board.get('name')} ({board_id})")
 
             # Get campaigns with batch assignments
             campaigns = self.db.get_campaigns_with_assignments(config.shop_id)
@@ -315,7 +334,7 @@ Errors: {len(self.metrics['errors'])}
             if job_id:
                 self.db.update_job_run(
                     job_id,
-                    status='completed' if not error_log else 'completed_with_errors',
+                    status='completed' if not error_log else 'partial',
                     shops_processed=self.metrics['shops_processed'],
                     shops_failed=len(shops) - self.metrics['shops_processed'],
                     error_log=error_log if error_log else None,

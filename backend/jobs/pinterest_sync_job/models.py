@@ -27,6 +27,7 @@ class ShopPinterestConfig:
     # Settings
     url_prefix: str = ''
     global_batch_size: int = 50
+    default_board_id: Optional[str] = None
 
 
 @dataclass
