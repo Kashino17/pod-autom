@@ -119,6 +119,8 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   const [linkToDelete, setLinkToDelete] = useState<string | null>(null);
   const [tempBatchSize, setTempBatchSize] = useState(settings?.global_batch_size || 10);
   const [tempUrlPrefix, setTempUrlPrefix] = useState(settings?.url_prefix || '');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [formState, setFormState] = useState({
     campaignMode: 'EXISTING' as 'EXISTING' | 'NEW',
     selectedCampaignId: '',
@@ -201,13 +203,40 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
   };
 
   const saveSettings = async () => {
-    await updateSettings.mutateAsync({
-      shopId,
-      settings: {
+    setSaveStatus('idle');
+    setSaveError(null);
+
+    try {
+      console.log('[PinterestSync] Saving settings:', {
+        shopId,
         global_batch_size: tempBatchSize,
         url_prefix: tempUrlPrefix
-      }
-    });
+      });
+
+      await updateSettings.mutateAsync({
+        shopId,
+        settings: {
+          global_batch_size: tempBatchSize,
+          url_prefix: tempUrlPrefix
+        }
+      });
+
+      console.log('[PinterestSync] Settings saved successfully');
+      setSaveStatus('success');
+
+      // Reset success status after 3 seconds
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    } catch (error) {
+      console.error('[PinterestSync] Error saving settings:', error);
+      setSaveStatus('error');
+      setSaveError(error instanceof Error ? error.message : 'Unbekannter Fehler');
+
+      // Reset error status after 5 seconds
+      setTimeout(() => {
+        setSaveStatus('idle');
+        setSaveError(null);
+      }, 5000);
+    }
   };
 
   // Loading state
@@ -414,7 +443,7 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
       </div>
 
       {/* SETTINGS BAR */}
-      <div className="flex items-center gap-4 bg-zinc-900/30 border border-zinc-800 rounded-xl p-4 shrink-0">
+      <div className="flex items-center gap-4 bg-zinc-900/30 border border-zinc-800 rounded-xl p-4 shrink-0 relative">
         <div className="flex items-center gap-2">
           <Info className="w-4 h-4 text-zinc-500" />
           <span className="text-xs font-medium text-zinc-400">Einstellungen</span>
@@ -452,18 +481,33 @@ export const PinterestSync: React.FC<PinterestSyncProps> = ({ shopId }) => {
           onClick={saveSettings}
           disabled={!hasSettingsChanged || updateSettings.isPending}
           className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 ${
-            hasSettingsChanged
+            saveStatus === 'success'
+              ? 'bg-emerald-600 text-white'
+              : saveStatus === 'error'
+              ? 'bg-red-600 text-white'
+              : hasSettingsChanged
               ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
               : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
           }`}
         >
           {updateSettings.isPending ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : saveStatus === 'success' ? (
+            <Check className="w-3.5 h-3.5" />
+          ) : saveStatus === 'error' ? (
+            <AlertTriangle className="w-3.5 h-3.5" />
           ) : (
             <Save className="w-3.5 h-3.5" />
           )}
-          Speichern
+          {saveStatus === 'success' ? 'Gespeichert!' : saveStatus === 'error' ? 'Fehler!' : 'Speichern'}
         </button>
+
+        {/* Error message tooltip */}
+        {saveStatus === 'error' && saveError && (
+          <div className="absolute top-full right-0 mt-2 p-2 bg-red-900/90 border border-red-700 rounded-lg text-xs text-red-200 max-w-xs z-50">
+            {saveError}
+          </div>
+        )}
       </div>
 
       {/* MAIN CONTENT */}
