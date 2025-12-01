@@ -1,0 +1,356 @@
+"""
+Pinterest Sync Job - Main Entry Point
+Syncs products from Shopify collections to Pinterest as pins
+Uses AsyncIO for parallel shop processing
+"""
+import os
+import sys
+import asyncio
+from datetime import datetime, timezone
+from typing import Dict, List, Optional
+
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+from models import ShopPinterestConfig, PinterestCampaign, SyncResult
+from services.supabase_service import SupabaseService
+from services.shopify_service import ShopifyRESTClient
+from services.pinterest_service import PinterestAPIClient
+
+
+class PinterestSyncJob:
+    """Main class for the Pinterest Sync Job."""
+
+    def __init__(self):
+        self.db: Optional[SupabaseService] = None
+        self.metrics = {
+            'start_time': datetime.now(timezone.utc),
+            'shops_processed': 0,
+            'campaigns_processed': 0,
+            'pins_created': 0,
+            'pins_failed': 0,
+            'errors': []
+        }
+
+    async def sync_campaign_products(self, shopify: ShopifyRESTClient,
+                                      pinterest: PinterestAPIClient,
+                                      campaign: PinterestCampaign,
+                                      config: ShopPinterestConfig,
+                                      board_id: str) -> Dict:
+        """Sync products from campaign's assigned batches to Pinterest."""
+        print(f"\n  Campaign: {campaign.name} ({campaign.status})")
+
+        if campaign.status != 'ACTIVE':
+            print(f"    Skipping - campaign not active")
+            return {'synced': 0, 'failed': 0, 'skipped': 1}
+
+        if not campaign.batch_assignments:
+            print(f"    No batch assignments for this campaign")
+            return {'synced': 0, 'failed': 0, 'skipped': 0}
+
+        synced = 0
+        failed = 0
+
+        for assignment in campaign.batch_assignments:
+            collection_shopify_id = assignment.get('collection_shopify_id')
+            collection_title = assignment.get('collection_title')
+            batch_indices = assignment.get('batch_indices', [])
+
+            print(f"    Collection: {collection_title}")
+            print(f"    Batches: {batch_indices}")
+
+            for batch_index in batch_indices:
+                # Get products for this batch
+                products = shopify.get_products_batch(
+                    collection_id=collection_shopify_id,
+                    batch_index=batch_index,
+                    batch_size=config.global_batch_size
+                )
+
+                print(f"      Batch {batch_index}: {len(products)} products")
+
+                for product in products:
+                    # Generate product URL
+                    product_url = shopify.get_product_url(
+                        handle=product.handle,
+                        url_prefix=config.url_prefix
+                    )
+
+                    # Create pin
+                    result = pinterest.create_product_pin(
+                        product=product,
+                        board_id=board_id,
+                        product_url=product_url
+                    )
+
+                    if result.success:
+                        synced += 1
+                        print(f"        [OK] {product.title[:40]}... -> Pin {result.pinterest_pin_id}")
+
+                        # Log sync result
+                        self.db.log_sync_result(
+                            shop_id=config.shop_id,
+                            campaign_id=campaign.id,
+                            shopify_product_id=product.id,
+                            pinterest_pin_id=result.pinterest_pin_id,
+                            success=True
+                        )
+                    else:
+                        failed += 1
+                        print(f"        [FAIL] {product.title[:40]}...: {result.error}")
+
+                        self.db.log_sync_result(
+                            shop_id=config.shop_id,
+                            campaign_id=campaign.id,
+                            shopify_product_id=product.id,
+                            pinterest_pin_id=None,
+                            success=False,
+                            error=result.error
+                        )
+
+                    # Rate limit between pins
+                    await asyncio.sleep(0.5)
+
+        return {'synced': synced, 'failed': failed, 'skipped': 0}
+
+    async def process_shop(self, config: ShopPinterestConfig) -> Dict:
+        """Process a single shop - sync products to Pinterest."""
+        print(f"\n{'='*60}")
+        print(f"Processing shop: {config.internal_name} ({config.shop_domain})")
+        print(f"Pinterest User: {config.pinterest_user_id}")
+        print(f"Ad Account: {config.pinterest_account_id}")
+        print(f"{'='*60}")
+
+        try:
+            # Create Shopify client
+            shopify = ShopifyRESTClient(
+                shop_domain=config.shop_domain,
+                access_token=config.access_token
+            )
+
+            if not shopify.test_connection():
+                raise ValueError(f"Cannot connect to Shopify: {config.shop_domain}")
+
+            # Create Pinterest client
+            pinterest = PinterestAPIClient(
+                access_token=config.pinterest_access_token,
+                refresh_token=config.pinterest_refresh_token,
+                expires_at=config.pinterest_expires_at
+            )
+
+            # Check if token needs refresh
+            if pinterest.is_token_expired():
+                new_tokens = pinterest.refresh_access_token()
+                if new_tokens:
+                    self.db.update_pinterest_tokens(
+                        shop_id=config.shop_id,
+                        access_token=new_tokens['access_token'],
+                        refresh_token=new_tokens.get('refresh_token'),
+                        expires_at=new_tokens.get('expires_at')
+                    )
+
+            if not pinterest.test_connection():
+                raise ValueError("Cannot connect to Pinterest API")
+
+            # Get boards (for organic pins)
+            boards = pinterest.get_boards()
+            if not boards:
+                raise ValueError("No Pinterest boards found. Create a board first.")
+
+            # Use first board for now (could be configurable)
+            default_board = boards[0]
+            board_id = default_board.get('id')
+            print(f"\nUsing board: {default_board.get('name')} ({board_id})")
+
+            # Get campaigns with batch assignments
+            campaigns = self.db.get_campaigns_with_assignments(config.shop_id)
+            print(f"\nFound {len(campaigns)} campaigns with assignments")
+
+            if not campaigns:
+                print("No campaigns with batch assignments found")
+                return {
+                    'success': True,
+                    'shop_id': config.shop_id,
+                    'shop_name': config.internal_name,
+                    'campaigns_processed': 0,
+                    'pins_created': 0,
+                    'pins_failed': 0,
+                    'errors': []
+                }
+
+            total_synced = 0
+            total_failed = 0
+            campaigns_processed = 0
+            errors = []
+
+            for campaign in campaigns:
+                result = await self.sync_campaign_products(
+                    shopify=shopify,
+                    pinterest=pinterest,
+                    campaign=campaign,
+                    config=config,
+                    board_id=board_id
+                )
+
+                total_synced += result['synced']
+                total_failed += result['failed']
+
+                if result['synced'] > 0 or result['failed'] > 0:
+                    campaigns_processed += 1
+
+            return {
+                'success': True,
+                'shop_id': config.shop_id,
+                'shop_name': config.internal_name,
+                'campaigns_processed': campaigns_processed,
+                'pins_created': total_synced,
+                'pins_failed': total_failed,
+                'errors': errors
+            }
+
+        except Exception as e:
+            print(f"Error processing shop {config.shop_id}: {e}")
+            return {
+                'success': False,
+                'shop_id': config.shop_id,
+                'shop_name': config.internal_name,
+                'error': str(e)
+            }
+
+    def generate_summary(self) -> str:
+        """Generate job run summary."""
+        duration = (datetime.now(timezone.utc) - self.metrics['start_time']).total_seconds()
+
+        summary = f"""
+{'='*60}
+PINTEREST SYNC JOB COMPLETED
+{'='*60}
+Duration: {duration:.2f} seconds
+Shops processed: {self.metrics['shops_processed']}
+Campaigns processed: {self.metrics['campaigns_processed']}
+Pins created: {self.metrics['pins_created']}
+Pins failed: {self.metrics['pins_failed']}
+Errors: {len(self.metrics['errors'])}
+"""
+
+        if self.metrics['errors']:
+            summary += "\nErrors encountered:\n"
+            for error in self.metrics['errors'][:10]:
+                summary += f"  - {error}\n"
+            if len(self.metrics['errors']) > 10:
+                summary += f"  ... and {len(self.metrics['errors']) - 10} more\n"
+
+        summary += "=" * 60
+
+        return summary
+
+    async def run(self):
+        """Main job execution."""
+        print("=" * 60)
+        print("STARTING PINTEREST SYNC JOB - ReBoss NextGen")
+        print(f"Time: {datetime.now(timezone.utc).isoformat()}")
+        print("=" * 60)
+
+        try:
+            # Initialize Supabase
+            self.db = SupabaseService()
+
+            # Log job start
+            job_id = self.db.log_job_run(
+                job_type='pinterest_sync_job',
+                status='running',
+                metadata={'start_time': datetime.now(timezone.utc).isoformat()}
+            )
+
+            # Get shops with Pinterest connected
+            shops = self.db.get_shops_with_pinterest()
+
+            if not shops:
+                print("No shops with Pinterest connected found")
+                if job_id:
+                    self.db.update_job_run(job_id, 'completed', shops_processed=0)
+                return
+
+            print(f"Found {len(shops)} shops with Pinterest connected")
+
+            # Process shops with concurrency limit
+            semaphore = asyncio.Semaphore(2)  # Max 2 shops at once
+
+            async def process_with_semaphore(config):
+                async with semaphore:
+                    return await self.process_shop(config)
+
+            tasks = [process_with_semaphore(config) for config in shops]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Aggregate results
+            error_log = []
+
+            for result in results:
+                if isinstance(result, Exception):
+                    self.metrics['errors'].append(str(result))
+                    error_log.append({'error': str(result)})
+                elif result.get('success'):
+                    self.metrics['shops_processed'] += 1
+                    self.metrics['campaigns_processed'] += result.get('campaigns_processed', 0)
+                    self.metrics['pins_created'] += result.get('pins_created', 0)
+                    self.metrics['pins_failed'] += result.get('pins_failed', 0)
+
+                    if result.get('errors'):
+                        self.metrics['errors'].extend(result['errors'])
+                        error_log.extend([
+                            {'shop': result.get('shop_name'), 'error': e}
+                            for e in result['errors']
+                        ])
+                else:
+                    self.metrics['errors'].append(f"Shop {result.get('shop_id')}: {result.get('error')}")
+                    error_log.append({
+                        'shop': result.get('shop_name') or result.get('shop_id'),
+                        'error': result.get('error')
+                    })
+
+            # Update job run
+            if job_id:
+                self.db.update_job_run(
+                    job_id,
+                    status='completed' if not error_log else 'completed_with_errors',
+                    shops_processed=self.metrics['shops_processed'],
+                    shops_failed=len(shops) - self.metrics['shops_processed'],
+                    error_log=error_log if error_log else None,
+                    metadata={
+                        'campaigns_processed': self.metrics['campaigns_processed'],
+                        'pins_created': self.metrics['pins_created'],
+                        'pins_failed': self.metrics['pins_failed'],
+                        'end_time': datetime.now(timezone.utc).isoformat()
+                    }
+                )
+
+            # Print summary
+            summary = self.generate_summary()
+            print(summary)
+
+            if self.metrics['errors']:
+                sys.exit(1)
+
+        except Exception as e:
+            print(f"Fatal error in job execution: {e}")
+            raise
+
+
+def main():
+    """Entry point for the Cron Job."""
+    try:
+        job = PinterestSyncJob()
+        asyncio.run(job.run())
+    except KeyboardInterrupt:
+        print("\nJob interrupted by user")
+        sys.exit(130)
+    except Exception as e:
+        print(f"\nFATAL ERROR: {e}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
