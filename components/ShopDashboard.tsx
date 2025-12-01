@@ -32,7 +32,6 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
     deleteThreshold: 1,
     keepThreshold: 4,
     winnerThreshold: 10,
-    loserThreshold: 5,
     isActive: true
   });
 
@@ -53,7 +52,8 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
     urlPrefix: '',
     startPhaseDays: 3,
     postPhaseDays: 12,
-    productsPerPage: 10
+    productsPerPage: 10,
+    loserThreshold: 5
   });
 
   const [limitsConfig, setLimitsConfig] = useState<LimitsConfig>({
@@ -154,7 +154,6 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
             ...prev,
             deleteThreshold: data.min_sales_day7_delete ?? prev.deleteThreshold,
             keepThreshold: data.min_sales_day7_replace ?? prev.keepThreshold,
-            loserThreshold: data.loser_threshold ?? prev.loserThreshold,
           }));
 
           // Update Post Phase config
@@ -177,6 +176,7 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
             urlPrefix: data.url_prefix ?? prev.urlPrefix,
             startPhaseDays: data.start_phase_days ?? prev.startPhaseDays,
             postPhaseDays: data.nach_phase_days ?? prev.postPhaseDays,
+            loserThreshold: data.loser_threshold ?? prev.loserThreshold,
           }));
         }
       } catch (err) {

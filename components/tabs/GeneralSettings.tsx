@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { GeneralConfig } from '../../types';
-import { Settings, Tag, Hash, Package, Link, CalendarClock, Database, AlertTriangle, CheckCircle, Loader2, Store, Save, Check, LayoutGrid } from 'lucide-react';
+import { Settings, Tag, Hash, Package, Link, CalendarClock, Database, AlertTriangle, CheckCircle, Loader2, Store, Save, Check, LayoutGrid, Info, Skull } from 'lucide-react';
+import { supabase } from '../../src/lib/supabase';
 import { useAllShopsResearchStatus, useInitializeAllMissingResearchTables } from '../../src/hooks/useFastFashionResearch';
 import { usePinterestSettings, useUpdatePinterestSettings } from '../../src/hooks/usePinterest';
 
@@ -23,6 +24,9 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ config, onChan
   // Save status
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Loser threshold info tooltip
+  const [showLoserInfo, setShowLoserInfo] = useState(false);
 
   // Sync urlPrefix and productsPerPage from Pinterest settings
   useEffect(() => {
@@ -70,6 +74,23 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ config, onChan
           products_per_page: config.productsPerPage
         }
       });
+
+      // Save loser_threshold and other settings to shop_rules
+      const { error: rulesError } = await supabase
+        .from('shop_rules')
+        .upsert({
+          shop_id: shopId,
+          loser_threshold: config.loserThreshold,
+          qk_tag: config.qkTag,
+          replace_tag_prefix: config.replaceTagPrefix,
+          start_phase_days: config.startPhaseDays,
+          nach_phase_days: config.postPhaseDays,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'shop_id'
+        });
+
+      if (rulesError) throw rulesError;
 
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 3000);
@@ -294,6 +315,59 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ config, onChan
                        <span className="text-zinc-600">
                           Example: If set to 10, products 1-10 link to page 1, products 11-20 link to page 2, etc.
                        </span>
+                    </p>
+                 </div>
+
+                 <div className="h-px bg-zinc-800 w-full" />
+
+                 {/* Loser Threshold Input */}
+                 <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-medium text-zinc-400 uppercase tracking-wider">
+                       <Skull className="w-3 h-3" />
+                       Loser Threshold
+                       <div className="relative">
+                          <button
+                             type="button"
+                             onClick={() => setShowLoserInfo(!showLoserInfo)}
+                             onMouseEnter={() => setShowLoserInfo(true)}
+                             onMouseLeave={() => setShowLoserInfo(false)}
+                             className="p-0.5 rounded-full hover:bg-zinc-700 transition-colors"
+                          >
+                             <Info className="w-3.5 h-3.5 text-zinc-500 hover:text-zinc-300" />
+                          </button>
+                          {showLoserInfo && (
+                             <div className="absolute left-0 top-6 z-50 w-72 p-3 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl text-left">
+                                <p className="text-xs text-zinc-300 leading-relaxed">
+                                   <strong className="text-red-400">Loser Threshold</strong> bestimmt, ob ein Produkt beim Ersetzen als <strong className="text-red-400">LOSER</strong> oder <strong className="text-amber-400">REPLACED</strong> markiert wird.
+                                </p>
+                                <div className="mt-2 pt-2 border-t border-zinc-800 space-y-1">
+                                   <p className="text-[11px] text-zinc-400">
+                                      <span className="text-red-400">LOSER:</span> Total Sales ≤ Threshold → Bestand = 0
+                                   </p>
+                                   <p className="text-[11px] text-zinc-400">
+                                      <span className="text-amber-400">REPLACED:</span> Total Sales &gt; Threshold → Bestand bleibt
+                                   </p>
+                                </div>
+                             </div>
+                          )}
+                       </div>
+                    </label>
+                    <div className="relative group">
+                       <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={config.loserThreshold}
+                          onChange={(e) => onChange({...config, loserThreshold: Math.max(0, parseInt(e.target.value) || 0)})}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-3 px-4 text-sm text-white focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/50 transition-all placeholder:text-zinc-700 font-mono"
+                          placeholder="5"
+                       />
+                       <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                          <span className="text-[10px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded border border-red-500/20">SALES</span>
+                       </div>
+                    </div>
+                    <p className="text-[11px] text-zinc-500">
+                       Produkte mit ≤ {config.loserThreshold || 0} Total Sales werden als LOSER markiert (Stock = 0).
                     </p>
                  </div>
 

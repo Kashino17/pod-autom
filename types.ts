@@ -19,7 +19,6 @@ export interface StartPhaseConfig {
   deleteThreshold: number;   // <= X: Products below this get replaced
   keepThreshold: number;     // >= X: Move to Post Phase
   winnerThreshold: number;   // >= X: Tag WP
-  loserThreshold: number;    // Total sales <= X: LOSER (Stock 0, Tag LOSER_DD_MM_YYYY), else REPLACED tag
   isActive: boolean;
 }
 
@@ -41,6 +40,7 @@ export interface GeneralConfig {
   startPhaseDays: number;
   postPhaseDays: number;
   productsPerPage: number; // Products per page in collection (for Pinterest URL calculation)
+  loserThreshold: number;  // Total sales <= X: LOSER (Stock 0), else REPLACED
 }
 
 export interface LimitsConfig {

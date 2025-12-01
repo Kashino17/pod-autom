@@ -29,7 +29,6 @@ export const StartPhase: React.FC<StartPhaseProps> = ({ config, onChange, onOpen
           shop_id: shopId,
           min_sales_day7_delete: config.deleteThreshold,
           min_sales_day7_replace: config.keepThreshold,
-          loser_threshold: config.loserThreshold,
           updated_at: new Date().toISOString()
         }, {
           onConflict: 'shop_id'
@@ -142,39 +141,6 @@ export const StartPhase: React.FC<StartPhaseProps> = ({ config, onChange, onOpen
                  <div className="p-3 bg-red-500/5 border border-red-500/10 rounded-lg">
                     <p className="text-xs text-red-300/80 leading-relaxed">
                        Warning: Products with <strong>{config.deleteThreshold} sales</strong> or less in the first 7 days will be <strong>automatically replaced</strong> by new products from the creation queue.
-                    </p>
-                 </div>
-              </div>
-           </div>
-
-           {/* Card: Loser Threshold (Total Sales) */}
-           <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden group hover:border-amber-900/50 transition-colors">
-              <div className="p-5 border-b border-zinc-800/50 bg-zinc-900/50">
-                 <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-zinc-200">Loser Threshold</h3>
-                    <span className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Total Sales</span>
-                 </div>
-              </div>
-              <div className="p-6 space-y-6">
-                 <div>
-                    <label className="flex justify-between text-xs font-medium text-zinc-400 mb-4">
-                       Total Sales Threshold
-                       <span className="text-white bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700">{config.loserThreshold} sales</span>
-                    </label>
-                    <input
-                       type="range"
-                       min="0"
-                       max="20"
-                       value={config.loserThreshold}
-                       onChange={(e) => onChange({...config, loserThreshold: parseInt(e.target.value)})}
-                       className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(245,158,11,0.5)] [&::-webkit-slider-thumb]:rounded-full hover:[&::-webkit-slider-thumb]:scale-110 transition-all"
-                    />
-                 </div>
-                 <div className="p-3 bg-amber-500/5 border border-amber-500/10 rounded-lg">
-                    <p className="text-xs text-amber-300/80 leading-relaxed">
-                       <strong>LOSER</strong>: Products with <strong>{config.loserThreshold} or fewer total sales</strong> get Stock=0 and tag <code className="bg-zinc-800 px-1 rounded">LOSER_DD_MM_YYYY</code>
-                       <br/><br/>
-                       <strong>REPLACED</strong>: Products with <strong>more than {config.loserThreshold} total sales</strong> keep their stock and get tag <code className="bg-zinc-800 px-1 rounded">Replaced_DD_MM_YYYY</code>
                     </p>
                  </div>
               </div>
