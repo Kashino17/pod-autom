@@ -343,6 +343,8 @@ export function useCampaignBatchAssignments(shopId: string | null) {
           shopify_collection_id,
           collection_title,
           batch_indices,
+          assigned_shop,
+          ad_channel,
           created_at,
           updated_at,
           pinterest_campaigns(id, name, status, pinterest_campaign_id)
@@ -367,6 +369,7 @@ export function useCreateCampaignBatchAssignment() {
       shopify_collection_id: string  // Shopify Collection ID (from API)
       collection_title: string  // Collection title for display
       batch_indices: number[]
+      ad_channel?: string  // 'pinterest', 'meta', or 'google'
     }) => {
       const { data, error } = await supabase
         .from('campaign_batch_assignments')
@@ -374,7 +377,9 @@ export function useCreateCampaignBatchAssignment() {
           campaign_id: assignment.campaign_id,
           shopify_collection_id: assignment.shopify_collection_id,
           collection_title: assignment.collection_title,
-          batch_indices: assignment.batch_indices
+          batch_indices: assignment.batch_indices,
+          assigned_shop: assignment.shop_id,
+          ad_channel: assignment.ad_channel || 'pinterest'
         } as any)
         .select()
         .single()
