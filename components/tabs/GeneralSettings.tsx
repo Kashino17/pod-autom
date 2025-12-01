@@ -2,7 +2,8 @@
 
 import React from 'react';
 import { GeneralConfig } from '../../types';
-import { Settings, Tag, Hash, Package, Link, CalendarClock } from 'lucide-react';
+import { Settings, Tag, Hash, Package, Link, CalendarClock, Database, AlertTriangle, CheckCircle, Loader2, Store } from 'lucide-react';
+import { useAllShopsResearchStatus, useInitializeAllMissingResearchTables } from '../../src/hooks/useFastFashionResearch';
 
 interface GeneralSettingsProps {
   config: GeneralConfig;
@@ -10,6 +11,18 @@ interface GeneralSettingsProps {
 }
 
 export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ config, onChange }) => {
+  // Fast Fashion Research Table Status Hooks
+  const { data: researchStatus, isLoading: statusLoading } = useAllShopsResearchStatus();
+  const initializeAllMutation = useInitializeAllMissingResearchTables();
+
+  const handleInitializeAll = async () => {
+    try {
+      await initializeAllMutation.mutateAsync();
+    } catch (error) {
+      console.error('Failed to initialize research tables:', error);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
@@ -25,6 +38,95 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ config, onChan
            <p className="text-zinc-400 text-sm max-w-xl">
              Configure global tag definitions used by the automation engine to identify and process products.
            </p>
+        </div>
+      </div>
+
+      {/* Fast Fashion Research Tables Status (Plan B) */}
+      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-zinc-800 bg-zinc-900/30 flex items-center gap-2">
+          <Database className="w-4 h-4 text-zinc-500" />
+          <h3 className="font-semibold text-zinc-200 text-sm">Fast Fashion Research Tabellen</h3>
+        </div>
+
+        <div className="p-5">
+          {statusLoading ? (
+            <div className="flex items-center gap-3 p-4 bg-zinc-950/50 rounded-lg border border-zinc-800">
+              <Loader2 className="w-5 h-5 text-zinc-400 animate-spin" />
+              <span className="text-sm text-zinc-400">Prüfe Research Tabellen Status...</span>
+            </div>
+          ) : researchStatus?.all_initialized ? (
+            <div className="flex items-center gap-3 p-4 bg-emerald-950/30 rounded-lg border border-emerald-800/50">
+              <div className="p-1.5 bg-emerald-500/20 rounded-lg">
+                <CheckCircle className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div className="flex-1">
+                <span className="text-sm text-emerald-300 font-medium">Alle Research Tabellen vorhanden</span>
+                <p className="text-xs text-emerald-400/60 mt-0.5">
+                  {researchStatus.shops?.length || 0} Shop(s) - Alle Fast Fashion Research Tabellen sind initialisiert.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 p-4 bg-amber-950/30 rounded-lg border border-amber-800/50">
+                <div className="p-1.5 bg-amber-500/20 rounded-lg">
+                  <AlertTriangle className="w-4 h-4 text-amber-400" />
+                </div>
+                <div className="flex-1">
+                  <span className="text-sm text-amber-300 font-medium">
+                    {researchStatus?.missing_count || 0} Research Tabelle(n) fehlen
+                  </span>
+                  <p className="text-xs text-amber-400/60 mt-0.5">
+                    Einige Shops haben keine verknüpfte Research-Tabelle. Klicke auf den Button um sie zu erstellen.
+                  </p>
+                </div>
+                <button
+                  onClick={handleInitializeAll}
+                  disabled={initializeAllMutation.isPending}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg text-sm font-medium transition-colors border border-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {initializeAllMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Erstelle...
+                    </>
+                  ) : (
+                    <>
+                      <Database className="w-4 h-4" />
+                      Alle erstellen
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Liste der fehlenden Shops */}
+              {researchStatus?.missing_shops && researchStatus.missing_shops.length > 0 && (
+                <div className="bg-zinc-950/50 rounded-lg border border-zinc-800 p-3">
+                  <p className="text-xs text-zinc-500 mb-2">Shops ohne Research-Tabelle:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {researchStatus.missing_shops.map((shop) => (
+                      <div key={shop.shop_id} className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900 rounded border border-zinc-700">
+                        <Store className="w-3 h-3 text-zinc-500" />
+                        <span className="text-xs text-zinc-400">{shop.internal_name || shop.shop_domain}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Erfolgsmeldung nach Initialisierung */}
+              {initializeAllMutation.isSuccess && initializeAllMutation.data && (
+                <div className="p-3 bg-emerald-950/30 rounded-lg border border-emerald-800/50">
+                  <p className="text-xs text-emerald-400">
+                    {initializeAllMutation.data.created_count} Tabelle(n) erfolgreich erstellt
+                    {initializeAllMutation.data.failed_count > 0 && (
+                      <span className="text-amber-400"> ({initializeAllMutation.data.failed_count} fehlgeschlagen)</span>
+                    )}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

@@ -1,11 +1,13 @@
 
 import React, { useState } from 'react';
-import { ProductCreationConfig, PodNiche, PodPrompt } from '../../types';
-import { Shirt, CheckSquare, Settings2, DollarSign, Box, Tag, Plus, X, Play, Palette, MessageSquare, Edit2, Save, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { ProductCreationConfig, PodNiche, PodPrompt, Shop } from '../../types';
+import { Shirt, CheckSquare, Settings2, DollarSign, Box, Tag, Plus, X, Play, Palette, MessageSquare, Edit2, Save, Trash2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, Database, Loader2, Store, ExternalLink } from 'lucide-react';
+import { useFastFashionResearchStatus, useFastFashionResearchCount } from '../../src/hooks/useFastFashionResearch';
 
 interface ProductCreationProps {
   config: ProductCreationConfig;
   onChange: (newConfig: ProductCreationConfig) => void;
+  shop: Shop;
 }
 
 const NICHE_CATEGORIES: Record<string, string[]> = {
@@ -82,9 +84,13 @@ const NICHE_CATEGORIES: Record<string, string[]> = {
   ]
 };
 
-export const ProductCreation: React.FC<ProductCreationProps> = ({ config, onChange }) => {
+export const ProductCreation: React.FC<ProductCreationProps> = ({ config, onChange, shop }) => {
   const [activeTab, setActiveTab] = useState<'fast-fashion' | 'pod'>('fast-fashion');
-  
+
+  // Fast Fashion Research Status Hook - per Shop
+  const { data: researchStatus, isLoading: statusLoading } = useFastFashionResearchStatus(shop?.id || null);
+  const { data: productCount } = useFastFashionResearchCount(shop?.id || null);
+
   const update = (key: keyof ProductCreationConfig, value: any) => {
     onChange({ ...config, [key]: value });
   };
@@ -186,6 +192,50 @@ export const ProductCreation: React.FC<ProductCreationProps> = ({ config, onChan
       {/* ================= FAST FASHION TAB ================= */}
       {activeTab === 'fast-fashion' && (
         <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-2">
+
+          {/* Fast Fashion Research Table Status Info */}
+          {statusLoading ? (
+            <div className="flex items-center gap-3 p-3 bg-zinc-900/50 border border-zinc-800 rounded-xl">
+              <Loader2 className="w-4 h-4 text-zinc-400 animate-spin" />
+              <span className="text-sm text-zinc-400">Prüfe Research Tabelle...</span>
+            </div>
+          ) : researchStatus?.is_initialized ? (
+            <div className="flex items-center gap-3 p-3 bg-zinc-900/30 border border-zinc-800 rounded-xl">
+              <div className="p-1 bg-emerald-500/20 rounded">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+              </div>
+              <div className="flex-1 flex items-center gap-3">
+                <span className="text-xs text-zinc-400">Research Tabelle:</span>
+                <code className="text-xs text-emerald-400 bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-800/50">
+                  {researchStatus.table_name}
+                </code>
+                <span className="text-xs text-zinc-500">|</span>
+                <span className="text-xs text-zinc-400">{productCount?.count ?? 0} Produkte</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                <Store className="w-3 h-3" />
+                {shop?.name || shop?.domain}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 p-3 bg-amber-950/20 border border-amber-800/30 rounded-xl">
+              <div className="p-1 bg-amber-500/20 rounded">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+              </div>
+              <div className="flex-1">
+                <span className="text-xs text-amber-300">Research Tabelle nicht vorhanden - </span>
+                <span className="text-xs text-amber-400/70">Gehe zu General Settings um sie zu erstellen</span>
+              </div>
+              <a
+                href="#general"
+                className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors"
+              >
+                Settings
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          )}
+
           {/* Global Template Selection */}
           <div className="flex items-center gap-4 p-4 bg-zinc-900/30 border border-zinc-800 rounded-xl">
              <label className="text-sm font-medium text-zinc-300 whitespace-nowrap">Sales Text & Title Template:</label>

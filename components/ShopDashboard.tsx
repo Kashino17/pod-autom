@@ -238,7 +238,7 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
           ) : activeTab === 'limits' ? (
             <RateLimits config={limitsConfig} onChange={setLimitsConfig} />
           ) : activeTab === 'product-creation' ? (
-            <ProductCreation config={productCreationConfig} onChange={setProductCreationConfig} />
+            <ProductCreation config={productCreationConfig} onChange={setProductCreationConfig} shop={shop} />
           ) : (
             // Placeholder for other tabs
             <div className="flex flex-col items-center justify-center h-[600px] text-center border-2 border-dashed border-zinc-800 rounded-2xl bg-zinc-900/20">
