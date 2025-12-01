@@ -394,7 +394,8 @@ class ShopifyProductOptimizer:
 
         # Update product in Shopify
         publish_to_all_channels = settings.get('publish_all_channels', False)
-        self.update_product_in_shopify(product, shop_domain, access_token, publish_to_all_channels)
+        should_update_inventory = settings.get('set_global_quantity', False) and settings.get('global_quantity') is not None
+        self.update_product_in_shopify(product, shop_domain, access_token, publish_to_all_channels, should_update_inventory)
 
     def generate_improved_description(self, product: Dict, settings: Dict) -> str:
         """Generate improved product description with GPT - exact port."""
@@ -639,8 +640,10 @@ Gib NUR die Tags als kommagetrennte Liste zurück, ohne weitere Erklärungen.
 
     def set_global_quantity(self, product: Dict, quantity: int):
         """Set global quantity for all variants."""
+        logger.info(f"Setting global quantity to {quantity} for {len(product.get('variants', []))} variants")
         for variant in product.get('variants', []):
             variant['inventory_quantity'] = quantity
+            logger.info(f"  Variant {variant.get('id')}: inventory_quantity set to {quantity}")
 
     def get_fashion_category_tags(self, product: Dict) -> List[str]:
         """Determine fashion category tags with GPT."""
@@ -685,7 +688,7 @@ Gib NUR die Tags als kommagetrennte Liste zurück, ohne weitere Erklärungen.
             return []
 
     def update_product_in_shopify(self, product: Dict, shop_domain: str, access_token: str,
-                                   publish_to_all_channels: bool = False):
+                                   publish_to_all_channels: bool = False, should_update_inventory: bool = False):
         """Update product in Shopify."""
         url = f"https://{shop_domain}/admin/api/2024-01/products/{product['id']}.json"
         headers = {
@@ -704,8 +707,9 @@ Gib NUR die Tags als kommagetrennte Liste zurück, ohne weitere Erklärungen.
             if publish_to_all_channels:
                 self.publish_to_all_sales_channels(product['id'], shop_domain, access_token)
 
-            # If inventory management was enabled, update inventory
-            if any(v.get('inventory_management') == 'shopify' for v in product.get('variants', [])):
+            # Update inventory if set_global_quantity is enabled OR inventory management was enabled
+            if should_update_inventory or any(v.get('inventory_management') == 'shopify' for v in product.get('variants', [])):
+                logger.info(f"Updating inventory levels for product {product['id']}...")
                 self.update_inventory_levels(product, shop_domain, access_token)
         else:
             logger.error(f"Error updating product: {response.status_code} - {response.text}")
@@ -816,6 +820,8 @@ Gib NUR die Tags als kommagetrennte Liste zurück, ohne weitere Erklärungen.
 
     def update_inventory_levels(self, product: Dict, shop_domain: str, access_token: str):
         """Update inventory levels via Inventory API."""
+        logger.info(f"update_inventory_levels called for product {product.get('id')}")
+
         locations_url = f"https://{shop_domain}/admin/api/2024-01/locations.json"
         headers = {
             "X-Shopify-Access-Token": access_token,
@@ -835,8 +841,12 @@ Gib NUR die Tags als kommagetrennte Liste zurück, ohne weitere Erklärungen.
             location_id = active_locations[0]['id']
             logger.info(f"Using location: {active_locations[0].get('name')} (ID: {location_id})")
 
+            variants_with_inventory = [v for v in product.get('variants', []) if 'inventory_quantity' in v]
+            logger.info(f"Found {len(variants_with_inventory)} variants with inventory_quantity set")
+
             for variant in product.get('variants', []):
                 if 'inventory_quantity' in variant:
+                    logger.info(f"  Processing variant {variant['id']} with target quantity {variant['inventory_quantity']}")
                     self.set_inventory_level(
                         variant['id'],
                         location_id,
@@ -844,6 +854,8 @@ Gib NUR die Tags als kommagetrennte Liste zurück, ohne weitere Erklärungen.
                         shop_domain,
                         access_token
                     )
+                else:
+                    logger.warning(f"  Variant {variant.get('id')} has no inventory_quantity set")
 
     def set_inventory_level(self, variant_id: int, location_id: int, quantity: int,
                             shop_domain: str, access_token: str):
