@@ -1,8 +1,10 @@
 
 import React, { useState } from 'react';
 import { ProductCreationConfig, PodNiche, PodPrompt, Shop } from '../../types';
-import { Shirt, CheckSquare, Settings2, DollarSign, Box, Tag, Plus, X, Play, Palette, MessageSquare, Edit2, Save, Trash2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, Database, Loader2, Store, ExternalLink } from 'lucide-react';
+import { Shirt, CheckSquare, Settings2, DollarSign, Box, Tag, Plus, X, Play, Palette, MessageSquare, Edit2, Save, Trash2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, Database, Loader2, Store, ExternalLink, Check } from 'lucide-react';
 import { useFastFashionResearchStatus, useFastFashionResearchCount } from '../../src/hooks/useFastFashionResearch';
+import { useUpdateProductCreationSettings } from '../../src/hooks/useShops';
+import { ProductCreationSettingsUpdate } from '../../src/lib/database.types';
 
 interface ProductCreationProps {
   config: ProductCreationConfig;
@@ -86,13 +88,77 @@ const NICHE_CATEGORIES: Record<string, string[]> = {
 
 export const ProductCreation: React.FC<ProductCreationProps> = ({ config, onChange, shop }) => {
   const [activeTab, setActiveTab] = useState<'fast-fashion' | 'pod'>('fast-fashion');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Fast Fashion Research Status Hook - per Shop
   const { data: researchStatus, isLoading: statusLoading } = useFastFashionResearchStatus(shop?.id || null);
   const { data: productCount } = useFastFashionResearchCount(shop?.id || null);
 
+  // Supabase update mutation
+  const updateSettings = useUpdateProductCreationSettings();
+
   const update = (key: keyof ProductCreationConfig, value: any) => {
     onChange({ ...config, [key]: value });
+  };
+
+  // Map UI config to Supabase columns and save
+  const handleSaveSettings = async () => {
+    if (!shop?.id) return;
+
+    setIsSaving(true);
+    setSaveSuccess(false);
+
+    // Map salesTextTemplate to season enum
+    const seasonMap: Record<string, 'Spring' | 'Summer' | 'Autumn' | 'Winter'> = {
+      'Winter': 'Winter',
+      'Frühling': 'Spring',
+      'Sommer': 'Summer',
+      'Herbst': 'Autumn'
+    };
+
+    // Map priceAdjustmentType
+    const adjustmentTypeMap: Record<string, 'Percentage' | 'FixedAmount'> = {
+      'PERCENT': 'Percentage',
+      'FIXED': 'FixedAmount'
+    };
+
+    const settings: ProductCreationSettingsUpdate = {
+      generate_optimized_title: config.generateOptimizedTitle,
+      generate_improved_description: config.generateOptimizedDescription,
+      generate_and_set_tags: config.generateTags,
+      sales_text_season: seasonMap[config.salesTextTemplate] || 'Winter',
+      change_size_to_groesse: config.translateSize,
+      set_german_sizes: config.setGermanSizes,
+      set_compare_price: config.setCompareAtPrice,
+      compare_price_percentage: config.compareAtPricePercent,
+      set_price_decimals: config.setPriceDecimals,
+      price_decimals: config.priceDecimalsValue,
+      set_compare_price_decimals: config.setCompareAtPriceDecimals,
+      compare_price_decimals: config.compareAtPriceDecimalsValue,
+      adjust_normal_price: config.adjustProductPrice,
+      price_adjustment_type: adjustmentTypeMap[config.priceAdjustmentType] || 'Percentage',
+      price_adjustment_value: config.priceAdjustmentValue,
+      set_global_quantity: config.setGlobalInventory,
+      global_quantity: config.globalInventoryValue,
+      enable_inventory_tracking: config.enableInventoryTracking,
+      publish_all_channels: config.publishChannels,
+      set_global_tags: config.setGlobalTags,
+      global_tags: config.globalTagsValue,
+      change_product_status: config.changeProductStatus,
+      product_status: config.productStatusValue,
+      set_category_tag_fashion: config.setCategoryTagFashion,
+    };
+
+    try {
+      await updateSettings.mutateAsync({ shopId: shop.id, settings });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } catch (error) {
+      console.error('Failed to save product creation settings:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // --- POD Helpers ---
@@ -575,8 +641,8 @@ export const ProductCreation: React.FC<ProductCreationProps> = ({ config, onChan
 
                 <div className="pt-2">
                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
                         checked={config.setCategoryTagFashion}
                         onChange={(e) => update('setCategoryTagFashion', e.target.checked)}
                         className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-indigo-500 focus:ring-indigo-500/20"
@@ -586,6 +652,36 @@ export const ProductCreation: React.FC<ProductCreationProps> = ({ config, onChan
                 </div>
 
              </div>
+          </div>
+
+          {/* Save Button */}
+          <div className="flex justify-end pt-4">
+            <button
+              onClick={handleSaveSettings}
+              disabled={isSaving || !shop?.id}
+              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-sm transition-all ${
+                saveSuccess
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 disabled:cursor-not-allowed'
+              }`}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Speichern...</span>
+                </>
+              ) : saveSuccess ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>Gespeichert!</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Einstellungen speichern</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
       )}
