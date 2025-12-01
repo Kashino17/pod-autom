@@ -307,11 +307,11 @@ export function AddShopDialog({ isOpen, onClose, onSuccess, editShop }: AddShopD
                   </div>
                 </div>
 
-                {/* Locales */}
+                {/* Locations */}
                 <div>
-                  <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1.5">Lokalisierung</p>
+                  <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1.5">Standorte</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {['read_locales', 'write_locales'].map((scope) => (
+                    {['read_locations', 'write_locations'].map((scope) => (
                       <span
                         key={scope}
                         className="px-2 py-1 text-xs font-mono bg-pink-500/20 text-pink-300 rounded border border-pink-500/30"
@@ -323,7 +323,7 @@ export function AddShopDialog({ isOpen, onClose, onSuccess, editShop }: AddShopD
                 </div>
 
                 <p className="mt-3 text-xs text-zinc-500">
-                  Diese Scopes sind erforderlich für Produktverwaltung, Inventar-Tracking, Verkaufsanalysen, Multi-Channel-Publishing und Übersetzungen.
+                  Diese Scopes sind erforderlich für Produktverwaltung, Inventar-Tracking, Verkaufsanalysen, Multi-Channel-Publishing und Standortverwaltung.
                 </p>
               </div>
 
