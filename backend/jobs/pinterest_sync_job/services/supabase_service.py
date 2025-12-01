@@ -89,19 +89,36 @@ class SupabaseService:
                     pinterest_account_id = ad_account_response.data[0].get('pinterest_account_id')
 
                 # Get Pinterest settings
-                settings_response = self.client.table('pinterest_settings').select(
-                    'url_prefix, global_batch_size, default_board_id, products_per_page'
-                ).eq('shop_id', shop_id).execute()
-
+                # Only select columns that are guaranteed to exist
                 url_prefix = ''
                 global_batch_size = 50
                 default_board_id = None
                 products_per_page = 10
-                if settings_response.data:
-                    url_prefix = settings_response.data[0].get('url_prefix') or ''
-                    global_batch_size = settings_response.data[0].get('global_batch_size') or 50
-                    default_board_id = settings_response.data[0].get('default_board_id')
-                    products_per_page = settings_response.data[0].get('products_per_page') or 10
+
+                try:
+                    settings_response = self.client.table('pinterest_settings').select(
+                        'url_prefix, global_batch_size'
+                    ).eq('shop_id', shop_id).execute()
+
+                    if settings_response.data:
+                        url_prefix = settings_response.data[0].get('url_prefix') or ''
+                        global_batch_size = settings_response.data[0].get('global_batch_size') or 50
+
+                    # Try to get optional columns separately (they may not exist yet)
+                    try:
+                        optional_response = self.client.table('pinterest_settings').select(
+                            'default_board_id, products_per_page'
+                        ).eq('shop_id', shop_id).execute()
+
+                        if optional_response.data:
+                            default_board_id = optional_response.data[0].get('default_board_id')
+                            products_per_page = optional_response.data[0].get('products_per_page') or 10
+                    except Exception:
+                        # Columns don't exist yet, use defaults
+                        pass
+
+                except Exception as e:
+                    print(f"  Warning: Could not load pinterest_settings: {e}")
 
                 config = ShopPinterestConfig(
                     shop_id=shop_id,
