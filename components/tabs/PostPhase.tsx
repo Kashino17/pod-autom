@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { PostPhaseConfig } from '../../types';
 import { RefreshCw, Calculator, CheckCircle2, XCircle, Info, Target, BarChart3, AlertCircle, Save, Loader2, Check, SlidersHorizontal, Undo2 } from 'lucide-react';
 import { supabase } from '../../src/lib/supabase';
+import { useAppStore } from '../../src/lib/store';
 
 interface PostPhaseProps {
   config: PostPhaseConfig;
@@ -24,6 +25,7 @@ export const PostPhase: React.FC<PostPhaseProps> = ({ config, onChange, onOpenCa
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const setHasUnsavedChanges = useAppStore(state => state.setHasUnsavedChanges);
 
   // Sales boost slider for simulation (0-20)
   const [salesBoost, setSalesBoost] = useState(0);
@@ -31,6 +33,16 @@ export const PostPhase: React.FC<PostPhaseProps> = ({ config, onChange, onOpenCa
   // Track original config for change detection
   const [originalConfig, setOriginalConfig] = useState<PostPhaseConfig>(config);
   const hasChanges = JSON.stringify(config) !== JSON.stringify(originalConfig);
+
+  // Sync hasChanges with global store
+  useEffect(() => {
+    setHasUnsavedChanges(hasChanges);
+  }, [hasChanges, setHasUnsavedChanges]);
+
+  // Reset hasUnsavedChanges when unmounting
+  useEffect(() => {
+    return () => setHasUnsavedChanges(false);
+  }, [setHasUnsavedChanges]);
 
   // Update original config when component mounts or config is loaded from DB
   const isInitialMount = useRef(true);

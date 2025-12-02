@@ -3,12 +3,14 @@ import React, { useEffect, useState } from 'react'
 import { Sidebar } from '@components/Sidebar'
 import { WelcomeView } from '@components/WelcomeView'
 import { ShopDashboard } from '@components/ShopDashboard'
+import { UnsavedChangesDialog } from '@components/ui/UnsavedChangesDialog'
 // Components from /src/components/
 import { AddShopDialog } from '../components/AddShopDialog'
 import { useShops } from '../hooks/useShops'
 import { useAppStore } from '../lib/store'
 import { Loader2 } from 'lucide-react'
 import { Shop } from '../lib/database.types'
+import type { TabId } from '../../types'
 
 export function Dashboard() {
   const { data: shops, isLoading, error } = useShops()
@@ -18,11 +20,41 @@ export function Dashboard() {
     activeTabId,
     setActiveTabId,
     isAddShopDialogOpen,
-    setAddShopDialogOpen
+    setAddShopDialogOpen,
+    hasUnsavedChanges,
+    setHasUnsavedChanges,
+    pendingTabId,
+    setPendingTabId,
+    showUnsavedWarning,
+    setShowUnsavedWarning
   } = useAppStore()
 
   // State for editing a shop
   const [editingShop, setEditingShop] = useState<Shop | null>(null)
+
+  // Handle tab change with unsaved changes warning
+  const handleTabChange = (tabId: TabId) => {
+    if (hasUnsavedChanges && tabId !== activeTabId) {
+      setPendingTabId(tabId)
+      setShowUnsavedWarning(true)
+    } else {
+      setActiveTabId(tabId)
+    }
+  }
+
+  const handleDiscardChanges = () => {
+    if (pendingTabId) {
+      setHasUnsavedChanges(false)
+      setActiveTabId(pendingTabId)
+      setPendingTabId(null)
+    }
+    setShowUnsavedWarning(false)
+  }
+
+  const handleCancelNavigation = () => {
+    setPendingTabId(null)
+    setShowUnsavedWarning(false)
+  }
 
   // Find active shop
   const activeShop = activeShopId
@@ -112,7 +144,7 @@ export function Dashboard() {
         activeShopId={activeShopId}
         activeTabId={activeTabId}
         onSelectShop={setActiveShopId}
-        onSelectTab={setActiveTabId}
+        onSelectTab={handleTabChange}
         onAddShop={() => setAddShopDialogOpen(true)}
         onEditShop={(shopId) => {
           const shopToEdit = shops?.find(s => s.id === shopId)
@@ -153,6 +185,13 @@ export function Dashboard() {
           setEditingShop(null)
         }}
         editShop={editingShop}
+      />
+
+      {/* Unsaved Changes Warning Dialog */}
+      <UnsavedChangesDialog
+        isOpen={showUnsavedWarning}
+        onDiscard={handleDiscardChanges}
+        onCancel={handleCancelNavigation}
       />
     </div>
   )

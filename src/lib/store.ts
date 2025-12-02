@@ -22,6 +22,14 @@ interface AppState {
   // Add Shop Dialog
   isAddShopDialogOpen: boolean
   setAddShopDialogOpen: (open: boolean) => void
+
+  // Unsaved Changes Warning
+  hasUnsavedChanges: boolean
+  setHasUnsavedChanges: (has: boolean) => void
+  pendingTabId: TabId | null
+  setPendingTabId: (id: TabId | null) => void
+  showUnsavedWarning: boolean
+  setShowUnsavedWarning: (show: boolean) => void
 }
 
 export const useAppStore = create<AppState>()(
@@ -45,7 +53,15 @@ export const useAppStore = create<AppState>()(
 
       // Add Shop Dialog
       isAddShopDialogOpen: false,
-      setAddShopDialogOpen: (open) => set({ isAddShopDialogOpen: open })
+      setAddShopDialogOpen: (open) => set({ isAddShopDialogOpen: open }),
+
+      // Unsaved Changes Warning
+      hasUnsavedChanges: false,
+      setHasUnsavedChanges: (has) => set({ hasUnsavedChanges: has }),
+      pendingTabId: null,
+      setPendingTabId: (id) => set({ pendingTabId: id }),
+      showUnsavedWarning: false,
+      setShowUnsavedWarning: (show) => set({ showUnsavedWarning: show })
     }),
     {
       name: 'reboss-app-store',

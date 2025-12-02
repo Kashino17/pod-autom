@@ -4,6 +4,7 @@ import { StartPhaseConfig } from '../../types';
 import { BarChart, Bar, ResponsiveContainer, Cell, XAxis, Tooltip, ReferenceLine } from 'recharts';
 import { Info, AlertTriangle, Zap, Calculator, Trophy, Repeat, CheckCircle2, Save, Loader2, Check, Undo2 } from 'lucide-react';
 import { supabase } from '../../src/lib/supabase';
+import { useAppStore } from '../../src/lib/store';
 
 interface StartPhaseProps {
   config: StartPhaseConfig;
@@ -16,10 +17,21 @@ export const StartPhase: React.FC<StartPhaseProps> = ({ config, onChange, onOpen
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const setHasUnsavedChanges = useAppStore(state => state.setHasUnsavedChanges);
 
   // Track original config for change detection
   const [originalConfig, setOriginalConfig] = useState<StartPhaseConfig>(config);
   const hasChanges = JSON.stringify(config) !== JSON.stringify(originalConfig);
+
+  // Sync hasChanges with global store
+  useEffect(() => {
+    setHasUnsavedChanges(hasChanges);
+  }, [hasChanges, setHasUnsavedChanges]);
+
+  // Reset hasUnsavedChanges when unmounting
+  useEffect(() => {
+    return () => setHasUnsavedChanges(false);
+  }, [setHasUnsavedChanges]);
 
   // Update original config when component mounts or config is loaded from DB
   const isInitialMount = useRef(true);
