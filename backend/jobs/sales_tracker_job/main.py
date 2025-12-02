@@ -69,12 +69,21 @@ def process_shop(supabase: SupabaseService, shop: Shop,
                     # Check if we have existing sales data
                     existing = supabase.get_sales_data(shop.id, collection_id, product.id)
 
-                    # Determine date to fetch sales from
+                    # Current time for new products
+                    now = datetime.now(timezone.utc)
+
+                    # Determine date_added_to_collection
+                    # - If existing record has it, use that
+                    # - If new product (first time seeing it in this collection), use NOW
                     if existing and existing.date_added_to_collection:
-                        since_date = existing.date_added_to_collection
+                        date_added = existing.date_added_to_collection
                     else:
-                        # Use product created_at as fallback
-                        since_date = product.created_at
+                        # NEW: Use current date when first tracking this product in collection
+                        date_added = now
+                        print(f"      [NEW] First time tracking '{product.title}' - date_added set to {now.isoformat()}")
+
+                    # Determine date to fetch sales from
+                    since_date = date_added
 
                     # Make timezone-aware if needed
                     if since_date.tzinfo is None:
@@ -84,7 +93,7 @@ def process_shop(supabase: SupabaseService, shop: Shop,
                     sales_data = shopify.get_product_sales_comprehensive(
                         product.id,
                         since_date,
-                        date_added_to_collection=existing.date_added_to_collection if existing else product.created_at,
+                        date_added_to_collection=date_added,
                         shop_timezone=shop_timezone
                     )
 
