@@ -153,6 +153,10 @@ class ReplacementLogic:
             phase, days_in_collection = self.calculate_product_phase(sales_data)
             action, reason = self.evaluate_product_action(phase, sales_data, days_in_collection)
 
+            # Debug: Show date_added for phase verification
+            date_added = sales_data.get('date_added_to_collection', 'N/A')
+            print(f"    [DEBUG] date_added={date_added}, days={days_in_collection}, start_phase={self.config.start_phase_days}, nach_phase={self.config.nach_phase_days}")
+
             # Create analysis object
             analysis = ProductAnalysis(
                 product_id=product_id,

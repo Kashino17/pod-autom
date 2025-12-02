@@ -387,28 +387,24 @@ class ShopifyGraphQLClient:
                             break
 
                     if current_qty > 0:
-                        # Set to 0 by adjusting
-                        success = self._adjust_inventory(
+                        # Set to 0 using the new API
+                        success = self._set_inventory_to_zero(
                             inventory_item_id,
-                            location_id,
-                            -current_qty
+                            location_id
                         )
                         if not success:
                             all_success = False
 
         return all_success
 
-    def _adjust_inventory(self, inventory_item_id: str, location_id: str, delta: int) -> bool:
-        """Adjust inventory by a delta amount."""
+    def _set_inventory_to_zero(self, inventory_item_id: str, location_id: str) -> bool:
+        """Set inventory to zero using the new inventorySetQuantities mutation."""
         mutation = """
-        mutation adjustInventory($input: InventoryAdjustQuantityInput!) {
-            inventoryAdjustQuantity(input: $input) {
-                inventoryLevel {
-                    id
-                    quantities(names: ["available"]) {
-                        name
-                        quantity
-                    }
+        mutation inventorySetQuantities($input: InventorySetQuantitiesInput!) {
+            inventorySetQuantities(input: $input) {
+                inventoryAdjustmentGroup {
+                    createdAt
+                    reason
                 }
                 userErrors {
                     field
@@ -420,24 +416,28 @@ class ShopifyGraphQLClient:
 
         variables = {
             "input": {
-                "inventoryItemId": inventory_item_id,
-                "locationId": location_id,
-                "delta": delta,
+                "name": "available",
                 "reason": "correction",
-                "name": "available"
+                "quantities": [
+                    {
+                        "inventoryItemId": inventory_item_id,
+                        "locationId": location_id,
+                        "quantity": 0
+                    }
+                ]
             }
         }
 
         try:
             result = self.execute(mutation, variables)
-            adjust_result = result.get("inventoryAdjustQuantity", {})
+            set_result = result.get("inventorySetQuantities", {})
 
-            user_errors = adjust_result.get("userErrors", [])
+            user_errors = set_result.get("userErrors", [])
             if user_errors:
-                print(f"Failed to adjust inventory: {user_errors}")
+                print(f"Failed to set inventory to 0: {user_errors}")
                 return False
 
             return True
         except Exception as e:
-            print(f"Error adjusting inventory: {e}")
+            print(f"Error setting inventory to 0: {e}")
             return False
