@@ -418,6 +418,7 @@ class ShopifyGraphQLClient:
             "input": {
                 "name": "available",
                 "reason": "correction",
+                "ignoreCompareQuantity": True,
                 "quantities": [
                     {
                         "inventoryItemId": inventory_item_id,
