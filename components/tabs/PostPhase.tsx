@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { PostPhaseConfig } from '../../types';
-import { RefreshCw, Calculator, CheckCircle2, XCircle, Info, Target, BarChart3, AlertCircle, Save, Loader2, Check } from 'lucide-react';
+import { RefreshCw, Calculator, CheckCircle2, XCircle, Info, Target, BarChart3, AlertCircle, Save, Loader2, Check, SlidersHorizontal } from 'lucide-react';
 import { supabase } from '../../src/lib/supabase';
 
 interface PostPhaseProps {
@@ -24,6 +24,9 @@ export const PostPhase: React.FC<PostPhaseProps> = ({ config, onChange, onOpenCa
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Sales boost slider for simulation (0-20)
+  const [salesBoost, setSalesBoost] = useState(0);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -68,24 +71,32 @@ export const PostPhase: React.FC<PostPhaseProps> = ({ config, onChange, onOpenCa
     });
   };
 
-  // Calculate logic for the simulation table
+  // Calculate logic for the simulation table (with salesBoost applied)
   const simulationResults = useMemo(() => {
     return SIMULATION_PRODUCTS.map(product => {
+      // Apply sales boost to all values
+      const boostedAvgs = {
+        day3: product.avgs.day3 + salesBoost,
+        day7: product.avgs.day7 + salesBoost,
+        day10: product.avgs.day10 + salesBoost,
+        day14: product.avgs.day14 + salesBoost,
+      };
+
       // Check each timeframe against config
       const checks = {
-        day3: product.avgs.day3 >= config.averageSettings.day3,
-        day7: product.avgs.day7 >= config.averageSettings.day7,
-        day10: product.avgs.day10 >= config.averageSettings.day10,
-        day14: product.avgs.day14 >= config.averageSettings.day14,
+        day3: boostedAvgs.day3 >= config.averageSettings.day3,
+        day7: boostedAvgs.day7 >= config.averageSettings.day7,
+        day10: boostedAvgs.day10 >= config.averageSettings.day10,
+        day14: boostedAvgs.day14 >= config.averageSettings.day14,
       };
 
       // Count successful buckets
       const successCount = Object.values(checks).filter(Boolean).length;
       const passed = successCount >= config.minBuckets;
 
-      return { product, checks, successCount, passed };
+      return { product, checks, successCount, passed, boostedAvgs };
     });
-  }, [config]);
+  }, [config, salesBoost]);
 
   const passingProducts = simulationResults.filter(r => r.passed).length;
   const failingProducts = simulationResults.length - passingProducts;
@@ -262,21 +273,46 @@ export const PostPhase: React.FC<PostPhaseProps> = ({ config, onChange, onOpenCa
           <div className="h-full bg-zinc-900/30 border border-zinc-800 rounded-xl flex flex-col min-h-[500px] overflow-hidden">
             
             {/* Simulation Header */}
-            <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
-               <div>
-                  <h3 className="font-semibold text-zinc-200">Logic Simulation Matrix</h3>
-                  <p className="text-xs text-zinc-500 mt-1">Live preview of automated decisions based on sales data</p>
-               </div>
-               
-               <div className="flex items-center gap-6">
-                  <div className="text-right">
-                     <span className="block text-xl font-bold text-emerald-400">{passingProducts}</span>
-                     <span className="text-[10px] uppercase text-zinc-500 font-bold tracking-wider">Keep (Active)</span>
+            <div className="p-6 border-b border-zinc-800 bg-zinc-900/50">
+               <div className="flex items-center justify-between mb-4">
+                  <div>
+                     <h3 className="font-semibold text-zinc-200">Logic Simulation Matrix</h3>
+                     <p className="text-xs text-zinc-500 mt-1">Live preview of automated decisions based on sales data</p>
                   </div>
-                  <div className="w-px h-8 bg-zinc-800"></div>
-                  <div className="text-right">
-                     <span className="block text-xl font-bold text-red-400">{failingProducts}</span>
-                     <span className="text-[10px] uppercase text-zinc-500 font-bold tracking-wider">Archive</span>
+
+                  <div className="flex items-center gap-6">
+                     <div className="text-right">
+                        <span className="block text-xl font-bold text-emerald-400">{passingProducts}</span>
+                        <span className="text-[10px] uppercase text-zinc-500 font-bold tracking-wider">Keep (Active)</span>
+                     </div>
+                     <div className="w-px h-8 bg-zinc-800"></div>
+                     <div className="text-right">
+                        <span className="block text-xl font-bold text-red-400">{failingProducts}</span>
+                        <span className="text-[10px] uppercase text-zinc-500 font-bold tracking-wider">Archive</span>
+                     </div>
+                  </div>
+               </div>
+
+               {/* Sales Boost Slider */}
+               <div className="flex items-center gap-4 p-3 bg-zinc-950/50 rounded-lg border border-zinc-800">
+                  <div className="flex items-center gap-2 shrink-0">
+                     <SlidersHorizontal className="w-4 h-4 text-indigo-400" />
+                     <span className="text-xs font-medium text-zinc-400">Sales Boost</span>
+                  </div>
+                  <input
+                     type="range"
+                     min="0"
+                     max="20"
+                     step="1"
+                     value={salesBoost}
+                     onChange={(e) => setSalesBoost(parseInt(e.target.value))}
+                     className="flex-1 h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(99,102,241,0.5)] [&::-webkit-slider-thumb]:rounded-full hover:[&::-webkit-slider-thumb]:scale-110 transition-all"
+                  />
+                  <div className="shrink-0 min-w-[4rem] text-right">
+                     <span className={`text-sm font-bold ${salesBoost > 0 ? 'text-indigo-400' : 'text-zinc-500'}`}>
+                        +{salesBoost}
+                     </span>
+                     <span className="text-[10px] text-zinc-600 ml-1">sales</span>
                   </div>
                </div>
             </div>
@@ -313,18 +349,24 @@ export const PostPhase: React.FC<PostPhaseProps> = ({ config, onChange, onOpenCa
                       {['day3', 'day7', 'day10', 'day14'].map((period) => {
                          const key = period as keyof typeof checks;
                          const isPassed = checks[key];
-                         const value = product.avgs[key];
+                         const boostedValue = boostedAvgs[key];
+                         const originalValue = product.avgs[key];
                          const target = config.averageSettings[key as keyof typeof config.averageSettings];
-                         
+
                          return (
                             <td key={period} className="px-4 py-4 text-center">
                               <div className={`
                                 inline-flex flex-col items-center justify-center min-w-[3.5rem] py-1 rounded border transition-all duration-300
-                                ${isPassed 
-                                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
+                                ${isPassed
+                                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
                                   : 'bg-red-500/5 border-red-500/10 text-red-400/70'}
                               `}>
-                                <span className="font-mono font-bold text-xs">{value}</span>
+                                <span className="font-mono font-bold text-xs">
+                                  {boostedValue}
+                                  {salesBoost > 0 && (
+                                    <span className="text-[9px] text-indigo-400 ml-0.5">({originalValue}+{salesBoost})</span>
+                                  )}
+                                </span>
                                 <span className="text-[9px] opacity-50">/ {target}</span>
                               </div>
                             </td>
