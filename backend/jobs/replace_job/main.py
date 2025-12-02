@@ -32,7 +32,7 @@ class ReplaceProductJob:
             'products_analyzed': 0,
             'products_kept': 0,
             'products_replaced': 0,
-            'products_deleted': 0,
+            'products_losers': 0,
             'positions_maintained': 0,
             'errors': []
         }
@@ -67,7 +67,7 @@ class ReplaceProductJob:
             print(f"  Analysis: {analysis_result['summary']}")
 
             # Execute replacements if needed
-            if analysis_result['to_replace'] or analysis_result['to_delete']:
+            if analysis_result['to_replace']:
                 replacement_result = replacement_logic.execute_replacements(
                     collection_id=collection_id,
                     collection_tag=collection_tag,
@@ -82,7 +82,7 @@ class ReplaceProductJob:
                     'products_analyzed': analysis_result['total_products'],
                     'products_kept': replacement_result['kept'],
                     'products_replaced': replacement_result['replaced'],
-                    'products_deleted': replacement_result['deleted'],
+                    'products_losers': replacement_result['losers'],
                     'positions_maintained': replacement_result.get('positions_maintained', 0)
                 }
             else:
@@ -92,7 +92,7 @@ class ReplaceProductJob:
                     'products_analyzed': analysis_result['total_products'],
                     'products_kept': analysis_result['total_products'],
                     'products_replaced': 0,
-                    'products_deleted': 0,
+                    'products_losers': 0,
                     'positions_maintained': 0
                 }
 
@@ -129,7 +129,7 @@ class ReplaceProductJob:
             total_analyzed = 0
             total_kept = 0
             total_replaced = 0
-            total_deleted = 0
+            total_losers = 0
             total_positions = 0
             collections_processed = 0
             errors = []
@@ -148,7 +148,7 @@ class ReplaceProductJob:
                     total_analyzed += result.get('products_analyzed', 0)
                     total_kept += result.get('products_kept', 0)
                     total_replaced += result.get('products_replaced', 0)
-                    total_deleted += result.get('products_deleted', 0)
+                    total_losers += result.get('products_losers', 0)
                     total_positions += result.get('positions_maintained', 0)
                 else:
                     errors.append(f"Collection {result.get('collection_id')}: {result.get('error')}")
@@ -161,7 +161,7 @@ class ReplaceProductJob:
                 'products_analyzed': total_analyzed,
                 'products_kept': total_kept,
                 'products_replaced': total_replaced,
-                'products_deleted': total_deleted,
+                'products_losers': total_losers,
                 'positions_maintained': total_positions,
                 'errors': errors
             }
@@ -188,7 +188,7 @@ Collections processed: {self.metrics['collections_processed']}
 Products analyzed: {self.metrics['products_analyzed']}
 Products kept: {self.metrics['products_kept']}
 Products replaced: {self.metrics['products_replaced']}
-Products deleted (archived): {self.metrics['products_deleted']}
+Products losers (tagged): {self.metrics['products_losers']}
 Positions maintained: {self.metrics['positions_maintained']}
 Errors: {len(self.metrics['errors'])}
 """
@@ -253,7 +253,7 @@ Errors: {len(self.metrics['errors'])}
                     self.metrics['products_analyzed'] += result.get('products_analyzed', 0)
                     self.metrics['products_kept'] += result.get('products_kept', 0)
                     self.metrics['products_replaced'] += result.get('products_replaced', 0)
-                    self.metrics['products_deleted'] += result.get('products_deleted', 0)
+                    self.metrics['products_losers'] += result.get('products_losers', 0)
                     self.metrics['positions_maintained'] += result.get('positions_maintained', 0)
 
                     if result.get('errors'):
@@ -276,7 +276,7 @@ Errors: {len(self.metrics['errors'])}
                 metadata={
                     'products_analyzed': self.metrics['products_analyzed'],
                     'products_replaced': self.metrics['products_replaced'],
-                    'products_deleted': self.metrics['products_deleted'],
+                    'products_losers': self.metrics['products_losers'],
                     'positions_maintained': self.metrics['positions_maintained'],
                     'end_time': datetime.now(timezone.utc).isoformat()
                 }
