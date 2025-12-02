@@ -350,7 +350,6 @@ export const PostPhase: React.FC<PostPhaseProps> = ({ config, onChange, onOpenCa
                          const key = period as keyof typeof checks;
                          const isPassed = checks[key];
                          const boostedValue = boostedAvgs[key];
-                         const originalValue = product.avgs[key];
                          const target = config.averageSettings[key as keyof typeof config.averageSettings];
 
                          return (
@@ -363,9 +362,6 @@ export const PostPhase: React.FC<PostPhaseProps> = ({ config, onChange, onOpenCa
                               `}>
                                 <span className="font-mono font-bold text-xs">
                                   {boostedValue}
-                                  {salesBoost > 0 && (
-                                    <span className="text-[9px] text-indigo-400 ml-0.5">({originalValue}+{salesBoost})</span>
-                                  )}
                                 </span>
                                 <span className="text-[9px] opacity-50">/ {target}</span>
                               </div>
