@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StartPhaseConfig } from '../../types';
 import { BarChart, Bar, ResponsiveContainer, Cell, XAxis, Tooltip, ReferenceLine } from 'recharts';
-import { Info, AlertTriangle, Zap, Calculator, Trophy, Repeat, CheckCircle2, Save, Loader2, Check } from 'lucide-react';
+import { Info, AlertTriangle, Zap, Calculator, Trophy, Repeat, CheckCircle2, Save, Loader2, Check, Undo2 } from 'lucide-react';
 import { supabase } from '../../src/lib/supabase';
 
 interface StartPhaseProps {
@@ -16,6 +16,36 @@ export const StartPhase: React.FC<StartPhaseProps> = ({ config, onChange, onOpen
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Track original config for change detection
+  const [originalConfig, setOriginalConfig] = useState<StartPhaseConfig>(config);
+  const hasChanges = JSON.stringify(config) !== JSON.stringify(originalConfig);
+
+  // Update original config when component mounts or config is loaded from DB
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    if (isInitialMount.current) {
+      setOriginalConfig(config);
+      isInitialMount.current = false;
+    }
+  }, []);
+
+  // Warn user before leaving with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
+
+  const handleDiscard = () => {
+    onChange(originalConfig);
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -36,6 +66,8 @@ export const StartPhase: React.FC<StartPhaseProps> = ({ config, onChange, onOpen
 
       if (error) throw error;
 
+      // Update original config after successful save
+      setOriginalConfig(config);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (err: any) {
@@ -85,28 +117,41 @@ export const StartPhase: React.FC<StartPhaseProps> = ({ config, onChange, onOpen
               Open Calculator
            </button>
 
-          <button
-             onClick={handleSave}
-             disabled={isSaving}
-             className={`
-               flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-medium transition-all border
-               ${saveSuccess
-                 ? 'bg-emerald-600 border-emerald-500 text-white'
-                 : saveError
-                   ? 'bg-red-600 border-red-500 text-white'
-                   : 'bg-primary hover:bg-primary/90 border-primary text-white'}
-               ${isSaving ? 'opacity-70 cursor-not-allowed' : ''}
-             `}
-           >
-              {isSaving ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : saveSuccess ? (
-                <Check className="w-3.5 h-3.5" />
-              ) : (
-                <Save className="w-3.5 h-3.5" />
-              )}
-              {saveSuccess ? 'Saved!' : saveError ? 'Error' : 'Save'}
-           </button>
+          {/* Show Discard and Save buttons only when there are changes */}
+          {hasChanges && (
+            <>
+              <button
+                onClick={handleDiscard}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-300 transition-colors border border-zinc-700 hover:text-white"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+                Discard
+              </button>
+
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className={`
+                  flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-medium transition-all border
+                  ${saveSuccess
+                    ? 'bg-emerald-600 border-emerald-500 text-white'
+                    : saveError
+                      ? 'bg-red-600 border-red-500 text-white'
+                      : 'bg-primary hover:bg-primary/90 border-primary text-white'}
+                  ${isSaving ? 'opacity-70 cursor-not-allowed' : ''}
+                `}
+              >
+                {isSaving ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : saveSuccess ? (
+                  <Check className="w-3.5 h-3.5" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
+                {saveSuccess ? 'Saved!' : saveError ? 'Error' : 'Save'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 

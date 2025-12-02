@@ -1,7 +1,7 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { PostPhaseConfig } from '../../types';
-import { RefreshCw, Calculator, CheckCircle2, XCircle, Info, Target, BarChart3, AlertCircle, Save, Loader2, Check, SlidersHorizontal } from 'lucide-react';
+import { RefreshCw, Calculator, CheckCircle2, XCircle, Info, Target, BarChart3, AlertCircle, Save, Loader2, Check, SlidersHorizontal, Undo2 } from 'lucide-react';
 import { supabase } from '../../src/lib/supabase';
 
 interface PostPhaseProps {
@@ -28,6 +28,36 @@ export const PostPhase: React.FC<PostPhaseProps> = ({ config, onChange, onOpenCa
   // Sales boost slider for simulation (0-20)
   const [salesBoost, setSalesBoost] = useState(0);
 
+  // Track original config for change detection
+  const [originalConfig, setOriginalConfig] = useState<PostPhaseConfig>(config);
+  const hasChanges = JSON.stringify(config) !== JSON.stringify(originalConfig);
+
+  // Update original config when component mounts or config is loaded from DB
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    if (isInitialMount.current) {
+      setOriginalConfig(config);
+      isInitialMount.current = false;
+    }
+  }, []);
+
+  // Warn user before leaving with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
+
+  const handleDiscard = () => {
+    onChange(originalConfig);
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     setSaveError(null);
@@ -50,6 +80,8 @@ export const PostPhase: React.FC<PostPhaseProps> = ({ config, onChange, onOpenCa
 
       if (error) throw error;
 
+      // Update original config after successful save
+      setOriginalConfig(config);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (err: any) {
@@ -122,28 +154,41 @@ export const PostPhase: React.FC<PostPhaseProps> = ({ config, onChange, onOpenCa
               Open Calculator
            </button>
 
-          <button
-             onClick={handleSave}
-             disabled={isSaving}
-             className={`
-               flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-medium transition-all border
-               ${saveSuccess
-                 ? 'bg-emerald-600 border-emerald-500 text-white'
-                 : saveError
-                   ? 'bg-red-600 border-red-500 text-white'
-                   : 'bg-primary hover:bg-primary/90 border-primary text-white'}
-               ${isSaving ? 'opacity-70 cursor-not-allowed' : ''}
-             `}
-           >
-              {isSaving ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : saveSuccess ? (
-                <Check className="w-3.5 h-3.5" />
-              ) : (
-                <Save className="w-3.5 h-3.5" />
-              )}
-              {saveSuccess ? 'Saved!' : saveError ? 'Error' : 'Save'}
-           </button>
+          {/* Show Discard and Save buttons only when there are changes */}
+          {hasChanges && (
+            <>
+              <button
+                onClick={handleDiscard}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-300 transition-colors border border-zinc-700 hover:text-white"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+                Discard
+              </button>
+
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className={`
+                  flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-medium transition-all border
+                  ${saveSuccess
+                    ? 'bg-emerald-600 border-emerald-500 text-white'
+                    : saveError
+                      ? 'bg-red-600 border-red-500 text-white'
+                      : 'bg-primary hover:bg-primary/90 border-primary text-white'}
+                  ${isSaving ? 'opacity-70 cursor-not-allowed' : ''}
+                `}
+              >
+                {isSaving ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : saveSuccess ? (
+                  <Check className="w-3.5 h-3.5" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
+                {saveSuccess ? 'Saved!' : saveError ? 'Error' : 'Save'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
