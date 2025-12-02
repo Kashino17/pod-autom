@@ -1,8 +1,8 @@
 """
-Supabase Service for Replace Job - Database operations
+Supabase Service for Replace Job - Database operations (READ-ONLY for product_sales)
 Updated to work with new ReBoss NextGen schema:
 - shop_rules table for phase configuration
-- product_sales table for sales data
+- product_sales table for sales data (READ-ONLY - only sales_tracker_job writes here)
 - campaign_batch_assignments for collection tracking
 """
 import os
@@ -166,34 +166,6 @@ class SupabaseService:
         except Exception as e:
             print(f"Error getting sales data for {product_id}: {e}")
             return {}
-
-    def update_collection_tracking(self, shop_id: str, collection_id: str,
-                                   product_id: str, added: datetime = None,
-                                   removed: datetime = None):
-        """Update tracking data for a product in a collection."""
-        try:
-            if product_id.startswith('gid://'):
-                product_id = product_id.split('/')[-1]
-
-            update_data = {
-                'shop_id': shop_id,
-                'collection_id': collection_id,
-                'product_id': product_id
-            }
-
-            if added:
-                update_data['date_added_to_collection'] = added.isoformat()
-            if removed:
-                # Store removal date in last_update field
-                update_data['last_update'] = datetime.now(timezone.utc).isoformat()
-
-            self.client.table('product_sales').upsert(
-                update_data,
-                on_conflict='shop_id,collection_id,product_id'
-            ).execute()
-
-        except Exception as e:
-            print(f"Error updating tracking for {product_id}: {e}")
 
     def log_job_run(self, job_type: str, status: str, shops_processed: int = 0,
                     shops_failed: int = 0, error_log: List[Dict] = None,

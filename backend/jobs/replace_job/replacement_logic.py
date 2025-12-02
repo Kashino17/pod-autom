@@ -28,15 +28,6 @@ class ReplacementLogic:
 
         return self.db.get_sales_data(self.config.shop_id, collection_id, product_id)
 
-    def update_collection_tracking(self, collection_id: str, product_id: str,
-                                   added: datetime = None, removed: datetime = None):
-        """Update tracking data in Supabase."""
-        if product_id.startswith('gid://'):
-            product_id = product_id.split('/')[-1]
-
-        self.db.update_collection_tracking(
-            self.config.shop_id, collection_id, product_id, added, removed
-        )
 
     def calculate_product_phase(self, sales_data: Dict) -> Tuple[ProductPhase, int]:
         """Determine product phase based on age."""
@@ -144,14 +135,13 @@ class ReplacementLogic:
             product_gid = product['id']
             product_id = product_gid.split('/')[-1]
 
-            # Get sales data
+            # Get sales data (read-only from product_sales table)
             sales_data = self.get_product_sales_data(collection_id, product_id)
 
-            # Initialize tracking if new
+            # Skip products without sales data (sales_tracker_job hasn't tracked them yet)
             if not sales_data.get('date_added_to_collection'):
-                print(f"First time seeing '{product['title']}' in collection, initializing")
-                self.update_collection_tracking(collection_id, product_id, added=now)
-                sales_data['date_added_to_collection'] = now.isoformat()
+                print(f"Skipping '{product['title']}' - not yet tracked by sales_tracker_job")
+                continue
 
             # Determine phase and action
             phase, days_in_collection = self.calculate_product_phase(sales_data)
@@ -314,10 +304,6 @@ class ReplacementLogic:
                 new_success = self.shopify.update_product_tags(new_product['id'], new_tags)
 
                 if old_success and new_success:
-                    # Update tracking
-                    self.update_collection_tracking(collection_id, analysis.product_id, removed=now)
-                    self.update_collection_tracking(collection_id, new_product['id'], added=now)
-
                     # Store position for Phase 2
                     old_product_gid = analysis.product_id
                     if not old_product_gid.startswith('gid://'):
