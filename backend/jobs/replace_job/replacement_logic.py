@@ -78,16 +78,20 @@ class ReplacementLogic:
         elif phase == ProductPhase.INITIAL:
             # Initial Phase: Check first 7 days sales
             sales = sales_data.get('sales_first_7_days', 0)
-            delete_threshold = self.config.initial_phase_rules.get('min_sales_day7_delete', 0)
-            replace_threshold = self.config.initial_phase_rules.get('min_sales_day7_replace', 1)
+            # min_sales_day7_delete = start_phase_replace_threshold (products with this or less get replaced)
+            # min_sales_day7_replace = start_phase_keep_threshold (products with this or more get kept)
+            replace_threshold = self.config.initial_phase_rules.get('min_sales_day7_delete', 0)
+            keep_threshold = self.config.initial_phase_rules.get('min_sales_day7_replace', 1)
 
-            # Both old DELETE and REPLACE thresholds now lead to REPLACE
-            if sales <= delete_threshold:
-                return ProductAction.REPLACE, f"Initial: {sales} sales <= {delete_threshold} (replace)"
+            # Check if product should be kept (sales >= keep_threshold)
+            if sales >= keep_threshold:
+                return ProductAction.KEEP, f"Initial: {sales} sales >= {keep_threshold} (keep)"
+            # Check if product should be replaced (sales <= replace_threshold)
             elif sales <= replace_threshold:
                 return ProductAction.REPLACE, f"Initial: {sales} sales <= {replace_threshold} (replace)"
             else:
-                return ProductAction.KEEP, f"Initial: {sales} sales > {replace_threshold} (keep)"
+                # Edge case: sales between replace_threshold and keep_threshold
+                return ProductAction.REPLACE, f"Initial: {sales} sales < {keep_threshold} (replace)"
 
         elif phase == ProductPhase.POST:
             # Post Phase: Check OK buckets
