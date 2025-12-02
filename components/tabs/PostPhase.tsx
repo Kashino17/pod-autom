@@ -331,7 +331,7 @@ export const PostPhase: React.FC<PostPhaseProps> = ({ config, onChange, onOpenCa
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
-                  {simulationResults.map(({ product, checks, passed }) => (
+                  {simulationResults.map(({ product, checks, passed, boostedAvgs }) => (
                     <tr key={product.id} className="group hover:bg-zinc-900/40 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
