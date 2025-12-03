@@ -124,12 +124,19 @@ class Campaign:
     @classmethod
     def from_db_row(cls, row: Dict) -> 'Campaign':
         """Create campaign from database row."""
+        # Handle None values explicitly
+        daily_budget = row.get('daily_budget')
+        if daily_budget is None:
+            daily_budget = 0.0
+        else:
+            daily_budget = float(daily_budget)
+
         return cls(
             id=row['id'],
-            pinterest_campaign_id=row['pinterest_campaign_id'],
+            pinterest_campaign_id=row.get('pinterest_campaign_id', ''),
             name=row.get('name', ''),
             status=row.get('status', 'ACTIVE'),
-            daily_budget=float(row.get('daily_budget', 0)),
+            daily_budget=daily_budget,
             ad_account_id=row.get('ad_account_id', ''),
             shop_id=row.get('shop_id', '')
         )
