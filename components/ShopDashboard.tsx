@@ -218,7 +218,7 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
       'post-phase': 'Post Phase Automation',
       'product-creation': 'Product Creation',
       'pinterest': 'Pinterest Integration',
-      'campaign-optimization': 'Kampagnen-Optimierung',
+      'campaign-optimization': 'Pinterest Kampagnen-Optimierung',
       'meta-ads': 'Meta Ads Integration',
       'google-ads': 'Google Ads Manager',
       'limits': 'Limits & Beschränkungen',

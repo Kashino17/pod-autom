@@ -9,9 +9,7 @@ import {
   OptimizationLogic,
   OptimizationActionType,
   OptimizationActionUnit,
-  PinterestCampaign,
-  TestMetricsByTimeRange,
-  TestMetricsForPeriod
+  PinterestCampaign
 } from '../../types';
 import {
   Settings,
@@ -20,6 +18,8 @@ import {
   Edit2,
   Save,
   X,
+  ChevronUp,
+  ChevronDown,
   TrendingUp,
   TrendingDown,
   Pause,
@@ -29,16 +29,9 @@ import {
   CheckCircle2,
   Loader2,
   Power,
-  RefreshCw,
-  Zap
+  RefreshCw
 } from 'lucide-react';
 import { supabase } from '../../src/lib/supabase';
-import {
-  usePinterestAuth,
-  usePinterestAdAccounts,
-  usePinterestCampaigns,
-  useUpsertPinterestCampaign
-} from '../../src/hooks/usePinterest';
 
 interface CampaignOptimizationProps {
   shopId: string;
@@ -51,11 +44,11 @@ const METRICS: { value: OptimizationMetric; label: string }[] = [
 ];
 
 const OPERATORS: { value: OptimizationOperator; label: string }[] = [
-  { value: '>=', label: 'ist gleich oder größer als' },
-  { value: '<=', label: 'ist gleich oder kleiner als' },
-  { value: '>', label: 'ist größer als' },
-  { value: '<', label: 'ist kleiner als' },
-  { value: '==', label: 'ist gleich' }
+  { value: '>=', label: '>=' },
+  { value: '<=', label: '<=' },
+  { value: '>', label: '>' },
+  { value: '<', label: '<' },
+  { value: '==', label: '==' }
 ];
 
 const TIME_RANGES = [1, 3, 7, 14];
@@ -66,28 +59,6 @@ const ACTION_TYPES: { value: OptimizationActionType; label: string; icon: React.
   { value: 'pause', label: 'Pausieren', icon: <Pause className="w-4 h-4" /> }
 ];
 
-// Pinterest API campaign type
-interface PinterestApiCampaign {
-  id: string;
-  name: string;
-  status: string;
-  daily_spend_cap?: number;
-}
-
-// Pinterest Ad Account type
-interface PinterestAdAccount {
-  id: string;
-  pinterest_account_id: string;
-  name: string;
-  is_selected: boolean;
-}
-
-// Pinterest Auth type
-interface PinterestAuth {
-  is_connected: boolean;
-  pinterest_username?: string;
-}
-
 export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shopId }) => {
   // State
   const [settings, setSettings] = useState<OptimizationSettings | null>(null);
@@ -96,46 +67,14 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
   const [campaigns, setCampaigns] = useState<PinterestCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isSyncingCampaigns, setIsSyncingCampaigns] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
-
-  // Default empty test metrics
-  const defaultTestMetrics: TestMetricsByTimeRange = {
-    day1: { spend: 0, checkouts: 0, roas: 0 },
-    day3: { spend: 0, checkouts: 0, roas: 0 },
-    day7: { spend: 0, checkouts: 0, roas: 0 },
-    day14: { spend: 0, checkouts: 0, roas: 0 }
-  };
 
   // Rule Editor State
   const [editingRule, setEditingRule] = useState<OptimizationRule | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
 
-  // Track the selected Pinterest campaign ID separately (for dropdown display)
-  const [selectedPinterestCampaignId, setSelectedPinterestCampaignId] = useState<string | null>(null);
-
   // Active Tab
   const [activeTab, setActiveTab] = useState<'settings' | 'rules' | 'logs'>('settings');
-
-  // Pinterest Hooks - Load directly from Pinterest API like PinterestSync does
-  const { data: pinterestAuthRaw } = usePinterestAuth(shopId);
-  const pinterestAuth = pinterestAuthRaw as PinterestAuth | null;
-  const { data: adAccountsRaw = [] } = usePinterestAdAccounts(shopId);
-  const adAccounts = adAccountsRaw as PinterestAdAccount[];
-  const selectedAdAccount = adAccounts.find(a => a.is_selected);
-
-  const {
-    data: pinterestCampaignsRaw = [],
-    isLoading: campaignsLoading,
-    refetch: refetchCampaigns
-  } = usePinterestCampaigns(
-    shopId,
-    selectedAdAccount?.pinterest_account_id || null
-  );
-  const pinterestCampaigns = pinterestCampaignsRaw as PinterestApiCampaign[];
-
-  const upsertCampaign = useUpsertPinterestCampaign();
 
   // Load data on mount
   useEffect(() => {
@@ -152,7 +91,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
         .from('pinterest_campaign_optimization_settings')
         .select('*')
         .eq('shop_id', shopId)
-        .maybeSingle();
+        .single();
 
       if (settingsData) {
         setSettings(settingsData);
@@ -186,26 +125,18 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
 
       setLogs(logsData || []);
 
-      // Load campaigns for test mode selection (stored in Supabase)
+      // Load campaigns for test mode selection
       const { data: campaignsData } = await supabase
         .from('pinterest_campaigns')
-        .select('id, pinterest_campaign_id, name, status, daily_budget')
+        .select('id, name, status, daily_budget')
         .eq('shop_id', shopId);
 
-      setCampaigns((campaignsData as any[] || []).map(c => ({
+      setCampaigns(campaignsData?.map(c => ({
         id: c.id,
         name: c.name,
-        status: c.status as 'ACTIVE' | 'PAUSED' | 'PENDING',
+        status: c.status,
         budget: c.daily_budget
-      })));
-
-      // If there's a saved test_campaign_id, find the corresponding pinterest_campaign_id for the dropdown
-      if (settingsData?.test_campaign_id && campaignsData) {
-        const savedCampaign = (campaignsData as any[]).find(c => c.id === settingsData.test_campaign_id);
-        if (savedCampaign) {
-          setSelectedPinterestCampaignId(savedCampaign.pinterest_campaign_id);
-        }
-      }
+      })) || []);
 
     } catch (err: any) {
       setError(err.message || 'Fehler beim Laden der Daten');
@@ -214,116 +145,21 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
     }
   };
 
-  // Sync campaigns from Pinterest API - just load them to the dropdown, don't save all to Supabase
-  const syncCampaignsFromPinterest = async () => {
-    if (!selectedAdAccount) {
-      setError('Kein Pinterest Ad Account ausgewählt. Bitte zuerst auf der Pinterest Sync Seite ein Ad Account auswählen.');
-      return;
-    }
-
-    setIsSyncingCampaigns(true);
-    setError(null);
-
-    try {
-      // Refetch campaigns from Pinterest API via hooks
-      await refetchCampaigns();
-
-      // The campaigns will be populated via useEffect when pinterestCampaigns updates
-
-    } catch (err: any) {
-      setError(err.message || 'Fehler beim Laden der Kampagnen');
-    } finally {
-      setIsSyncingCampaigns(false);
-    }
-  };
-
-  // Save only the selected test campaign to Supabase when user selects it
-  const handleTestCampaignSelect = async (pinterestCampaignId: string | null) => {
-    // Update the local display state
-    setSelectedPinterestCampaignId(pinterestCampaignId);
-
-    if (!pinterestCampaignId) {
-      setSettings({ ...settings!, test_campaign_id: null });
-      return;
-    }
-
-    // If a campaign is selected, save it to Supabase first to get the UUID
-    if (selectedAdAccount) {
-      const selectedCampaign = pinterestCampaigns.find(c => c.id === pinterestCampaignId);
-      if (selectedCampaign) {
-        try {
-          // Upsert returns the Supabase record with UUID
-          const savedCampaign = await upsertCampaign.mutateAsync({
-            shop_id: shopId,
-            ad_account_id: selectedAdAccount.pinterest_account_id,
-            pinterest_campaign_id: selectedCampaign.id,
-            name: selectedCampaign.name,
-            status: selectedCampaign.status,
-            daily_budget: selectedCampaign.daily_spend_cap ? selectedCampaign.daily_spend_cap / 1000000 : undefined
-          });
-
-          // Use the Supabase UUID (not the Pinterest campaign ID)
-          setSettings({ ...settings!, test_campaign_id: savedCampaign.id });
-        } catch (err: any) {
-          console.error('Error saving test campaign:', err);
-          setError('Fehler beim Speichern der Test-Kampagne');
-        }
-      }
-    }
-  };
-
-  // Auto-update campaigns dropdown when Pinterest campaigns are loaded
-  useEffect(() => {
-    if (pinterestCampaigns.length > 0 && campaigns.length === 0) {
-      // Transform Pinterest API campaigns to local format
-      const activeCampaigns = pinterestCampaigns
-        .filter(c => c.status === 'ACTIVE')
-        .map(c => ({
-          id: c.id,
-          name: c.name,
-          status: c.status as 'ACTIVE' | 'PAUSED' | 'PENDING',
-          budget: c.daily_spend_cap ? c.daily_spend_cap / 1000000 : undefined
-        }));
-      if (activeCampaigns.length > 0) {
-        setCampaigns(activeCampaigns);
-      }
-    }
-  }, [pinterestCampaigns]);
-
   const saveSettings = async () => {
     if (!settings) return;
 
     setIsSaving(true);
-    setSaveStatus('idle');
     try {
-      // Ensure test_metrics only contains the new time-range format (no old spend/checkouts/roas keys)
-      const cleanTestMetrics = settings.test_metrics ? {
-        day1: settings.test_metrics.day1 || { spend: 0, checkouts: 0, roas: 0 },
-        day3: settings.test_metrics.day3 || { spend: 0, checkouts: 0, roas: 0 },
-        day7: settings.test_metrics.day7 || { spend: 0, checkouts: 0, roas: 0 },
-        day14: settings.test_metrics.day14 || { spend: 0, checkouts: 0, roas: 0 }
-      } : null;
-
       const { error } = await supabase
         .from('pinterest_campaign_optimization_settings')
         .upsert({
-          shop_id: settings.shop_id,
-          is_enabled: settings.is_enabled,
-          test_mode_enabled: settings.test_mode_enabled,
-          test_campaign_id: settings.test_campaign_id,
-          test_metrics: cleanTestMetrics,
+          ...settings,
           updated_at: new Date().toISOString()
-        } as any, { onConflict: 'shop_id' });
+        }, { onConflict: 'shop_id' });
 
       if (error) throw error;
-
-      // Show success feedback
-      setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (err: any) {
       setError(err.message || 'Fehler beim Speichern');
-      setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 3000);
     } finally {
       setIsSaving(false);
     }
@@ -339,17 +175,16 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
           .insert({
             ...ruleData,
             shop_id: shopId
-          } as any);
+          });
 
         if (error) throw error;
       } else {
-        const updateData = {
-          ...rule,
-          updated_at: new Date().toISOString()
-        };
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from('pinterest_campaign_optimization_rules')
-          .update(updateData)
+          .update({
+            ...rule,
+            updated_at: new Date().toISOString()
+          })
           .eq('id', rule.id);
 
         if (error) throw error;
@@ -383,7 +218,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
 
   const toggleRuleEnabled = async (rule: OptimizationRule) => {
     try {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from('pinterest_campaign_optimization_rules')
         .update({ is_enabled: !rule.is_enabled })
         .eq('id', rule.id);
@@ -421,29 +256,24 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Header Banner */}
-      <div className="flex items-center justify-between bg-gradient-to-r from-zinc-900 to-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/10 rounded-lg border border-primary/20">
-            <TrendingUp className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-white">Kampagnen-Optimierung</h1>
-            <p className="text-sm text-zinc-500">
-              Automatische Budget-Anpassung basierend auf Performance-Regeln
-            </p>
-          </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">Pinterest Kampagnen-Optimierung</h2>
+          <p className="text-sm text-gray-500">
+            Automatische Budget-Anpassung für Pinterest-Kampagnen basierend auf Performance-Regeln
+          </p>
         </div>
         <button
           onClick={loadData}
-          className="p-2 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+          className="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100"
         >
           <RefreshCw className="w-5 h-5" />
         </button>
@@ -451,30 +281,30 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
 
       {/* Error Display */}
       {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-400">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
           <AlertCircle className="w-5 h-5" />
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-auto hover:text-red-300">
+          <button onClick={() => setError(null)} className="ml-auto">
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
       {/* Tabs */}
-      <div className="border-b border-zinc-800">
-        <nav className="-mb-px flex gap-1">
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex gap-4">
           {[
             { id: 'settings', label: 'Einstellungen', icon: Settings },
-            { id: 'rules', label: 'Regeln', icon: Zap },
+            { id: 'rules', label: 'Regeln', icon: TrendingUp },
             { id: 'logs', label: 'Verlauf', icon: History }
           ].map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 py-3 px-4 border-b-2 font-medium text-sm transition-colors ${
+              className={`flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm ${
                 activeTab === tab.id
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:border-zinc-700'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
               <tab.icon className="w-4 h-4" />
@@ -488,11 +318,11 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
       {activeTab === 'settings' && settings && (
         <div className="space-y-6">
           {/* Enable/Disable */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-zinc-200">Optimierung aktivieren</h3>
-                <p className="text-sm text-zinc-500 mt-1">
+                <h3 className="font-medium text-gray-900">Optimierung aktivieren</h3>
+                <p className="text-sm text-gray-500">
                   Aktiviert die automatische Kampagnen-Optimierung für diesen Shop
                 </p>
               </div>
@@ -501,7 +331,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
                   setSettings({ ...settings, is_enabled: !settings.is_enabled });
                 }}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  settings.is_enabled ? 'bg-primary' : 'bg-zinc-700'
+                  settings.is_enabled ? 'bg-blue-600' : 'bg-gray-200'
                 }`}
               >
                 <span
@@ -514,16 +344,16 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
           </div>
 
           {/* Test Mode */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 space-y-5">
-            <div className="flex items-center gap-2 text-amber-400">
+          <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+            <div className="flex items-center gap-2 text-amber-600 mb-4">
               <FlaskConical className="w-5 h-5" />
-              <h3 className="font-semibold">Test-Modus</h3>
+              <h3 className="font-medium">Test-Modus</h3>
             </div>
 
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-zinc-300">Test-Modus aktivieren</p>
-                <p className="text-xs text-zinc-500 mt-0.5">
+                <p className="text-sm text-gray-700">Test-Modus aktivieren</p>
+                <p className="text-xs text-gray-500">
                   Verwendet manuelle Test-Daten statt echter Pinterest-Metriken
                 </p>
               </div>
@@ -532,7 +362,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
                   setSettings({ ...settings, test_mode_enabled: !settings.test_mode_enabled });
                 }}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  settings.test_mode_enabled ? 'bg-amber-500' : 'bg-zinc-700'
+                  settings.test_mode_enabled ? 'bg-amber-500' : 'bg-gray-200'
                 }`}
               >
                 <span
@@ -544,184 +374,92 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
             </div>
 
             {settings.test_mode_enabled && (
-              <div className="pt-4 border-t border-zinc-800 space-y-4">
-                {/* Pinterest Connection Status */}
-                {!pinterestAuth?.is_connected && (
-                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4" />
-                    Pinterest ist nicht verbunden. Bitte zuerst auf der Pinterest Sync Seite verbinden.
-                  </div>
-                )}
-
-                {pinterestAuth?.is_connected && !selectedAdAccount && (
-                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4" />
-                    Kein Ad Account ausgewählt. Bitte zuerst auf der Pinterest Sync Seite ein Ad Account auswählen.
-                  </div>
-                )}
-
+              <>
                 {/* Test Campaign Selection */}
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-xs font-medium text-zinc-400">
-                      Test-Kampagne
-                    </label>
-                    <button
-                      onClick={syncCampaignsFromPinterest}
-                      disabled={isSyncingCampaigns || campaignsLoading || !selectedAdAccount}
-                      className="flex items-center gap-1.5 px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors disabled:opacity-50"
-                    >
-                      <RefreshCw className={`w-3 h-3 ${(isSyncingCampaigns || campaignsLoading) ? 'animate-spin' : ''}`} />
-                      {isSyncingCampaigns || campaignsLoading ? 'Laden...' : 'Kampagnen laden'}
-                    </button>
-                  </div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Test-Kampagne
+                  </label>
                   <select
-                    value={selectedPinterestCampaignId || ''}
-                    onChange={(e) => handleTestCampaignSelect(e.target.value || null)}
-                    disabled={!selectedAdAccount}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600 disabled:opacity-50"
+                    value={settings.test_campaign_id || ''}
+                    onChange={(e) => setSettings({ ...settings, test_campaign_id: e.target.value || null })}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
                   >
-                    <option value="">
-                      {!selectedAdAccount
-                        ? 'Erst Ad Account auswählen...'
-                        : campaigns.length === 0
-                          ? (campaignsLoading ? 'Lade Kampagnen...' : 'Kampagnen laden...')
-                          : 'Kampagne auswählen...'}
-                    </option>
+                    <option value="">Kampagne auswählen...</option>
                     {campaigns.map(c => (
-                      <option key={c.id} value={c.id}>{c.name} ({c.status})</option>
+                      <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
-                  {selectedAdAccount && campaigns.length === 0 && !campaignsLoading && (
-                    <p className="text-xs text-zinc-500 mt-1">
-                      Klicke auf "Kampagnen laden" um aktive Pinterest-Kampagnen zu synchronisieren
-                    </p>
-                  )}
-                  {campaigns.length > 0 && (
-                    <p className="text-xs text-emerald-500 mt-1">
-                      {campaigns.length} aktive Kampagne{campaigns.length !== 1 ? 'n' : ''} gefunden
-                    </p>
-                  )}
                 </div>
 
-                {/* Test Metrics by Time Range */}
-                <div className="space-y-4">
-                  <p className="text-xs text-zinc-500">
-                    Gib Test-Metriken für verschiedene Zeiträume ein. Die Regeln werden anhand dieser Werte evaluiert.
-                  </p>
-
-                  {/* Time Range Headers */}
-                  <div className="grid grid-cols-4 gap-3">
-                    {(['day1', 'day3', 'day7', 'day14'] as const).map((dayKey, index) => {
-                      const days = [1, 3, 7, 14][index];
-                      const testMetrics = settings.test_metrics || defaultTestMetrics;
-                      const periodMetrics = testMetrics[dayKey] || { spend: 0, checkouts: 0, roas: 0 };
-
-                      return (
-                        <div key={dayKey} className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-3 space-y-3">
-                          <h4 className="text-xs font-semibold text-zinc-300 text-center border-b border-zinc-800 pb-2">
-                            Letzte {days} {days === 1 ? 'Tag' : 'Tage'}
-                          </h4>
-
-                          <div>
-                            <label className="block text-xs text-zinc-500 mb-1">Spend (€)</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={periodMetrics.spend}
-                              onChange={(e) => {
-                                const newMetrics = { ...testMetrics };
-                                newMetrics[dayKey] = {
-                                  ...periodMetrics,
-                                  spend: parseFloat(e.target.value) || 0
-                                };
-                                setSettings({ ...settings, test_metrics: newMetrics });
-                              }}
-                              className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1.5 text-sm text-white focus:outline-none focus:border-zinc-500"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs text-zinc-500 mb-1">Checkouts</label>
-                            <input
-                              type="number"
-                              value={periodMetrics.checkouts}
-                              onChange={(e) => {
-                                const newMetrics = { ...testMetrics };
-                                newMetrics[dayKey] = {
-                                  ...periodMetrics,
-                                  checkouts: parseInt(e.target.value) || 0
-                                };
-                                setSettings({ ...settings, test_metrics: newMetrics });
-                              }}
-                              className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1.5 text-sm text-white focus:outline-none focus:border-zinc-500"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs text-zinc-500 mb-1">ROAS</label>
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={periodMetrics.roas}
-                              onChange={(e) => {
-                                const newMetrics = { ...testMetrics };
-                                newMetrics[dayKey] = {
-                                  ...periodMetrics,
-                                  roas: parseFloat(e.target.value) || 0
-                                };
-                                setSettings({ ...settings, test_metrics: newMetrics });
-                              }}
-                              className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1.5 text-sm text-white focus:outline-none focus:border-zinc-500"
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
+                {/* Test Metrics */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Test Spend (€)
+                    </label>
+                    <input
+                      type="number"
+                      value={settings.test_metrics?.spend || 0}
+                      onChange={(e) => setSettings({
+                        ...settings,
+                        test_metrics: {
+                          ...settings.test_metrics || { spend: 0, checkouts: 0, roas: 0 },
+                          spend: parseFloat(e.target.value) || 0
+                        }
+                      })}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Test Checkouts
+                    </label>
+                    <input
+                      type="number"
+                      value={settings.test_metrics?.checkouts || 0}
+                      onChange={(e) => setSettings({
+                        ...settings,
+                        test_metrics: {
+                          ...settings.test_metrics || { spend: 0, checkouts: 0, roas: 0 },
+                          checkouts: parseInt(e.target.value) || 0
+                        }
+                      })}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Test ROAS
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={settings.test_metrics?.roas || 0}
+                      onChange={(e) => setSettings({
+                        ...settings,
+                        test_metrics: {
+                          ...settings.test_metrics || { spend: 0, checkouts: 0, roas: 0 },
+                          roas: parseFloat(e.target.value) || 0
+                        }
+                      })}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    />
                   </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
 
-          {/* Save Button with Feedback */}
-          <div className="flex items-center gap-4">
-            <button
-              onClick={saveSettings}
-              disabled={isSaving}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-                saveStatus === 'success'
-                  ? 'bg-emerald-600 text-white'
-                  : saveStatus === 'error'
-                    ? 'bg-red-600 text-white'
-                    : 'bg-primary text-white hover:bg-primary/90'
-              } disabled:opacity-50`}
-            >
-              {isSaving ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : saveStatus === 'success' ? (
-                <CheckCircle2 className="w-4 h-4" />
-              ) : saveStatus === 'error' ? (
-                <AlertCircle className="w-4 h-4" />
-              ) : (
-                <Save className="w-4 h-4" />
-              )}
-              {isSaving
-                ? 'Speichern...'
-                : saveStatus === 'success'
-                  ? 'Gespeichert!'
-                  : saveStatus === 'error'
-                    ? 'Fehler!'
-                    : 'Einstellungen speichern'}
-            </button>
-
-            {/* Status message */}
-            {saveStatus === 'success' && (
-              <span className="text-sm text-emerald-400 animate-in fade-in duration-200">
-                Einstellungen wurden erfolgreich gespeichert
-              </span>
-            )}
-          </div>
+          {/* Save Button */}
+          <button
+            onClick={saveSettings}
+            disabled={isSaving}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Einstellungen speichern
+          </button>
         </div>
       )}
 
@@ -731,7 +469,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
           {/* Add Rule Button */}
           <button
             onClick={createNewRule}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             <Plus className="w-4 h-4" />
             Neue Regel
@@ -750,34 +488,28 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
           {/* Rules List */}
           <div className="space-y-3">
             {rules.length === 0 ? (
-              <div className="text-center py-12 bg-zinc-900/30 border border-zinc-800 rounded-xl">
-                <Zap className="w-8 h-8 text-zinc-600 mx-auto mb-3" />
-                <p className="text-zinc-500">Keine Regeln vorhanden.</p>
-                <p className="text-sm text-zinc-600 mt-1">Erstellen Sie Ihre erste Regel.</p>
+              <div className="text-center py-12 text-gray-500">
+                Keine Regeln vorhanden. Erstellen Sie Ihre erste Regel.
               </div>
             ) : (
-              rules.map((rule) => (
+              rules.map((rule, index) => (
                 <div
                   key={rule.id}
-                  className={`bg-zinc-900/50 border rounded-xl p-4 transition-all ${
-                    rule.is_enabled ? 'border-zinc-800' : 'border-zinc-800/50 opacity-60'
+                  className={`bg-white rounded-lg border p-4 ${
+                    rule.is_enabled ? 'border-gray-200' : 'border-gray-100 opacity-60'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => toggleRuleEnabled(rule)}
-                        className={`p-1.5 rounded-lg transition-colors ${
-                          rule.is_enabled
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : 'bg-zinc-800 text-zinc-500'
-                        }`}
+                        className={`p-1 rounded ${rule.is_enabled ? 'text-green-600' : 'text-gray-400'}`}
                       >
-                        <Power className="w-4 h-4" />
+                        <Power className="w-5 h-5" />
                       </button>
                       <div>
-                        <h4 className="font-medium text-zinc-200">{rule.name}</h4>
-                        <p className="text-xs text-zinc-500 mt-0.5">
+                        <h4 className="font-medium text-gray-900">{rule.name}</h4>
+                        <p className="text-sm text-gray-500">
                           Priorität: {rule.priority} | {rule.conditions.length} Bedingung(en)
                         </p>
                       </div>
@@ -785,10 +517,10 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
 
                     <div className="flex items-center gap-2">
                       {/* Action Badge */}
-                      <span className={`px-2.5 py-1 rounded-lg text-xs font-medium ${
-                        rule.action_type === 'scale_up' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                        rule.action_type === 'scale_down' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                        'bg-red-500/10 text-red-400 border border-red-500/20'
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        rule.action_type === 'scale_up' ? 'bg-green-100 text-green-700' :
+                        rule.action_type === 'scale_down' ? 'bg-amber-100 text-amber-700' :
+                        'bg-red-100 text-red-700'
                       }`}>
                         {rule.action_type === 'scale_up' ? '↑' : rule.action_type === 'scale_down' ? '↓' : '⏸'}
                         {rule.action_type !== 'pause' && ` ${rule.action_value}${rule.action_unit === 'percent' ? '%' : '€'}`}
@@ -796,13 +528,13 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
 
                       <button
                         onClick={() => setEditingRule(rule)}
-                        className="p-1.5 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                        className="p-1 text-gray-400 hover:text-gray-600"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => deleteRule(rule.id)}
-                        className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                        className="p-1 text-gray-400 hover:text-red-600"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -814,10 +546,10 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
                     {rule.conditions.map((cond, i) => (
                       <span
                         key={i}
-                        className="px-2 py-1 bg-zinc-800 rounded-md text-xs text-zinc-400 border border-zinc-700"
+                        className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-600"
                       >
                         {cond.metric} {cond.operator} {cond.value} ({cond.time_range_days}d)
-                        {cond.logic && <span className="ml-1 font-medium text-zinc-300">{cond.logic}</span>}
+                        {cond.logic && <span className="ml-1 font-medium">{cond.logic}</span>}
                       </span>
                     ))}
                   </div>
@@ -832,47 +564,26 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
       {activeTab === 'logs' && (
         <div className="space-y-3">
           {logs.length === 0 ? (
-            <div className="text-center py-12 bg-zinc-900/30 border border-zinc-800 rounded-xl">
-              <History className="w-8 h-8 text-zinc-600 mx-auto mb-3" />
-              <p className="text-zinc-500">Noch keine Optimierungen durchgeführt.</p>
+            <div className="text-center py-12 text-gray-500">
+              Noch keine Optimierungen durchgeführt.
             </div>
           ) : (
             logs.map(log => (
               <div
                 key={log.id}
-                className={`bg-zinc-900/50 border rounded-xl p-4 ${
-                  log.is_test_run ? 'border-amber-500/30' : 'border-zinc-800'
+                className={`bg-white rounded-lg border p-4 ${
+                  log.is_test_run ? 'border-amber-200' : 'border-gray-200'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    {log.action_taken === 'scaled_up' && (
-                      <div className="p-1.5 bg-emerald-500/10 rounded-lg">
-                        <TrendingUp className="w-4 h-4 text-emerald-400" />
-                      </div>
-                    )}
-                    {log.action_taken === 'scaled_down' && (
-                      <div className="p-1.5 bg-amber-500/10 rounded-lg">
-                        <TrendingDown className="w-4 h-4 text-amber-400" />
-                      </div>
-                    )}
-                    {log.action_taken === 'paused' && (
-                      <div className="p-1.5 bg-red-500/10 rounded-lg">
-                        <Pause className="w-4 h-4 text-red-400" />
-                      </div>
-                    )}
-                    {log.action_taken === 'failed' && (
-                      <div className="p-1.5 bg-red-500/10 rounded-lg">
-                        <AlertCircle className="w-4 h-4 text-red-400" />
-                      </div>
-                    )}
-                    {log.action_taken === 'skipped' && (
-                      <div className="p-1.5 bg-zinc-800 rounded-lg">
-                        <CheckCircle2 className="w-4 h-4 text-zinc-500" />
-                      </div>
-                    )}
+                    {log.action_taken === 'scaled_up' && <TrendingUp className="w-4 h-4 text-green-600" />}
+                    {log.action_taken === 'scaled_down' && <TrendingDown className="w-4 h-4 text-amber-600" />}
+                    {log.action_taken === 'paused' && <Pause className="w-4 h-4 text-red-600" />}
+                    {log.action_taken === 'failed' && <AlertCircle className="w-4 h-4 text-red-600" />}
+                    {log.action_taken === 'skipped' && <CheckCircle2 className="w-4 h-4 text-gray-400" />}
 
-                    <span className="font-medium text-zinc-200">
+                    <span className="font-medium text-gray-900">
                       {log.action_taken === 'scaled_up' && 'Budget erhöht'}
                       {log.action_taken === 'scaled_down' && 'Budget reduziert'}
                       {log.action_taken === 'paused' && 'Pausiert'}
@@ -881,30 +592,30 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
                     </span>
 
                     {log.is_test_run && (
-                      <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 text-xs rounded-md border border-amber-500/20">
+                      <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded">
                         TEST
                       </span>
                     )}
                   </div>
 
-                  <span className="text-sm text-zinc-500">
+                  <span className="text-sm text-gray-500">
                     {new Date(log.executed_at).toLocaleString('de-DE')}
                   </span>
                 </div>
 
-                <div className="mt-2 text-sm text-zinc-400">
+                <div className="mt-2 text-sm text-gray-600">
                   {log.action_taken !== 'skipped' && log.action_taken !== 'paused' && (
-                    <span className="font-mono">€{log.old_budget.toFixed(2)} → €{log.new_budget.toFixed(2)}</span>
+                    <span>€{log.old_budget.toFixed(2)} → €{log.new_budget.toFixed(2)}</span>
                   )}
                   {log.error_message && (
-                    <span className="text-red-400 ml-2">{log.error_message}</span>
+                    <span className="text-red-600 ml-2">{log.error_message}</span>
                   )}
                 </div>
 
-                <div className="mt-2 flex gap-4 text-xs text-zinc-500">
-                  <span className="px-2 py-0.5 bg-zinc-800 rounded">Spend: €{log.metrics_snapshot.spend.toFixed(2)}</span>
-                  <span className="px-2 py-0.5 bg-zinc-800 rounded">Checkouts: {log.metrics_snapshot.checkouts}</span>
-                  <span className="px-2 py-0.5 bg-zinc-800 rounded">ROAS: {log.metrics_snapshot.roas.toFixed(2)}</span>
+                <div className="mt-2 flex gap-4 text-xs text-gray-500">
+                  <span>Spend: €{log.metrics_snapshot.spend.toFixed(2)}</span>
+                  <span>Checkouts: {log.metrics_snapshot.checkouts}</span>
+                  <span>ROAS: {log.metrics_snapshot.roas.toFixed(2)}</span>
                 </div>
               </div>
             ))
@@ -957,48 +668,48 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel, isSavin
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-        <div className="p-6 border-b border-zinc-800">
-          <h3 className="text-lg font-semibold text-white">Regel bearbeiten</h3>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Regel bearbeiten</h3>
         </div>
 
         <div className="p-6 space-y-6">
           {/* Rule Name */}
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-2">Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
             <input
               type="text"
               value={editedRule.name}
               onChange={(e) => setEditedRule({ ...editedRule, name: e.target.value })}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-zinc-600"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
             />
           </div>
 
           {/* Priority */}
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-2">Priorität</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Priorität</label>
             <input
               type="number"
               value={editedRule.priority}
               onChange={(e) => setEditedRule({ ...editedRule, priority: parseInt(e.target.value) || 0 })}
-              className="w-32 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-zinc-600"
+              className="w-32 rounded-lg border border-gray-300 px-3 py-2"
             />
-            <p className="text-xs text-zinc-500 mt-1">Höhere Priorität wird zuerst geprüft</p>
+            <p className="text-xs text-gray-500 mt-1">Höhere Priorität wird zuerst geprüft</p>
           </div>
 
           {/* Conditions */}
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-3">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               WENN (Bedingungen)
             </label>
             <div className="space-y-3">
               {editedRule.conditions.map((cond, index) => (
-                <div key={index} className="flex items-center gap-2 flex-wrap bg-zinc-950/50 p-3 rounded-lg border border-zinc-800">
+                <div key={index} className="flex items-center gap-2 flex-wrap">
                   <select
                     value={cond.metric}
                     onChange={(e) => updateCondition(index, { metric: e.target.value as OptimizationMetric })}
-                    className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500"
+                    className="rounded-lg border border-gray-300 px-3 py-2"
                   >
                     {METRICS.map(m => (
                       <option key={m.value} value={m.value}>{m.label}</option>
@@ -1008,7 +719,7 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel, isSavin
                   <select
                     value={cond.operator}
                     onChange={(e) => updateCondition(index, { operator: e.target.value as OptimizationOperator })}
-                    className="w-20 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500"
+                    className="w-20 rounded-lg border border-gray-300 px-3 py-2"
                   >
                     {OPERATORS.map(o => (
                       <option key={o.value} value={o.value}>{o.label}</option>
@@ -1020,13 +731,13 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel, isSavin
                     step="0.01"
                     value={cond.value}
                     onChange={(e) => updateCondition(index, { value: parseFloat(e.target.value) || 0 })}
-                    className="w-24 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500"
+                    className="w-24 rounded-lg border border-gray-300 px-3 py-2"
                   />
 
                   <select
                     value={cond.time_range_days}
                     onChange={(e) => updateCondition(index, { time_range_days: parseInt(e.target.value) })}
-                    className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500"
+                    className="rounded-lg border border-gray-300 px-3 py-2"
                   >
                     {TIME_RANGES.map(d => (
                       <option key={d} value={d}>letzte {d} Tage</option>
@@ -1037,7 +748,7 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel, isSavin
                     <select
                       value={cond.logic || 'AND'}
                       onChange={(e) => updateCondition(index, { logic: e.target.value as OptimizationLogic })}
-                      className="w-20 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-medium text-primary focus:outline-none focus:border-zinc-500"
+                      className="w-20 rounded-lg border border-gray-300 px-3 py-2 font-medium"
                     >
                       <option value="AND">AND</option>
                       <option value="OR">OR</option>
@@ -1047,7 +758,7 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel, isSavin
                   {editedRule.conditions.length > 1 && (
                     <button
                       onClick={() => removeCondition(index)}
-                      className="p-2 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                      className="p-2 text-gray-400 hover:text-red-600"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -1058,7 +769,7 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel, isSavin
 
             <button
               onClick={addCondition}
-              className="mt-3 flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
+              className="mt-3 flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
             >
               <Plus className="w-4 h-4" />
               Bedingung hinzufügen
@@ -1067,14 +778,14 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel, isSavin
 
           {/* Action */}
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-3">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               DANN (Aktion)
             </label>
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
               <select
                 value={editedRule.action_type}
                 onChange={(e) => setEditedRule({ ...editedRule, action_type: e.target.value as OptimizationActionType })}
-                className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500"
+                className="rounded-lg border border-gray-300 px-3 py-2"
               >
                 {ACTION_TYPES.map(a => (
                   <option key={a.value} value={a.value}>{a.label}</option>
@@ -1087,13 +798,13 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel, isSavin
                     type="number"
                     value={editedRule.action_value || 0}
                     onChange={(e) => setEditedRule({ ...editedRule, action_value: parseFloat(e.target.value) || 0 })}
-                    className="w-24 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500"
+                    className="w-24 rounded-lg border border-gray-300 px-3 py-2"
                   />
 
                   <select
                     value={editedRule.action_unit || 'percent'}
                     onChange={(e) => setEditedRule({ ...editedRule, action_unit: e.target.value as OptimizationActionUnit })}
-                    className="w-20 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500"
+                    className="w-20 rounded-lg border border-gray-300 px-3 py-2"
                   >
                     <option value="percent">%</option>
                     <option value="amount">€</option>
@@ -1107,25 +818,25 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel, isSavin
           {editedRule.action_type !== 'pause' && (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Minimum Budget (€)
                 </label>
                 <input
                   type="number"
                   value={editedRule.min_budget}
                   onChange={(e) => setEditedRule({ ...editedRule, min_budget: parseFloat(e.target.value) || 5 })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-zinc-600"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Maximum Budget (€)
                 </label>
                 <input
                   type="number"
                   value={editedRule.max_budget}
                   onChange={(e) => setEditedRule({ ...editedRule, max_budget: parseFloat(e.target.value) || 1000 })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-zinc-600"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
                 />
               </div>
             </div>
@@ -1133,17 +844,17 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel, isSavin
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-zinc-800 flex justify-end gap-3">
+        <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
           >
             Abbrechen
           </button>
           <button
             onClick={() => onSave(editedRule)}
             disabled={isSaving}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Speichern

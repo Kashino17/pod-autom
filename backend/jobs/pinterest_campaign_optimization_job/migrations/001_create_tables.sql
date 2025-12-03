@@ -1,9 +1,10 @@
--- Campaign Optimization Job - Database Migrations
+-- Pinterest Campaign Optimization Job - Database Migrations
 -- Run this in Supabase SQL Editor
+-- Prefix: pinterest_ for clear separation from future Meta/Google optimization
 
 -- ============================================
 -- Table 1: pinterest_campaign_optimization_rules
--- Stores optimization rules per shop
+-- Stores optimization rules per shop for Pinterest campaigns
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS pinterest_campaign_optimization_rules (
@@ -35,18 +36,18 @@ CREATE TABLE IF NOT EXISTS pinterest_campaign_optimization_rules (
 );
 
 -- Index for fast shop queries
-CREATE INDEX IF NOT EXISTS idx_optimization_rules_shop
+CREATE INDEX IF NOT EXISTS idx_pinterest_optimization_rules_shop
 ON pinterest_campaign_optimization_rules(shop_id);
 
 -- Index for enabled rules
-CREATE INDEX IF NOT EXISTS idx_optimization_rules_enabled
+CREATE INDEX IF NOT EXISTS idx_pinterest_optimization_rules_enabled
 ON pinterest_campaign_optimization_rules(shop_id, is_enabled)
 WHERE is_enabled = true;
 
 
 -- ============================================
 -- Table 2: pinterest_campaign_optimization_log
--- Logs all optimization actions taken
+-- Logs all optimization actions taken for Pinterest campaigns
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS pinterest_campaign_optimization_log (
@@ -76,18 +77,18 @@ CREATE TABLE IF NOT EXISTS pinterest_campaign_optimization_log (
 );
 
 -- Index for querying by shop and date
-CREATE INDEX IF NOT EXISTS idx_optimization_log_shop_date
+CREATE INDEX IF NOT EXISTS idx_pinterest_optimization_log_shop_date
 ON pinterest_campaign_optimization_log(shop_id, executed_at DESC);
 
 -- Index for test runs
-CREATE INDEX IF NOT EXISTS idx_optimization_log_test_runs
+CREATE INDEX IF NOT EXISTS idx_pinterest_optimization_log_test_runs
 ON pinterest_campaign_optimization_log(shop_id, is_test_run)
 WHERE is_test_run = true;
 
 
 -- ============================================
 -- Table 3: pinterest_campaign_optimization_settings
--- Per-shop settings including test mode config
+-- Per-shop settings including test mode config for Pinterest
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS pinterest_campaign_optimization_settings (
@@ -120,39 +121,39 @@ ALTER TABLE pinterest_campaign_optimization_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pinterest_campaign_optimization_settings ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for service key access (backend jobs)
-CREATE POLICY "Service key can read optimization_rules"
+CREATE POLICY "Service key can read pinterest_optimization_rules"
 ON pinterest_campaign_optimization_rules FOR SELECT
 USING (true);
 
-CREATE POLICY "Service key can insert optimization_rules"
+CREATE POLICY "Service key can insert pinterest_optimization_rules"
 ON pinterest_campaign_optimization_rules FOR INSERT
 WITH CHECK (true);
 
-CREATE POLICY "Service key can update optimization_rules"
+CREATE POLICY "Service key can update pinterest_optimization_rules"
 ON pinterest_campaign_optimization_rules FOR UPDATE
 USING (true);
 
-CREATE POLICY "Service key can delete optimization_rules"
+CREATE POLICY "Service key can delete pinterest_optimization_rules"
 ON pinterest_campaign_optimization_rules FOR DELETE
 USING (true);
 
-CREATE POLICY "Service key can read optimization_log"
+CREATE POLICY "Service key can read pinterest_optimization_log"
 ON pinterest_campaign_optimization_log FOR SELECT
 USING (true);
 
-CREATE POLICY "Service key can insert optimization_log"
+CREATE POLICY "Service key can insert pinterest_optimization_log"
 ON pinterest_campaign_optimization_log FOR INSERT
 WITH CHECK (true);
 
-CREATE POLICY "Service key can read optimization_settings"
+CREATE POLICY "Service key can read pinterest_optimization_settings"
 ON pinterest_campaign_optimization_settings FOR SELECT
 USING (true);
 
-CREATE POLICY "Service key can insert optimization_settings"
+CREATE POLICY "Service key can insert pinterest_optimization_settings"
 ON pinterest_campaign_optimization_settings FOR INSERT
 WITH CHECK (true);
 
-CREATE POLICY "Service key can update optimization_settings"
+CREATE POLICY "Service key can update pinterest_optimization_settings"
 ON pinterest_campaign_optimization_settings FOR UPDATE
 USING (true);
 
@@ -161,7 +162,7 @@ USING (true);
 -- Trigger for updated_at
 -- ============================================
 
-CREATE OR REPLACE FUNCTION update_optimization_updated_at()
+CREATE OR REPLACE FUNCTION update_pinterest_optimization_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
   NEW.updated_at = NOW();
@@ -169,12 +170,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER update_optimization_rules_updated_at
+CREATE TRIGGER update_pinterest_optimization_rules_updated_at
   BEFORE UPDATE ON pinterest_campaign_optimization_rules
   FOR EACH ROW
-  EXECUTE FUNCTION update_optimization_updated_at();
+  EXECUTE FUNCTION update_pinterest_optimization_updated_at();
 
-CREATE TRIGGER update_optimization_settings_updated_at
+CREATE TRIGGER update_pinterest_optimization_settings_updated_at
   BEFORE UPDATE ON pinterest_campaign_optimization_settings
   FOR EACH ROW
-  EXECUTE FUNCTION update_optimization_updated_at();
+  EXECUTE FUNCTION update_pinterest_optimization_updated_at();

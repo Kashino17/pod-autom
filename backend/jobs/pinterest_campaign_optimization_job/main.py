@@ -1,5 +1,5 @@
 """
-Campaign Optimization Job
+Pinterest Campaign Optimization Job
 Automatically optimizes Pinterest campaign budgets based on user-defined rules
 """
 import os
@@ -21,8 +21,8 @@ from services.pinterest_service import PinterestAPIClient
 load_dotenv()
 
 
-class CampaignOptimizationJob:
-    """Main job class for campaign optimization."""
+class PinterestCampaignOptimizationJob:
+    """Main job class for Pinterest campaign optimization."""
 
     def __init__(self):
         self.db = SupabaseService()
@@ -32,13 +32,13 @@ class CampaignOptimizationJob:
     async def run(self):
         """Main entry point for the job."""
         print("=" * 60)
-        print("CAMPAIGN OPTIMIZATION JOB")
+        print("PINTEREST CAMPAIGN OPTIMIZATION JOB")
         print(f"Started at: {datetime.now(timezone.utc).isoformat()}")
         print("=" * 60)
 
         # Log job start
         self.job_id = self.db.log_job_run(
-            job_type='campaign_optimization',
+            job_type='pinterest_campaign_optimization',
             status='running',
             metadata={'started_at': datetime.now(timezone.utc).isoformat()}
         )
@@ -379,7 +379,7 @@ class CampaignOptimizationJob:
 
 async def main():
     """Entry point for the job."""
-    job = CampaignOptimizationJob()
+    job = PinterestCampaignOptimizationJob()
     await job.run()
 
 

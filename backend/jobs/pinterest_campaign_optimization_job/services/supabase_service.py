@@ -1,6 +1,6 @@
 """
-Supabase Service for Campaign Optimization Job
-Handles all database operations for optimization rules, settings, and logging
+Supabase Service for Pinterest Campaign Optimization Job
+Handles all database operations for Pinterest optimization rules, settings, and logging
 """
 import os
 from typing import List, Dict, Optional
@@ -16,7 +16,7 @@ from models import (
 
 
 class SupabaseService:
-    """Supabase client for Campaign Optimization Job."""
+    """Supabase client for Pinterest Campaign Optimization Job."""
 
     def __init__(self):
         url = os.environ.get('SUPABASE_URL')

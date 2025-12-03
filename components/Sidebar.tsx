@@ -69,7 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     ]},
     { category: 'Marketing Sync', items: [
       { id: 'pinterest', label: 'Pinterest Sync', icon: Share2 },
-      { id: 'campaign-optimization', label: 'Kampagnen-Optimierung', icon: TrendingUp },
+      { id: 'campaign-optimization', label: 'Pinterest Optimierung', icon: TrendingUp },
       { id: 'meta-ads', label: 'Meta Ads Sync', icon: Facebook },
       { id: 'google-ads', label: 'Google Ads Manager', icon: Search },
       { id: 'product-creation', label: 'Product Creation', icon: Shirt },
