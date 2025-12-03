@@ -220,8 +220,7 @@ class SupabaseService:
         """Update campaign budget in database after Pinterest update."""
         try:
             self.client.table('pinterest_campaigns').update({
-                'daily_budget': new_budget,
-                'updated_at': datetime.now(timezone.utc).isoformat()
+                'daily_budget': new_budget
             }).eq('id', campaign_id).execute()
 
             return True
@@ -234,8 +233,7 @@ class SupabaseService:
         """Update campaign status in database after Pinterest update."""
         try:
             self.client.table('pinterest_campaigns').update({
-                'status': new_status,
-                'updated_at': datetime.now(timezone.utc).isoformat()
+                'status': new_status
             }).eq('id', campaign_id).execute()
 
             return True
