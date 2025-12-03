@@ -322,18 +322,10 @@ class PinterestCampaignOptimizationJob:
             # Calculate new budget
             if rule.action_unit == 'percent':
                 increase = campaign.daily_budget * (rule.action_value / 100)
-                # If budget is 0, use min_budget as base for percentage
-                if campaign.daily_budget == 0:
-                    increase = rule.min_budget * (rule.action_value / 100)
-                    # Ensure at least min_budget for 0-budget campaigns
-                    if increase == 0:
-                        increase = rule.min_budget
             else:
                 increase = rule.action_value
 
             new_budget = min(campaign.daily_budget + increase, rule.max_budget)
-            # Ensure minimum budget
-            new_budget = max(new_budget, rule.min_budget)
             new_budget = round(new_budget, 2)
 
             if new_budget == campaign.daily_budget:
