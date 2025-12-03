@@ -43,11 +43,11 @@ const METRICS: { value: OptimizationMetric; label: string }[] = [
 ];
 
 const OPERATORS: { value: OptimizationOperator; label: string }[] = [
-  { value: '>=', label: '>=' },
-  { value: '<=', label: '<=' },
-  { value: '>', label: '>' },
-  { value: '<', label: '<' },
-  { value: '==', label: '==' }
+  { value: '>=', label: 'ist gleich oder größer als' },
+  { value: '<=', label: 'ist gleich oder kleiner als' },
+  { value: '>', label: 'ist größer als' },
+  { value: '<', label: 'ist kleiner als' },
+  { value: '==', label: 'ist gleich' }
 ];
 
 const TIME_RANGES = [1, 3, 7, 14];
