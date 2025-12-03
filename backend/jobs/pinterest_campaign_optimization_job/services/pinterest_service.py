@@ -85,7 +85,7 @@ class PinterestAPIClient:
             'campaign_ids': campaign_id,
             'start_date': start_date,
             'end_date': end_date,
-            'columns': 'SPEND_IN_MICRO_DOLLAR,TOTAL_CONVERSIONS,TOTAL_CONVERSIONS_VALUE_IN_MICRO_DOLLAR',
+            'columns': 'SPEND_IN_MICRO_DOLLAR,TOTAL_CHECKOUT,TOTAL_CHECKOUT_VALUE_IN_MICRO_DOLLAR',
             'granularity': 'TOTAL'
         }
 
@@ -101,13 +101,13 @@ class PinterestAPIClient:
             spend_micro = data.get('SPEND_IN_MICRO_DOLLAR', 0) or 0
             spend = spend_micro / 1_000_000  # Micro dollars to dollars/euros
 
-            checkouts = data.get('TOTAL_CONVERSIONS', 0) or 0
+            checkouts = data.get('TOTAL_CHECKOUT', 0) or 0
 
             # Calculate ROAS (Return on Ad Spend)
-            conversion_value_micro = data.get('TOTAL_CONVERSIONS_VALUE_IN_MICRO_DOLLAR', 0) or 0
-            conversion_value = conversion_value_micro / 1_000_000
+            checkout_value_micro = data.get('TOTAL_CHECKOUT_VALUE_IN_MICRO_DOLLAR', 0) or 0
+            checkout_value = checkout_value_micro / 1_000_000
 
-            roas = conversion_value / spend if spend > 0 else 0
+            roas = checkout_value / spend if spend > 0 else 0
 
             return CampaignMetrics(
                 spend=round(spend, 2),
