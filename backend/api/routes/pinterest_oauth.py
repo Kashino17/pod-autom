@@ -433,12 +433,13 @@ def sync_campaigns():
         access_token = auth_result.data['access_token']
 
         # Get selected ad account
-        ad_account_result = supabase.table('pinterest_ad_accounts').select('pinterest_account_id').eq('shop_id', shop_id).eq('is_selected', True).single().execute()
+        ad_account_result = supabase.table('pinterest_ad_accounts').select('id, pinterest_account_id').eq('shop_id', shop_id).eq('is_selected', True).single().execute()
 
         if not ad_account_result.data:
             return jsonify({'error': 'No ad account selected'}), 400
 
-        pinterest_account_id = ad_account_result.data['pinterest_account_id']
+        ad_account_uuid = ad_account_result.data['id']  # Internal UUID
+        pinterest_account_id = ad_account_result.data['pinterest_account_id']  # Pinterest's ID for API calls
 
         # Fetch ALL campaigns from Pinterest API with pagination
         all_campaigns = []
@@ -484,7 +485,7 @@ def sync_campaigns():
             supabase.table('pinterest_campaigns').upsert({
                 'shop_id': shop_id,
                 'pinterest_campaign_id': campaign_id,
-                'ad_account_id': pinterest_account_id,
+                'ad_account_id': ad_account_uuid,
                 'name': campaign.get('name', 'Unnamed Campaign'),
                 'status': status,
                 'daily_budget': daily_budget
