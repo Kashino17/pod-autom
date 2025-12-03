@@ -170,6 +170,7 @@ class PinterestAPIClient:
 
         data = [{
             'id': campaign_id,
+            'ad_account_id': ad_account_id,
             'daily_spend_cap': budget_micro
         }]
 
@@ -208,6 +209,7 @@ class PinterestAPIClient:
 
         data = [{
             'id': campaign_id,
+            'ad_account_id': ad_account_id,
             'status': status
         }]
 
