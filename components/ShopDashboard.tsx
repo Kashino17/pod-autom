@@ -6,6 +6,7 @@ import { StartPhase } from './tabs/StartPhase';
 import { PostPhase } from './tabs/PostPhase';
 import { GeneralSettings } from './tabs/GeneralSettings';
 import { PinterestSync } from './tabs/PinterestSync';
+import { CampaignOptimization } from './tabs/CampaignOptimization';
 import { MetaAdsSync } from './tabs/MetaAdsSync';
 import { GoogleAdsManager } from './tabs/GoogleAdsManager';
 import { RateLimits } from './tabs/RateLimits';
@@ -217,6 +218,7 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
       'post-phase': 'Post Phase Automation',
       'product-creation': 'Product Creation',
       'pinterest': 'Pinterest Integration',
+      'campaign-optimization': 'Kampagnen-Optimierung',
       'meta-ads': 'Meta Ads Integration',
       'google-ads': 'Google Ads Manager',
       'limits': 'Limits & Beschränkungen',
@@ -282,6 +284,8 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
             <GeneralSettings config={generalConfig} onChange={setGeneralConfig} shopId={shop.id} />
           ) : activeTab === 'pinterest' ? (
             <PinterestSync shopId={shop.id} />
+          ) : activeTab === 'campaign-optimization' ? (
+            <CampaignOptimization shopId={shop.id} />
           ) : activeTab === 'meta-ads' ? (
             <MetaAdsSync 
                config={metaConfig} 

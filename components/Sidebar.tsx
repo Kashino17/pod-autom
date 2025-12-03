@@ -17,7 +17,8 @@ import {
   PiggyBank,
   BrainCircuit,
   BarChart2,
-  Pencil
+  Pencil,
+  TrendingUp
 } from 'lucide-react';
 import { Shop, TabId } from '../types';
 
@@ -68,6 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     ]},
     { category: 'Marketing Sync', items: [
       { id: 'pinterest', label: 'Pinterest Sync', icon: Share2 },
+      { id: 'campaign-optimization', label: 'Kampagnen-Optimierung', icon: TrendingUp },
       { id: 'meta-ads', label: 'Meta Ads Sync', icon: Facebook },
       { id: 'google-ads', label: 'Google Ads Manager', icon: Search },
       { id: 'product-creation', label: 'Product Creation', icon: Shirt },

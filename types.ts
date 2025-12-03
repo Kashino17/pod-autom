@@ -13,7 +13,7 @@ export interface Shop {
   };
 }
 
-export type TabId = 'dashboard' | 'automation-roi' | 'pod-intelligence' | 'marketing-analytics' | 'start-phase' | 'post-phase' | 'general' | 'pinterest' | 'meta-ads' | 'google-ads' | 'product-creation' | 'limits';
+export type TabId = 'dashboard' | 'automation-roi' | 'pod-intelligence' | 'marketing-analytics' | 'start-phase' | 'post-phase' | 'general' | 'pinterest' | 'campaign-optimization' | 'meta-ads' | 'google-ads' | 'product-creation' | 'limits';
 
 export interface StartPhaseConfig {
   deleteThreshold: number;   // <= X: Products below this get replaced
@@ -192,4 +192,73 @@ export interface PinterestCampaign {
   name: string;
   status: 'ACTIVE' | 'PENDING' | 'PAUSED';
   budget?: number;
+}
+
+// Campaign Optimization Types
+export type OptimizationMetric = 'spend' | 'checkouts' | 'roas';
+export type OptimizationOperator = '>=' | '<=' | '>' | '<' | '==';
+export type OptimizationLogic = 'AND' | 'OR';
+export type OptimizationActionType = 'scale_up' | 'scale_down' | 'pause';
+export type OptimizationActionUnit = 'amount' | 'percent';
+
+export interface OptimizationCondition {
+  metric: OptimizationMetric;
+  operator: OptimizationOperator;
+  value: number;
+  time_range_days: number;
+  logic?: OptimizationLogic;
+}
+
+export interface OptimizationRule {
+  id: string;
+  shop_id: string;
+  name: string;
+  is_enabled: boolean;
+  priority: number;
+  conditions: OptimizationCondition[];
+  action_type: OptimizationActionType;
+  action_value: number | null;
+  action_unit: OptimizationActionUnit | null;
+  min_budget: number;
+  max_budget: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface OptimizationSettings {
+  id?: string;
+  shop_id: string;
+  is_enabled: boolean;
+  test_mode_enabled: boolean;
+  test_campaign_id: string | null;
+  test_metrics: {
+    spend: number;
+    checkouts: number;
+    roas: number;
+  } | null;
+}
+
+export interface OptimizationLogEntry {
+  id: string;
+  shop_id: string;
+  campaign_id: string;
+  rule_id: string;
+  old_budget: number;
+  new_budget: number;
+  old_status?: string;
+  new_status?: string;
+  action_taken: 'scaled_up' | 'scaled_down' | 'paused' | 'skipped' | 'failed';
+  metrics_snapshot: {
+    spend: number;
+    checkouts: number;
+    roas: number;
+  };
+  is_test_run: boolean;
+  test_metrics?: {
+    spend: number;
+    checkouts: number;
+    roas: number;
+  };
+  error_message?: string;
+  executed_at: string;
 }
