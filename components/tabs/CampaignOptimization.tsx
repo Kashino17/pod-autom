@@ -112,6 +112,9 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
   const [editingRule, setEditingRule] = useState<OptimizationRule | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
 
+  // Track the selected Pinterest campaign ID separately (for dropdown display)
+  const [selectedPinterestCampaignId, setSelectedPinterestCampaignId] = useState<string | null>(null);
+
   // Active Tab
   const [activeTab, setActiveTab] = useState<'settings' | 'rules' | 'logs'>('settings');
 
@@ -183,10 +186,10 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
 
       setLogs(logsData || []);
 
-      // Load campaigns for test mode selection
+      // Load campaigns for test mode selection (stored in Supabase)
       const { data: campaignsData } = await supabase
         .from('pinterest_campaigns')
-        .select('id, name, status, daily_budget')
+        .select('id, pinterest_campaign_id, name, status, daily_budget')
         .eq('shop_id', shopId);
 
       setCampaigns((campaignsData as any[] || []).map(c => ({
@@ -195,6 +198,14 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
         status: c.status as 'ACTIVE' | 'PAUSED' | 'PENDING',
         budget: c.daily_budget
       })));
+
+      // If there's a saved test_campaign_id, find the corresponding pinterest_campaign_id for the dropdown
+      if (settingsData?.test_campaign_id && campaignsData) {
+        const savedCampaign = (campaignsData as any[]).find(c => c.id === settingsData.test_campaign_id);
+        if (savedCampaign) {
+          setSelectedPinterestCampaignId(savedCampaign.pinterest_campaign_id);
+        }
+      }
 
     } catch (err: any) {
       setError(err.message || 'Fehler beim Laden der Daten');
@@ -227,15 +238,22 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
   };
 
   // Save only the selected test campaign to Supabase when user selects it
-  const handleTestCampaignSelect = async (campaignId: string | null) => {
-    setSettings({ ...settings!, test_campaign_id: campaignId });
+  const handleTestCampaignSelect = async (pinterestCampaignId: string | null) => {
+    // Update the local display state
+    setSelectedPinterestCampaignId(pinterestCampaignId);
 
-    // If a campaign is selected, save it to Supabase so the backend can reference it
-    if (campaignId && selectedAdAccount) {
-      const selectedCampaign = pinterestCampaigns.find(c => c.id === campaignId);
+    if (!pinterestCampaignId) {
+      setSettings({ ...settings!, test_campaign_id: null });
+      return;
+    }
+
+    // If a campaign is selected, save it to Supabase first to get the UUID
+    if (selectedAdAccount) {
+      const selectedCampaign = pinterestCampaigns.find(c => c.id === pinterestCampaignId);
       if (selectedCampaign) {
         try {
-          await upsertCampaign.mutateAsync({
+          // Upsert returns the Supabase record with UUID
+          const savedCampaign = await upsertCampaign.mutateAsync({
             shop_id: shopId,
             ad_account_id: selectedAdAccount.pinterest_account_id,
             pinterest_campaign_id: selectedCampaign.id,
@@ -243,8 +261,12 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
             status: selectedCampaign.status,
             daily_budget: selectedCampaign.daily_spend_cap ? selectedCampaign.daily_spend_cap / 1000000 : undefined
           });
+
+          // Use the Supabase UUID (not the Pinterest campaign ID)
+          setSettings({ ...settings!, test_campaign_id: savedCampaign.id });
         } catch (err: any) {
           console.error('Error saving test campaign:', err);
+          setError('Fehler beim Speichern der Test-Kampagne');
         }
       }
     }
@@ -554,7 +576,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
                     </button>
                   </div>
                   <select
-                    value={settings.test_campaign_id || ''}
+                    value={selectedPinterestCampaignId || ''}
                     onChange={(e) => handleTestCampaignSelect(e.target.value || null)}
                     disabled={!selectedAdAccount}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600 disabled:opacity-50"
