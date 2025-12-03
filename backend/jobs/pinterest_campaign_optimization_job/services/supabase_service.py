@@ -33,7 +33,7 @@ class SupabaseService:
 
         try:
             # Get shops with optimization enabled
-            settings_response = self.client.table('campaign_optimization_settings').select(
+            settings_response = self.client.table('pinterest_campaign_optimization_settings').select(
                 'shop_id'
             ).eq('is_enabled', True).execute()
 
@@ -95,7 +95,7 @@ class SupabaseService:
     def get_optimization_settings(self, shop_id: str) -> Optional[OptimizationSettings]:
         """Get optimization settings for a shop."""
         try:
-            response = self.client.table('campaign_optimization_settings').select(
+            response = self.client.table('pinterest_campaign_optimization_settings').select(
                 '*'
             ).eq('shop_id', shop_id).execute()
 
@@ -113,7 +113,7 @@ class SupabaseService:
         rules = []
 
         try:
-            response = self.client.table('campaign_optimization_rules').select(
+            response = self.client.table('pinterest_campaign_optimization_rules').select(
                 '*'
             ).eq('shop_id', shop_id).eq('is_enabled', True).order(
                 'priority', desc=True
@@ -205,7 +205,7 @@ class SupabaseService:
             if error_message:
                 data['error_message'] = error_message
 
-            result = self.client.table('campaign_optimization_log').insert(data).execute()
+            result = self.client.table('pinterest_campaign_optimization_log').insert(data).execute()
 
             if result.data:
                 return result.data[0].get('id')

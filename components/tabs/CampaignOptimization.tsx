@@ -87,7 +87,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
     try {
       // Load settings
       const { data: settingsData } = await supabase
-        .from('campaign_optimization_settings')
+        .from('pinterest_campaign_optimization_settings')
         .select('*')
         .eq('shop_id', shopId)
         .single();
@@ -107,7 +107,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
 
       // Load rules
       const { data: rulesData } = await supabase
-        .from('campaign_optimization_rules')
+        .from('pinterest_campaign_optimization_rules')
         .select('*')
         .eq('shop_id', shopId)
         .order('priority', { ascending: false });
@@ -116,7 +116,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
 
       // Load logs
       const { data: logsData } = await supabase
-        .from('campaign_optimization_log')
+        .from('pinterest_campaign_optimization_log')
         .select('*')
         .eq('shop_id', shopId)
         .order('executed_at', { ascending: false })
@@ -150,7 +150,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
     setIsSaving(true);
     try {
       const { error } = await supabase
-        .from('campaign_optimization_settings')
+        .from('pinterest_campaign_optimization_settings')
         .upsert({
           ...settings,
           updated_at: new Date().toISOString()
@@ -170,7 +170,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
       if (isCreatingNew) {
         const { id, ...ruleData } = rule;
         const { error } = await supabase
-          .from('campaign_optimization_rules')
+          .from('pinterest_campaign_optimization_rules')
           .insert({
             ...ruleData,
             shop_id: shopId
@@ -179,7 +179,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
         if (error) throw error;
       } else {
         const { error } = await supabase
-          .from('campaign_optimization_rules')
+          .from('pinterest_campaign_optimization_rules')
           .update({
             ...rule,
             updated_at: new Date().toISOString()
@@ -204,7 +204,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
 
     try {
       const { error } = await supabase
-        .from('campaign_optimization_rules')
+        .from('pinterest_campaign_optimization_rules')
         .delete()
         .eq('id', ruleId);
 
@@ -218,7 +218,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
   const toggleRuleEnabled = async (rule: OptimizationRule) => {
     try {
       const { error } = await supabase
-        .from('campaign_optimization_rules')
+        .from('pinterest_campaign_optimization_rules')
         .update({ is_enabled: !rule.is_enabled })
         .eq('id', rule.id);
 
