@@ -39,72 +39,57 @@ def evaluate_conditions(conditions: List[RuleCondition], metrics: Dict) -> bool:
     """
     Evaluate conditions with AND/OR logic.
 
-    The logic works as follows:
-    - Conditions are grouped by AND boundaries
-    - Within each AND group, conditions are OR'd together
-    - All AND groups must be True for the rule to match
+    The logic field on a condition specifies how to connect to the NEXT condition.
 
     Example:
         conditions = [
             {"metric": "spend", "operator": ">=", "value": 100, "logic": "AND"},
-            {"metric": "checkouts", "operator": "<=", "value": 3, "logic": "OR"},
-            {"metric": "roas", "operator": "<", "value": 2.0}
+            {"metric": "checkouts", "operator": ">=", "value": 5, "logic": None}
         ]
 
         Is evaluated as:
-        (spend >= 100) AND (checkouts <= 3 OR roas < 2.0)
+        (spend >= 100) AND (checkouts >= 5)
+
+    Example with OR:
+        conditions = [
+            {"metric": "spend", "operator": ">=", "value": 100, "logic": "OR"},
+            {"metric": "checkouts", "operator": ">=", "value": 5, "logic": None}
+        ]
+
+        Is evaluated as:
+        (spend >= 100) OR (checkouts >= 5)
 
     Args:
         conditions: List of RuleCondition objects
         metrics: Dict with metric values
 
     Returns:
-        True if all AND groups are satisfied
+        True if the combined expression evaluates to True
     """
     if not conditions:
         return False
 
-    # Group conditions by AND boundaries
-    # A new AND group starts when the CURRENT condition's logic is "AND"
-    # or it's the first condition
-    groups = []
-    current_group = []
+    # Start with the result of the first condition
+    result = evaluate_single_condition(conditions[0], metrics)
 
-    for i, cond in enumerate(conditions):
-        current_group.append(cond)
+    # Process remaining conditions with their logic operators
+    for i in range(len(conditions) - 1):
+        current_cond = conditions[i]
+        next_cond = conditions[i + 1]
+        next_result = evaluate_single_condition(next_cond, metrics)
 
-        # Check if we should close this group
-        # Close group if:
-        # 1. Next condition has logic "AND" (meaning AND before it)
-        # 2. This is the last condition
-        is_last = (i == len(conditions) - 1)
-        next_is_and = (
-            i + 1 < len(conditions) and
-            conditions[i + 1].logic == 'AND'
-        )
+        # The logic field on current condition tells us how to combine with next
+        logic = current_cond.logic
 
-        if is_last or next_is_and:
-            groups.append(current_group)
-            current_group = []
+        if logic == 'AND' or logic == 'UND':
+            result = result and next_result
+        elif logic == 'OR' or logic == 'ODER':
+            result = result or next_result
+        else:
+            # Default to AND if no logic specified
+            result = result and next_result
 
-    # If there's a remaining group (shouldn't happen but just in case)
-    if current_group:
-        groups.append(current_group)
-
-    # Evaluate groups:
-    # - Within each group: OR logic (at least one must be true)
-    # - Between groups: AND logic (all groups must be true)
-    for group in groups:
-        group_result = False
-        for cond in group:
-            if evaluate_single_condition(cond, metrics):
-                group_result = True
-                break  # Short-circuit OR
-
-        if not group_result:
-            return False  # Short-circuit AND
-
-    return True
+    return result
 
 
 def filter_metrics_by_timerange(full_metrics: Dict[int, CampaignMetrics],
@@ -190,8 +175,9 @@ def explain_evaluation(conditions: List[RuleCondition], metrics: Dict) -> str:
             f"(actual: {metric_value})"
         )
 
-        if cond.logic:
-            explanation += f" [{cond.logic}]"
+        # Show logic connector to next condition
+        if i < len(conditions) - 1 and cond.logic:
+            explanation += f" {cond.logic}"
 
         explanations.append(explanation)
 
