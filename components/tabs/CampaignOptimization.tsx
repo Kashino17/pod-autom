@@ -274,10 +274,22 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
     setIsSaving(true);
     setSaveStatus('idle');
     try {
+      // Ensure test_metrics only contains the new time-range format (no old spend/checkouts/roas keys)
+      const cleanTestMetrics = settings.test_metrics ? {
+        day1: settings.test_metrics.day1 || { spend: 0, checkouts: 0, roas: 0 },
+        day3: settings.test_metrics.day3 || { spend: 0, checkouts: 0, roas: 0 },
+        day7: settings.test_metrics.day7 || { spend: 0, checkouts: 0, roas: 0 },
+        day14: settings.test_metrics.day14 || { spend: 0, checkouts: 0, roas: 0 }
+      } : null;
+
       const { error } = await supabase
         .from('pinterest_campaign_optimization_settings')
         .upsert({
-          ...settings,
+          shop_id: settings.shop_id,
+          is_enabled: settings.is_enabled,
+          test_mode_enabled: settings.test_mode_enabled,
+          test_campaign_id: settings.test_campaign_id,
+          test_metrics: cleanTestMetrics,
           updated_at: new Date().toISOString()
         } as any, { onConflict: 'shop_id' });
 
