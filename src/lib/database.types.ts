@@ -911,6 +911,138 @@ export interface Database {
           estimated_time_saved_hours?: number
         }
       }
+      pinterest_campaign_optimization_settings: {
+        Row: {
+          id: string
+          shop_id: string
+          is_enabled: boolean
+          test_mode_enabled: boolean
+          test_campaign_id: string | null
+          test_metrics: Json | null
+          run_frequency: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          shop_id: string
+          is_enabled?: boolean
+          test_mode_enabled?: boolean
+          test_campaign_id?: string | null
+          test_metrics?: Json | null
+          run_frequency?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          shop_id?: string
+          is_enabled?: boolean
+          test_mode_enabled?: boolean
+          test_campaign_id?: string | null
+          test_metrics?: Json | null
+          run_frequency?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      pinterest_campaign_optimization_rules: {
+        Row: {
+          id: string
+          shop_id: string
+          name: string
+          is_enabled: boolean
+          priority: number
+          conditions: Json
+          action_type: string
+          action_value: number | null
+          action_unit: string | null
+          min_budget: number
+          max_budget: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          shop_id: string
+          name: string
+          is_enabled?: boolean
+          priority?: number
+          conditions: Json
+          action_type: string
+          action_value?: number | null
+          action_unit?: string | null
+          min_budget?: number
+          max_budget?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          shop_id?: string
+          name?: string
+          is_enabled?: boolean
+          priority?: number
+          conditions?: Json
+          action_type?: string
+          action_value?: number | null
+          action_unit?: string | null
+          min_budget?: number
+          max_budget?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      pinterest_campaign_optimization_log: {
+        Row: {
+          id: string
+          shop_id: string
+          campaign_id: string
+          rule_id: string
+          old_budget: number | null
+          new_budget: number | null
+          old_status: string | null
+          new_status: string | null
+          action_taken: string
+          metrics_snapshot: Json | null
+          is_test_run: boolean
+          test_metrics: Json | null
+          error_message: string | null
+          executed_at: string
+        }
+        Insert: {
+          id?: string
+          shop_id: string
+          campaign_id: string
+          rule_id: string
+          old_budget?: number | null
+          new_budget?: number | null
+          old_status?: string | null
+          new_status?: string | null
+          action_taken: string
+          metrics_snapshot?: Json | null
+          is_test_run?: boolean
+          test_metrics?: Json | null
+          error_message?: string | null
+          executed_at?: string
+        }
+        Update: {
+          id?: string
+          shop_id?: string
+          campaign_id?: string
+          rule_id?: string
+          old_budget?: number | null
+          new_budget?: number | null
+          old_status?: string | null
+          new_status?: string | null
+          action_taken?: string
+          metrics_snapshot?: Json | null
+          is_test_run?: boolean
+          test_metrics?: Json | null
+          error_message?: string | null
+          executed_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
