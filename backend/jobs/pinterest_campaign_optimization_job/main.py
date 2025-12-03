@@ -1,6 +1,8 @@
 """
 Pinterest Campaign Optimization Job
 Automatically optimizes Pinterest campaign budgets based on user-defined rules
+
+Version: 1.1.0 - Fixed Pinterest API columns (TOTAL_CHECKOUT instead of TOTAL_CONVERSIONS)
 """
 import os
 import asyncio
