@@ -405,3 +405,101 @@ def select_ad_account():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@pinterest_bp.route('/api/pinterest/sync-campaigns', methods=['POST'])
+def sync_campaigns():
+    """
+    Sync all active Pinterest campaigns to the database.
+    Fetches campaigns from Pinterest API and stores them in pinterest_campaigns table.
+    """
+    try:
+        data = request.json
+        shop_id = data.get('shop_id')
+
+        if not shop_id:
+            return jsonify({'error': 'Missing shop_id'}), 400
+
+        supabase = get_supabase_client()
+        if not supabase:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Get access token and selected ad account
+        auth_result = supabase.table('pinterest_auth').select('access_token').eq('shop_id', shop_id).single().execute()
+
+        if not auth_result.data or not auth_result.data.get('access_token'):
+            return jsonify({'error': 'Pinterest not connected'}), 401
+
+        access_token = auth_result.data['access_token']
+
+        # Get selected ad account
+        ad_account_result = supabase.table('pinterest_ad_accounts').select('pinterest_account_id').eq('shop_id', shop_id).eq('is_selected', True).single().execute()
+
+        if not ad_account_result.data:
+            return jsonify({'error': 'No ad account selected'}), 400
+
+        pinterest_account_id = ad_account_result.data['pinterest_account_id']
+
+        # Fetch ALL campaigns from Pinterest API with pagination
+        all_campaigns = []
+        bookmark = None
+
+        while True:
+            params = {'page_size': 100}
+            if bookmark:
+                params['bookmark'] = bookmark
+
+            response = requests.get(
+                f'https://api.pinterest.com/v5/ad_accounts/{pinterest_account_id}/campaigns',
+                headers={'Authorization': f'Bearer {access_token}'},
+                params=params,
+                timeout=15
+            )
+
+            if not response.ok:
+                return jsonify({'error': f'Pinterest API error: {response.status_code}'}), response.status_code
+
+            pinterest_data = response.json()
+            campaigns = pinterest_data.get('items', [])
+            all_campaigns.extend(campaigns)
+
+            bookmark = pinterest_data.get('bookmark')
+            if not bookmark:
+                break
+
+        # Sync campaigns to database
+        synced_count = 0
+        for campaign in all_campaigns:
+            campaign_id = campaign.get('id')
+            status = campaign.get('status', 'UNKNOWN')
+
+            # Get daily spend cap (budget) - convert from micro-currency
+            daily_spend_cap = campaign.get('daily_spend_cap', 0)
+            if daily_spend_cap:
+                daily_budget = daily_spend_cap / 1_000_000  # Convert micro to regular currency
+            else:
+                daily_budget = 0
+
+            # Upsert campaign
+            supabase.table('pinterest_campaigns').upsert({
+                'shop_id': shop_id,
+                'pinterest_campaign_id': campaign_id,
+                'ad_account_id': pinterest_account_id,
+                'name': campaign.get('name', 'Unnamed Campaign'),
+                'status': status,
+                'daily_budget': daily_budget,
+                'objective_type': campaign.get('objective_type'),
+                'synced_at': datetime.now(timezone.utc).isoformat()
+            }, on_conflict='shop_id,pinterest_campaign_id').execute()
+
+            synced_count += 1
+
+        return jsonify({
+            'success': True,
+            'synced_count': synced_count,
+            'campaigns': all_campaigns
+        })
+
+    except Exception as e:
+        print(f"Error syncing campaigns: {e}")
+        return jsonify({'error': str(e)}), 500
