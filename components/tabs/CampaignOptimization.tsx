@@ -31,6 +31,12 @@ import {
   Zap
 } from 'lucide-react';
 import { supabase } from '../../src/lib/supabase';
+import {
+  usePinterestAuth,
+  usePinterestAdAccounts,
+  usePinterestCampaigns,
+  useUpsertPinterestCampaign
+} from '../../src/hooks/usePinterest';
 
 interface CampaignOptimizationProps {
   shopId: string;
@@ -58,6 +64,28 @@ const ACTION_TYPES: { value: OptimizationActionType; label: string; icon: React.
   { value: 'pause', label: 'Pausieren', icon: <Pause className="w-4 h-4" /> }
 ];
 
+// Pinterest API campaign type
+interface PinterestApiCampaign {
+  id: string;
+  name: string;
+  status: string;
+  daily_spend_cap?: number;
+}
+
+// Pinterest Ad Account type
+interface PinterestAdAccount {
+  id: string;
+  pinterest_account_id: string;
+  name: string;
+  is_selected: boolean;
+}
+
+// Pinterest Auth type
+interface PinterestAuth {
+  is_connected: boolean;
+  pinterest_username?: string;
+}
+
 export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shopId }) => {
   // State
   const [settings, setSettings] = useState<OptimizationSettings | null>(null);
@@ -75,6 +103,25 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<'settings' | 'rules' | 'logs'>('settings');
+
+  // Pinterest Hooks - Load directly from Pinterest API like PinterestSync does
+  const { data: pinterestAuthRaw } = usePinterestAuth(shopId);
+  const pinterestAuth = pinterestAuthRaw as PinterestAuth | null;
+  const { data: adAccountsRaw = [] } = usePinterestAdAccounts(shopId);
+  const adAccounts = adAccountsRaw as PinterestAdAccount[];
+  const selectedAdAccount = adAccounts.find(a => a.is_selected);
+
+  const {
+    data: pinterestCampaignsRaw = [],
+    isLoading: campaignsLoading,
+    refetch: refetchCampaigns
+  } = usePinterestCampaigns(
+    shopId,
+    selectedAdAccount?.pinterest_account_id || null
+  );
+  const pinterestCampaigns = pinterestCampaignsRaw as PinterestApiCampaign[];
+
+  const upsertCampaign = useUpsertPinterestCampaign();
 
   // Load data on mount
   useEffect(() => {
@@ -131,12 +178,12 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
         .select('id, name, status, daily_budget')
         .eq('shop_id', shopId);
 
-      setCampaigns(campaignsData?.map(c => ({
+      setCampaigns((campaignsData as any[] || []).map(c => ({
         id: c.id,
         name: c.name,
-        status: c.status,
+        status: c.status as 'ACTIVE' | 'PAUSED' | 'PENDING',
         budget: c.daily_budget
-      })) || []);
+      })));
 
     } catch (err: any) {
       setError(err.message || 'Fehler beim Laden der Daten');
@@ -145,22 +192,33 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
     }
   };
 
+  // Sync campaigns from Pinterest API and save active ones to Supabase
   const syncCampaignsFromPinterest = async () => {
+    if (!selectedAdAccount) {
+      setError('Kein Pinterest Ad Account ausgewählt. Bitte zuerst auf der Pinterest Sync Seite ein Ad Account auswählen.');
+      return;
+    }
+
     setIsSyncingCampaigns(true);
     setError(null);
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-      const response = await fetch(`${apiUrl}/api/pinterest/sync-campaigns`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shop_id: shopId })
-      });
+      // Refetch campaigns from Pinterest API via hooks
+      await refetchCampaigns();
 
-      const result = await response.json();
+      // Filter only active campaigns
+      const activeCampaigns = pinterestCampaigns.filter(c => c.status === 'ACTIVE');
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Fehler beim Synchronisieren');
+      // Upsert each active campaign to Supabase
+      for (const campaign of activeCampaigns) {
+        await upsertCampaign.mutateAsync({
+          shop_id: shopId,
+          ad_account_id: selectedAdAccount.pinterest_account_id,
+          pinterest_campaign_id: campaign.id,
+          name: campaign.name,
+          status: campaign.status,
+          daily_budget: campaign.daily_spend_cap ? campaign.daily_spend_cap / 1000000 : undefined
+        });
       }
 
       // Reload campaigns from database
@@ -169,12 +227,12 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
         .select('id, name, status, daily_budget')
         .eq('shop_id', shopId);
 
-      setCampaigns(campaignsData?.map(c => ({
+      setCampaigns((campaignsData as any[] || []).map(c => ({
         id: c.id,
         name: c.name,
-        status: c.status,
+        status: c.status as 'ACTIVE' | 'PAUSED' | 'PENDING',
         budget: c.daily_budget
-      })) || []);
+      })));
 
     } catch (err: any) {
       setError(err.message || 'Fehler beim Laden der Kampagnen');
@@ -182,6 +240,24 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
       setIsSyncingCampaigns(false);
     }
   };
+
+  // Auto-update campaigns dropdown when Pinterest campaigns are loaded
+  useEffect(() => {
+    if (pinterestCampaigns.length > 0 && campaigns.length === 0) {
+      // Transform Pinterest API campaigns to local format
+      const activeCampaigns = pinterestCampaigns
+        .filter(c => c.status === 'ACTIVE')
+        .map(c => ({
+          id: c.id,
+          name: c.name,
+          status: c.status as 'ACTIVE' | 'PAUSED' | 'PENDING',
+          budget: c.daily_spend_cap ? c.daily_spend_cap / 1000000 : undefined
+        }));
+      if (activeCampaigns.length > 0) {
+        setCampaigns(activeCampaigns);
+      }
+    }
+  }, [pinterestCampaigns]);
 
   const saveSettings = async () => {
     if (!settings) return;
@@ -193,7 +269,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
         .upsert({
           ...settings,
           updated_at: new Date().toISOString()
-        }, { onConflict: 'shop_id' });
+        } as any, { onConflict: 'shop_id' });
 
       if (error) throw error;
     } catch (err: any) {
@@ -213,16 +289,17 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
           .insert({
             ...ruleData,
             shop_id: shopId
-          });
+          } as any);
 
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const updateData = {
+          ...rule,
+          updated_at: new Date().toISOString()
+        };
+        const { error } = await (supabase as any)
           .from('pinterest_campaign_optimization_rules')
-          .update({
-            ...rule,
-            updated_at: new Date().toISOString()
-          })
+          .update(updateData)
           .eq('id', rule.id);
 
         if (error) throw error;
@@ -256,7 +333,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
 
   const toggleRuleEnabled = async (rule: OptimizationRule) => {
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('pinterest_campaign_optimization_rules')
         .update({ is_enabled: !rule.is_enabled })
         .eq('id', rule.id);
@@ -418,6 +495,21 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
 
             {settings.test_mode_enabled && (
               <div className="pt-4 border-t border-zinc-800 space-y-4">
+                {/* Pinterest Connection Status */}
+                {!pinterestAuth?.is_connected && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    Pinterest ist nicht verbunden. Bitte zuerst auf der Pinterest Sync Seite verbinden.
+                  </div>
+                )}
+
+                {pinterestAuth?.is_connected && !selectedAdAccount && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    Kein Ad Account ausgewählt. Bitte zuerst auf der Pinterest Sync Seite ein Ad Account auswählen.
+                  </div>
+                )}
+
                 {/* Test Campaign Selection */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -426,26 +518,38 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
                     </label>
                     <button
                       onClick={syncCampaignsFromPinterest}
-                      disabled={isSyncingCampaigns}
+                      disabled={isSyncingCampaigns || campaignsLoading || !selectedAdAccount}
                       className="flex items-center gap-1.5 px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors disabled:opacity-50"
                     >
-                      <RefreshCw className={`w-3 h-3 ${isSyncingCampaigns ? 'animate-spin' : ''}`} />
-                      {isSyncingCampaigns ? 'Laden...' : 'Kampagnen laden'}
+                      <RefreshCw className={`w-3 h-3 ${(isSyncingCampaigns || campaignsLoading) ? 'animate-spin' : ''}`} />
+                      {isSyncingCampaigns || campaignsLoading ? 'Laden...' : 'Kampagnen laden'}
                     </button>
                   </div>
                   <select
                     value={settings.test_campaign_id || ''}
                     onChange={(e) => setSettings({ ...settings, test_campaign_id: e.target.value || null })}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600"
+                    disabled={!selectedAdAccount}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600 disabled:opacity-50"
                   >
-                    <option value="">{campaigns.length === 0 ? 'Erst Kampagnen laden...' : 'Kampagne auswählen...'}</option>
+                    <option value="">
+                      {!selectedAdAccount
+                        ? 'Erst Ad Account auswählen...'
+                        : campaigns.length === 0
+                          ? (campaignsLoading ? 'Lade Kampagnen...' : 'Kampagnen laden...')
+                          : 'Kampagne auswählen...'}
+                    </option>
                     {campaigns.map(c => (
                       <option key={c.id} value={c.id}>{c.name} ({c.status})</option>
                     ))}
                   </select>
-                  {campaigns.length === 0 && (
+                  {selectedAdAccount && campaigns.length === 0 && !campaignsLoading && (
                     <p className="text-xs text-zinc-500 mt-1">
                       Klicke auf "Kampagnen laden" um aktive Pinterest-Kampagnen zu synchronisieren
+                    </p>
+                  )}
+                  {campaigns.length > 0 && (
+                    <p className="text-xs text-emerald-500 mt-1">
+                      {campaigns.length} aktive Kampagne{campaigns.length !== 1 ? 'n' : ''} gefunden
                     </p>
                   )}
                 </div>
