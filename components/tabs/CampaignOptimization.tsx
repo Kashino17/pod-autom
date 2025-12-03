@@ -66,6 +66,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
   const [campaigns, setCampaigns] = useState<PinterestCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncingCampaigns, setIsSyncingCampaigns] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Rule Editor State
@@ -141,6 +142,44 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
       setError(err.message || 'Fehler beim Laden der Daten');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const syncCampaignsFromPinterest = async () => {
+    setIsSyncingCampaigns(true);
+    setError(null);
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+      const response = await fetch(`${apiUrl}/api/pinterest/sync-campaigns`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop_id: shopId })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Fehler beim Synchronisieren');
+      }
+
+      // Reload campaigns from database
+      const { data: campaignsData } = await supabase
+        .from('pinterest_campaigns')
+        .select('id, name, status, daily_budget')
+        .eq('shop_id', shopId);
+
+      setCampaigns(campaignsData?.map(c => ({
+        id: c.id,
+        name: c.name,
+        status: c.status,
+        budget: c.daily_budget
+      })) || []);
+
+    } catch (err: any) {
+      setError(err.message || 'Fehler beim Laden der Kampagnen');
+    } finally {
+      setIsSyncingCampaigns(false);
     }
   };
 
@@ -381,19 +420,34 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
               <div className="pt-4 border-t border-zinc-800 space-y-4">
                 {/* Test Campaign Selection */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-2">
-                    Test-Kampagne
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-medium text-zinc-400">
+                      Test-Kampagne
+                    </label>
+                    <button
+                      onClick={syncCampaignsFromPinterest}
+                      disabled={isSyncingCampaigns}
+                      className="flex items-center gap-1.5 px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isSyncingCampaigns ? 'animate-spin' : ''}`} />
+                      {isSyncingCampaigns ? 'Laden...' : 'Kampagnen laden'}
+                    </button>
+                  </div>
                   <select
                     value={settings.test_campaign_id || ''}
                     onChange={(e) => setSettings({ ...settings, test_campaign_id: e.target.value || null })}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600"
                   >
-                    <option value="">Kampagne auswählen...</option>
+                    <option value="">{campaigns.length === 0 ? 'Erst Kampagnen laden...' : 'Kampagne auswählen...'}</option>
                     {campaigns.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
+                      <option key={c.id} value={c.id}>{c.name} ({c.status})</option>
                     ))}
                   </select>
+                  {campaigns.length === 0 && (
+                    <p className="text-xs text-zinc-500 mt-1">
+                      Klicke auf "Kampagnen laden" um aktive Pinterest-Kampagnen zu synchronisieren
+                    </p>
+                  )}
                 </div>
 
                 {/* Test Metrics */}
