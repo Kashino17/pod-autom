@@ -441,15 +441,12 @@ def sync_campaigns():
         ad_account_uuid = ad_account_result.data['id']  # Internal UUID
         pinterest_account_id = ad_account_result.data['pinterest_account_id']  # Pinterest's ID for API calls
 
-        # Fetch ACTIVE campaigns from Pinterest API with pagination
+        # Fetch campaigns from Pinterest API with pagination
         all_campaigns = []
         bookmark = None
 
         while True:
-            params = {
-                'page_size': 100,
-                'campaign_status': 'ACTIVE'  # Only fetch active campaigns
-            }
+            params = {'page_size': 100}
             if bookmark:
                 params['bookmark'] = bookmark
 
@@ -465,7 +462,10 @@ def sync_campaigns():
 
             pinterest_data = response.json()
             campaigns = pinterest_data.get('items', [])
-            all_campaigns.extend(campaigns)
+
+            # Filter only ACTIVE campaigns
+            active_campaigns = [c for c in campaigns if c.get('status') == 'ACTIVE']
+            all_campaigns.extend(active_campaigns)
 
             bookmark = pinterest_data.get('bookmark')
             if not bookmark:
