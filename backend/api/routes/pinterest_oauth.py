@@ -487,9 +487,7 @@ def sync_campaigns():
                 'ad_account_id': pinterest_account_id,
                 'name': campaign.get('name', 'Unnamed Campaign'),
                 'status': status,
-                'daily_budget': daily_budget,
-                'objective_type': campaign.get('objective_type'),
-                'synced_at': datetime.now(timezone.utc).isoformat()
+                'daily_budget': daily_budget
             }, on_conflict='shop_id,pinterest_campaign_id').execute()
 
             synced_count += 1
