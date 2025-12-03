@@ -90,7 +90,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
         .from('pinterest_campaign_optimization_settings')
         .select('*')
         .eq('shop_id', shopId)
-        .single();
+        .maybeSingle();
 
       if (settingsData) {
         setSettings(settingsData);
