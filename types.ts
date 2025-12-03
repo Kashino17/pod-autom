@@ -225,17 +225,28 @@ export interface OptimizationRule {
   updated_at?: string;
 }
 
+// Test metrics for a specific time range
+export interface TestMetricsForPeriod {
+  spend: number;
+  checkouts: number;
+  roas: number;
+}
+
+// Test metrics with different time ranges
+export interface TestMetricsByTimeRange {
+  day1: TestMetricsForPeriod;
+  day3: TestMetricsForPeriod;
+  day7: TestMetricsForPeriod;
+  day14: TestMetricsForPeriod;
+}
+
 export interface OptimizationSettings {
   id?: string;
   shop_id: string;
   is_enabled: boolean;
   test_mode_enabled: boolean;
   test_campaign_id: string | null;
-  test_metrics: {
-    spend: number;
-    checkouts: number;
-    roas: number;
-  } | null;
+  test_metrics: TestMetricsByTimeRange | null;
 }
 
 export interface OptimizationLogEntry {

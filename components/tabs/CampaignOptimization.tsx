@@ -9,7 +9,9 @@ import {
   OptimizationLogic,
   OptimizationActionType,
   OptimizationActionUnit,
-  PinterestCampaign
+  PinterestCampaign,
+  TestMetricsByTimeRange,
+  TestMetricsForPeriod
 } from '../../types';
 import {
   Settings,
@@ -96,6 +98,15 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncingCampaigns, setIsSyncingCampaigns] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  // Default empty test metrics
+  const defaultTestMetrics: TestMetricsByTimeRange = {
+    day1: { spend: 0, checkouts: 0, roas: 0 },
+    day3: { spend: 0, checkouts: 0, roas: 0 },
+    day7: { spend: 0, checkouts: 0, roas: 0 },
+    day14: { spend: 0, checkouts: 0, roas: 0 }
+  };
 
   // Rule Editor State
   const [editingRule, setEditingRule] = useState<OptimizationRule | null>(null);
@@ -192,7 +203,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
     }
   };
 
-  // Sync campaigns from Pinterest API and save active ones to Supabase
+  // Sync campaigns from Pinterest API - just load them to the dropdown, don't save all to Supabase
   const syncCampaignsFromPinterest = async () => {
     if (!selectedAdAccount) {
       setError('Kein Pinterest Ad Account ausgewählt. Bitte zuerst auf der Pinterest Sync Seite ein Ad Account auswählen.');
@@ -206,38 +217,36 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
       // Refetch campaigns from Pinterest API via hooks
       await refetchCampaigns();
 
-      // Filter only active campaigns
-      const activeCampaigns = pinterestCampaigns.filter(c => c.status === 'ACTIVE');
-
-      // Upsert each active campaign to Supabase
-      for (const campaign of activeCampaigns) {
-        await upsertCampaign.mutateAsync({
-          shop_id: shopId,
-          ad_account_id: selectedAdAccount.pinterest_account_id,
-          pinterest_campaign_id: campaign.id,
-          name: campaign.name,
-          status: campaign.status,
-          daily_budget: campaign.daily_spend_cap ? campaign.daily_spend_cap / 1000000 : undefined
-        });
-      }
-
-      // Reload campaigns from database
-      const { data: campaignsData } = await supabase
-        .from('pinterest_campaigns')
-        .select('id, name, status, daily_budget')
-        .eq('shop_id', shopId);
-
-      setCampaigns((campaignsData as any[] || []).map(c => ({
-        id: c.id,
-        name: c.name,
-        status: c.status as 'ACTIVE' | 'PAUSED' | 'PENDING',
-        budget: c.daily_budget
-      })));
+      // The campaigns will be populated via useEffect when pinterestCampaigns updates
 
     } catch (err: any) {
       setError(err.message || 'Fehler beim Laden der Kampagnen');
     } finally {
       setIsSyncingCampaigns(false);
+    }
+  };
+
+  // Save only the selected test campaign to Supabase when user selects it
+  const handleTestCampaignSelect = async (campaignId: string | null) => {
+    setSettings({ ...settings!, test_campaign_id: campaignId });
+
+    // If a campaign is selected, save it to Supabase so the backend can reference it
+    if (campaignId && selectedAdAccount) {
+      const selectedCampaign = pinterestCampaigns.find(c => c.id === campaignId);
+      if (selectedCampaign) {
+        try {
+          await upsertCampaign.mutateAsync({
+            shop_id: shopId,
+            ad_account_id: selectedAdAccount.pinterest_account_id,
+            pinterest_campaign_id: selectedCampaign.id,
+            name: selectedCampaign.name,
+            status: selectedCampaign.status,
+            daily_budget: selectedCampaign.daily_spend_cap ? selectedCampaign.daily_spend_cap / 1000000 : undefined
+          });
+        } catch (err: any) {
+          console.error('Error saving test campaign:', err);
+        }
+      }
     }
   };
 
@@ -263,6 +272,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
     if (!settings) return;
 
     setIsSaving(true);
+    setSaveStatus('idle');
     try {
       const { error } = await supabase
         .from('pinterest_campaign_optimization_settings')
@@ -272,8 +282,14 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
         } as any, { onConflict: 'shop_id' });
 
       if (error) throw error;
+
+      // Show success feedback
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (err: any) {
       setError(err.message || 'Fehler beim Speichern');
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
     } finally {
       setIsSaving(false);
     }
@@ -527,7 +543,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
                   </div>
                   <select
                     value={settings.test_campaign_id || ''}
-                    onChange={(e) => setSettings({ ...settings, test_campaign_id: e.target.value || null })}
+                    onChange={(e) => handleTestCampaignSelect(e.target.value || null)}
                     disabled={!selectedAdAccount}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600 disabled:opacity-50"
                   >
@@ -554,74 +570,124 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
                   )}
                 </div>
 
-                {/* Test Metrics */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-400 mb-2">
-                      Test Spend (€)
-                    </label>
-                    <input
-                      type="number"
-                      value={settings.test_metrics?.spend || 0}
-                      onChange={(e) => setSettings({
-                        ...settings,
-                        test_metrics: {
-                          ...settings.test_metrics || { spend: 0, checkouts: 0, roas: 0 },
-                          spend: parseFloat(e.target.value) || 0
-                        }
-                      })}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-400 mb-2">
-                      Test Checkouts
-                    </label>
-                    <input
-                      type="number"
-                      value={settings.test_metrics?.checkouts || 0}
-                      onChange={(e) => setSettings({
-                        ...settings,
-                        test_metrics: {
-                          ...settings.test_metrics || { spend: 0, checkouts: 0, roas: 0 },
-                          checkouts: parseInt(e.target.value) || 0
-                        }
-                      })}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-400 mb-2">
-                      Test ROAS
-                    </label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={settings.test_metrics?.roas || 0}
-                      onChange={(e) => setSettings({
-                        ...settings,
-                        test_metrics: {
-                          ...settings.test_metrics || { spend: 0, checkouts: 0, roas: 0 },
-                          roas: parseFloat(e.target.value) || 0
-                        }
-                      })}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600"
-                    />
+                {/* Test Metrics by Time Range */}
+                <div className="space-y-4">
+                  <p className="text-xs text-zinc-500">
+                    Gib Test-Metriken für verschiedene Zeiträume ein. Die Regeln werden anhand dieser Werte evaluiert.
+                  </p>
+
+                  {/* Time Range Headers */}
+                  <div className="grid grid-cols-4 gap-3">
+                    {(['day1', 'day3', 'day7', 'day14'] as const).map((dayKey, index) => {
+                      const days = [1, 3, 7, 14][index];
+                      const testMetrics = settings.test_metrics || defaultTestMetrics;
+                      const periodMetrics = testMetrics[dayKey] || { spend: 0, checkouts: 0, roas: 0 };
+
+                      return (
+                        <div key={dayKey} className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-3 space-y-3">
+                          <h4 className="text-xs font-semibold text-zinc-300 text-center border-b border-zinc-800 pb-2">
+                            Letzte {days} {days === 1 ? 'Tag' : 'Tage'}
+                          </h4>
+
+                          <div>
+                            <label className="block text-xs text-zinc-500 mb-1">Spend (€)</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={periodMetrics.spend}
+                              onChange={(e) => {
+                                const newMetrics = { ...testMetrics };
+                                newMetrics[dayKey] = {
+                                  ...periodMetrics,
+                                  spend: parseFloat(e.target.value) || 0
+                                };
+                                setSettings({ ...settings, test_metrics: newMetrics });
+                              }}
+                              className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1.5 text-sm text-white focus:outline-none focus:border-zinc-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs text-zinc-500 mb-1">Checkouts</label>
+                            <input
+                              type="number"
+                              value={periodMetrics.checkouts}
+                              onChange={(e) => {
+                                const newMetrics = { ...testMetrics };
+                                newMetrics[dayKey] = {
+                                  ...periodMetrics,
+                                  checkouts: parseInt(e.target.value) || 0
+                                };
+                                setSettings({ ...settings, test_metrics: newMetrics });
+                              }}
+                              className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1.5 text-sm text-white focus:outline-none focus:border-zinc-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs text-zinc-500 mb-1">ROAS</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={periodMetrics.roas}
+                              onChange={(e) => {
+                                const newMetrics = { ...testMetrics };
+                                newMetrics[dayKey] = {
+                                  ...periodMetrics,
+                                  roas: parseFloat(e.target.value) || 0
+                                };
+                                setSettings({ ...settings, test_metrics: newMetrics });
+                              }}
+                              className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1.5 text-sm text-white focus:outline-none focus:border-zinc-500"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Save Button */}
-          <button
-            onClick={saveSettings}
-            disabled={isSaving}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          >
-            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Einstellungen speichern
-          </button>
+          {/* Save Button with Feedback */}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={saveSettings}
+              disabled={isSaving}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                saveStatus === 'success'
+                  ? 'bg-emerald-600 text-white'
+                  : saveStatus === 'error'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-primary text-white hover:bg-primary/90'
+              } disabled:opacity-50`}
+            >
+              {isSaving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : saveStatus === 'success' ? (
+                <CheckCircle2 className="w-4 h-4" />
+              ) : saveStatus === 'error' ? (
+                <AlertCircle className="w-4 h-4" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              {isSaving
+                ? 'Speichern...'
+                : saveStatus === 'success'
+                  ? 'Gespeichert!'
+                  : saveStatus === 'error'
+                    ? 'Fehler!'
+                    : 'Einstellungen speichern'}
+            </button>
+
+            {/* Status message */}
+            {saveStatus === 'success' && (
+              <span className="text-sm text-emerald-400 animate-in fade-in duration-200">
+                Einstellungen wurden erfolgreich gespeichert
+              </span>
+            )}
+          </div>
         </div>
       )}
 
