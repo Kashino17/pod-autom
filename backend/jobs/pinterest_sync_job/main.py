@@ -75,7 +75,12 @@ class PinterestSyncJob:
             print(f"    Collection: {collection_title}")
             print(f"    Batches: {batch_indices}")
 
-            for batch_index in batch_indices:
+            for batch_number in batch_indices:
+                # Convert 1-based batch number (from UI) to 0-based index (for API)
+                # UI shows "Batch 3" which means products 3-3 (with batch_size=1)
+                # But Shopify API uses 0-based indexing, so batch_index=2 gets product 3
+                batch_index = batch_number - 1
+
                 # Get products for this batch
                 products = shopify.get_products_batch(
                     collection_id=collection_shopify_id,
@@ -83,7 +88,7 @@ class PinterestSyncJob:
                     batch_size=config.global_batch_size
                 )
 
-                print(f"      Batch {batch_index}: {len(products)} products")
+                print(f"      Batch {batch_number} (index {batch_index}): {len(products)} products")
 
                 for product_idx_in_batch, product in enumerate(products):
                     # Track this product as currently in batches
@@ -98,8 +103,8 @@ class PinterestSyncJob:
                         print(f"        [SKIP] {product.title[:40]}... (already synced)")
                         continue
 
-                    # Calculate global product index in collection
-                    # batch_index * batch_size + position_in_batch
+                    # Calculate global product index in collection (0-based)
+                    # batch_index is already 0-based, so this gives correct position
                     product_index_in_collection = (batch_index * config.global_batch_size) + product_idx_in_batch
 
                     # Generate collection page URL
