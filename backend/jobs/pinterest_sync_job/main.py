@@ -31,6 +31,8 @@ class PinterestSyncJob:
             'campaigns_processed': 0,
             'pins_created': 0,
             'pins_failed': 0,
+            'ads_paused': 0,
+            'ads_pause_failed': 0,
             'errors': []
         }
 
@@ -63,6 +65,7 @@ class PinterestSyncJob:
 
         synced = 0
         failed = 0
+        current_product_ids = set()  # Track all products currently in batches
 
         for assignment in campaign.batch_assignments:
             collection_shopify_id = assignment.get('collection_shopify_id')
@@ -83,6 +86,9 @@ class PinterestSyncJob:
                 print(f"      Batch {batch_index}: {len(products)} products")
 
                 for product_idx_in_batch, product in enumerate(products):
+                    # Track this product as currently in batches
+                    current_product_ids.add(str(product.id))
+
                     # Check if product is already synced to this campaign
                     if self.db.is_product_already_synced(
                         shop_id=config.shop_id,
@@ -166,7 +172,80 @@ class PinterestSyncJob:
                     # Rate limit between pins
                     await asyncio.sleep(0.5)
 
-        return {'synced': synced, 'failed': failed, 'skipped': 0}
+        return {'synced': synced, 'failed': failed, 'skipped': 0, 'current_product_ids': current_product_ids}
+
+    async def pause_removed_product_ads(self, pinterest: PinterestAPIClient,
+                                         campaign: PinterestCampaign,
+                                         config: ShopPinterestConfig,
+                                         current_product_ids: set) -> Dict:
+        """Pause ads for products that are no longer in the campaign batches.
+
+        This detects products that were replaced (by replace_job) and pauses
+        their Pinterest ads to stop spending on products no longer in collection.
+        """
+        print(f"\n    Checking for removed products to pause...")
+
+        # Get all active syncs for this campaign
+        active_syncs = self.db.get_active_syncs_for_campaign(
+            shop_id=config.shop_id,
+            campaign_id=campaign.id
+        )
+
+        if not active_syncs:
+            print(f"    No active syncs found for campaign")
+            return {'ads_paused': 0, 'ads_pause_failed': 0}
+
+        # Find products that are in DB but not in current batches
+        synced_product_ids = {sync['shopify_product_id'] for sync in active_syncs}
+        removed_product_ids = synced_product_ids - current_product_ids
+
+        if not removed_product_ids:
+            print(f"    No removed products to pause")
+            return {'ads_paused': 0, 'ads_pause_failed': 0}
+
+        print(f"    Found {len(removed_product_ids)} products to pause")
+
+        ads_paused = 0
+        ads_pause_failed = 0
+
+        for sync in active_syncs:
+            if sync['shopify_product_id'] in removed_product_ids:
+                ad_id = sync.get('pinterest_ad_id')
+
+                if not ad_id:
+                    # No ad to pause (only pin, no campaign link)
+                    print(f"      [SKIP] Product {sync['shopify_product_id']} has no ad")
+                    # Still mark as paused in DB since product is removed
+                    self.db.mark_sync_as_paused(
+                        shop_id=config.shop_id,
+                        campaign_id=campaign.id,
+                        shopify_product_id=sync['shopify_product_id']
+                    )
+                    continue
+
+                # Pause the ad via Pinterest API
+                success = pinterest.pause_ad(
+                    ad_account_id=config.pinterest_account_id,
+                    ad_id=ad_id
+                )
+
+                if success:
+                    # Mark sync as paused in DB
+                    self.db.mark_sync_as_paused(
+                        shop_id=config.shop_id,
+                        campaign_id=campaign.id,
+                        shopify_product_id=sync['shopify_product_id']
+                    )
+                    ads_paused += 1
+                    print(f"      [PAUSED] Ad {ad_id} for product {sync['shopify_product_id']}")
+                else:
+                    ads_pause_failed += 1
+                    print(f"      [ERROR] Failed to pause ad {ad_id}")
+
+                # Rate limit
+                await asyncio.sleep(0.3)
+
+        return {'ads_paused': ads_paused, 'ads_pause_failed': ads_pause_failed}
 
     async def process_shop(self, config: ShopPinterestConfig) -> Dict:
         """Process a single shop - sync products to Pinterest."""
@@ -254,10 +333,13 @@ class PinterestSyncJob:
 
             total_synced = 0
             total_failed = 0
+            total_ads_paused = 0
+            total_ads_pause_failed = 0
             campaigns_processed = 0
             errors = []
 
             for campaign in campaigns:
+                # Phase 1: Sync new products
                 result = await self.sync_campaign_products(
                     shopify=shopify,
                     pinterest=pinterest,
@@ -272,6 +354,17 @@ class PinterestSyncJob:
                 if result['synced'] > 0 or result['failed'] > 0:
                     campaigns_processed += 1
 
+                # Phase 2: Pause ads for removed products
+                if config.pinterest_account_id and campaign.status == 'ACTIVE':
+                    pause_result = await self.pause_removed_product_ads(
+                        pinterest=pinterest,
+                        campaign=campaign,
+                        config=config,
+                        current_product_ids=result.get('current_product_ids', set())
+                    )
+                    total_ads_paused += pause_result['ads_paused']
+                    total_ads_pause_failed += pause_result['ads_pause_failed']
+
             return {
                 'success': True,
                 'shop_id': config.shop_id,
@@ -279,6 +372,8 @@ class PinterestSyncJob:
                 'campaigns_processed': campaigns_processed,
                 'pins_created': total_synced,
                 'pins_failed': total_failed,
+                'ads_paused': total_ads_paused,
+                'ads_pause_failed': total_ads_pause_failed,
                 'errors': errors
             }
 
@@ -304,6 +399,8 @@ Shops processed: {self.metrics['shops_processed']}
 Campaigns processed: {self.metrics['campaigns_processed']}
 Pins created: {self.metrics['pins_created']}
 Pins failed: {self.metrics['pins_failed']}
+Ads paused: {self.metrics['ads_paused']}
+Ads pause failed: {self.metrics['ads_pause_failed']}
 Errors: {len(self.metrics['errors'])}
 """
 
@@ -369,6 +466,8 @@ Errors: {len(self.metrics['errors'])}
                     self.metrics['campaigns_processed'] += result.get('campaigns_processed', 0)
                     self.metrics['pins_created'] += result.get('pins_created', 0)
                     self.metrics['pins_failed'] += result.get('pins_failed', 0)
+                    self.metrics['ads_paused'] += result.get('ads_paused', 0)
+                    self.metrics['ads_pause_failed'] += result.get('ads_pause_failed', 0)
 
                     if result.get('errors'):
                         self.metrics['errors'].extend(result['errors'])
@@ -395,6 +494,8 @@ Errors: {len(self.metrics['errors'])}
                         'campaigns_processed': self.metrics['campaigns_processed'],
                         'pins_created': self.metrics['pins_created'],
                         'pins_failed': self.metrics['pins_failed'],
+                        'ads_paused': self.metrics['ads_paused'],
+                        'ads_pause_failed': self.metrics['ads_pause_failed'],
                         'end_time': datetime.now(timezone.utc).isoformat()
                     }
                 )

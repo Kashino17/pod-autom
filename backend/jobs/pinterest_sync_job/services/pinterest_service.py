@@ -132,6 +132,8 @@ class PinterestAPIClient:
                     response = requests.get(url, headers=self.headers, timeout=30)
                 elif method == "POST":
                     response = requests.post(url, headers=self.headers, json=data, timeout=30)
+                elif method == "PATCH":
+                    response = requests.patch(url, headers=self.headers, json=data, timeout=30)
                 elif method == "DELETE":
                     response = requests.delete(url, headers=self.headers, timeout=30)
                 else:
@@ -495,3 +497,40 @@ class PinterestAPIClient:
 
         print(f"        Failed to create ad group")
         return None
+
+    def pause_ad(self, ad_account_id: str, ad_id: str) -> bool:
+        """
+        Pause a Pinterest ad by setting status to PAUSED.
+
+        Args:
+            ad_account_id: Pinterest ad account ID
+            ad_id: The ad ID to pause
+
+        Returns:
+            True if successful, False otherwise
+        """
+        # Pinterest API expects an array of ad updates
+        data = [
+            {
+                "id": ad_id,
+                "status": "PAUSED"
+            }
+        ]
+
+        result = self._make_request(
+            "PATCH",
+            f"ad_accounts/{ad_account_id}/ads",
+            data
+        )
+
+        if result and 'items' in result:
+            # Check if the update was successful
+            for item in result['items']:
+                if item.get('data', {}).get('id') == ad_id:
+                    return True
+                # Some responses wrap differently
+                if item.get('id') == ad_id:
+                    return True
+            return True  # Assume success if we got a response with items
+
+        return result is not None

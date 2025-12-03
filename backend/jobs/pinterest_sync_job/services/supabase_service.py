@@ -348,3 +348,41 @@ class SupabaseService:
 
         except Exception as e:
             print(f"Error updating Pinterest tokens: {e}")
+
+    def get_active_syncs_for_campaign(self, shop_id: str, campaign_id: str) -> List[Dict]:
+        """Get all active synced products for a campaign.
+
+        Returns products that have status='active' - these are the products
+        currently advertised on Pinterest for this campaign.
+        """
+        try:
+            result = self.client.table('pinterest_sync_log').select(
+                'shopify_product_id, pinterest_ad_id, pinterest_pin_id'
+            ).eq('shop_id', shop_id).eq(
+                'campaign_id', campaign_id
+            ).eq('status', 'active').execute()
+
+            return result.data or []
+        except Exception as e:
+            print(f"Error getting active syncs for campaign: {e}")
+            return []
+
+    def mark_sync_as_paused(self, shop_id: str, campaign_id: str,
+                            shopify_product_id: str) -> bool:
+        """Mark a sync record as paused.
+
+        Called when a product is removed from the campaign batches
+        (replaced by replace_job) and its Pinterest ad should be paused.
+        """
+        try:
+            self.client.table('pinterest_sync_log').update({
+                'status': 'paused',
+                'paused_at': datetime.now(timezone.utc).isoformat()
+            }).eq('shop_id', shop_id).eq(
+                'campaign_id', campaign_id
+            ).eq('shopify_product_id', shopify_product_id).execute()
+
+            return True
+        except Exception as e:
+            print(f"Error marking sync as paused: {e}")
+            return False
