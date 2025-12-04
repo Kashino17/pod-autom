@@ -490,6 +490,90 @@ class PinterestCampaignService:
         print("      No boards found on account")
         return None
 
+    def _upload_video_to_pinterest(self, video_url: str) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Upload a video to Pinterest Media API and wait for processing.
+
+        Pinterest requires videos to be uploaded first, then the media_id
+        is used when creating the pin.
+
+        Returns:
+            Tuple of (media_id, error_message)
+        """
+        import time
+
+        # Step 1: Register the video upload
+        register_data = {
+            'media_type': 'video'
+        }
+
+        register_result, error = self._make_request(
+            'POST',
+            'media',
+            data=register_data
+        )
+
+        if error:
+            return None, f"Video registration failed: {error}"
+
+        media_id = register_result.get('media_id')
+        upload_url = register_result.get('upload_url')
+
+        if not media_id or not upload_url:
+            return None, f"Invalid media registration response: {register_result}"
+
+        print(f"      Registered video upload, media_id: {media_id}")
+
+        # Step 2: Download video and upload to Pinterest's upload URL
+        try:
+            # Download video from our storage
+            video_response = requests.get(video_url, timeout=120)
+            video_response.raise_for_status()
+            video_bytes = video_response.content
+
+            # Upload to Pinterest's upload URL
+            upload_response = requests.put(
+                upload_url,
+                data=video_bytes,
+                headers={'Content-Type': 'video/mp4'},
+                timeout=120
+            )
+
+            if upload_response.status_code not in [200, 201, 204]:
+                return None, f"Video upload failed: {upload_response.status_code} - {upload_response.text}"
+
+            print(f"      Video uploaded to Pinterest")
+
+        except Exception as e:
+            return None, f"Video upload error: {str(e)}"
+
+        # Step 3: Poll for processing status
+        max_wait = 300  # 5 minutes
+        poll_interval = 10
+        elapsed = 0
+
+        while elapsed < max_wait:
+            status_result, error = self._make_request(
+                'GET',
+                f'media/{media_id}'
+            )
+
+            if error:
+                return None, f"Video status check failed: {error}"
+
+            status = status_result.get('status')
+            print(f"      Video processing status: {status} ({elapsed}s)")
+
+            if status == 'succeeded':
+                return media_id, None
+            elif status == 'failed':
+                return None, f"Video processing failed: {status_result}"
+
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+
+        return None, f"Video processing timed out after {max_wait}s"
+
     def _create_pin(
         self,
         ad_account_id: str,
@@ -510,14 +594,19 @@ class PinterestCampaignService:
 
         # First, create the organic pin
         if creative.creative_type == 'video':
+            # For videos, we need to upload first and get a media_id
+            media_id, error = self._upload_video_to_pinterest(creative.url)
+            if error:
+                return None, f"Video upload failed: {error}"
+
             pin_data = {
                 'title': title,
                 'description': f"{title} - Jetzt entdecken!",
                 'link': destination_url,
                 'board_id': board_id,
                 'media_source': {
-                    'source_type': 'video_url',
-                    'url': creative.url
+                    'source_type': 'video_id',
+                    'media_id': media_id
                 }
             }
         else:
