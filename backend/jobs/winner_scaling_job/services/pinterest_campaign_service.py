@@ -443,15 +443,15 @@ class PinterestCampaignService:
 
         pin_id = pin_result.get('id')
 
-        # Now create the ad (promoted pin)
-        ad_data = {
+        # Now create the ad (promoted pin) - API expects an array
+        ad_data = [{
             'ad_account_id': ad_account_id,
             'ad_group_id': ad_group_id,
             'creative_type': 'REGULAR',
             'pin_id': pin_id,
             'name': f"{title} - Ad {index + 1}",
             'status': 'ACTIVE'
-        }
+        }]
 
         ad_result, error = self._make_request(
             'POST',
@@ -462,7 +462,16 @@ class PinterestCampaignService:
         if error:
             return {'id': pin_id}, f"Ad creation failed: {error}"
 
-        return {'id': pin_id, 'ad_id': ad_result.get('id')}, None
+        # Extract ad ID from array response
+        if ad_result and 'items' in ad_result and len(ad_result['items']) > 0:
+            item = ad_result['items'][0]
+            exceptions = item.get('exceptions', [])
+            if exceptions:
+                return {'id': pin_id}, f"Ad creation error: {exceptions}"
+            ad_id = item.get('data', item).get('id') if isinstance(item.get('data', item), dict) else item.get('id')
+            return {'id': pin_id, 'ad_id': ad_id}, None
+
+        return {'id': pin_id}, f"Unexpected ad API response: {ad_result}"
 
     def pause_campaign(self, ad_account_id: str, campaign_id: str) -> bool:
         """Pause a campaign."""
