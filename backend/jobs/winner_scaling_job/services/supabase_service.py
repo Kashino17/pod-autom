@@ -143,20 +143,22 @@ class SupabaseService:
         if not result.data:
             return []
 
-        # Get product details from pinterest_sync_log for handles and image URLs
+        # Get campaign info from pinterest_sync_log for each product
+        # Note: pinterest_sync_log only has: shopify_product_id, campaign_id, pinterest_ad_group_id
+        # Handles and position must come from other sources
         product_ids = [row['product_id'] for row in result.data]
         sync_log_result = self.client.table('pinterest_sync_log').select(
-            'shopify_product_id, shopify_collection_id, product_handle, collection_handle, '
-            'product_image_url, position_in_collection'
+            'shopify_product_id, campaign_id, pinterest_ad_group_id'
         ).eq('shop_id', shop_id).in_(
             'shopify_product_id', product_ids
         ).eq('status', 'active').execute()
 
-        # Build lookup map keyed by product_id + collection_id
+        # Build lookup map keyed by product_id
         sync_log_by_product = {}
         for s in sync_log_result.data or []:
-            key = f"{s['shopify_product_id']}_{s['shopify_collection_id']}"
-            sync_log_by_product[key] = s
+            product_id = s['shopify_product_id']
+            if product_id not in sync_log_by_product:
+                sync_log_by_product[product_id] = s
 
         products = []
         for row in result.data:
@@ -166,23 +168,27 @@ class SupabaseService:
                 row.get('sales_last_10_days', 0) > 0 or
                 row.get('sales_last_14_days', 0) > 0):
 
-                # Get enriched data from sync_log
-                key = f"{row['product_id']}_{row['collection_id']}"
-                sync_data = sync_log_by_product.get(key, {})
+                # Get sync log data for campaign info
+                sync_data = sync_log_by_product.get(row['product_id'], {})
+
+                # For now, use product_id as handle (will need Shopify API for real handles)
+                # Format: product_id is typically numeric, handle would be the URL slug
+                product_handle = row['product_id']
+                collection_handle = row['collection_id']
 
                 products.append(ProductSalesData(
                     product_id=row['product_id'],
                     collection_id=row['collection_id'],
                     product_title=row.get('product_title', ''),
-                    product_handle=sync_data.get('product_handle'),
-                    collection_handle=sync_data.get('collection_handle'),
-                    shopify_image_url=sync_data.get('product_image_url'),
-                    original_campaign_id=None,
+                    product_handle=product_handle,
+                    collection_handle=collection_handle,
+                    shopify_image_url=None,
+                    original_campaign_id=sync_data.get('campaign_id'),
                     sales_3d=row.get('sales_last_3_days', 0) or 0,
                     sales_7d=row.get('sales_last_7_days', 0) or 0,
                     sales_10d=row.get('sales_last_10_days', 0) or 0,
                     sales_14d=row.get('sales_last_14_days', 0) or 0,
-                    position_in_collection=sync_data.get('position_in_collection', 0) or 0
+                    position_in_collection=0
                 ))
 
         return products
