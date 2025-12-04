@@ -115,6 +115,14 @@ class PinterestCampaignService:
         else:
             destination_url = f"https://{shop_domain}/collections/{winner.collection_handle}" if winner.collection_handle else f"https://{shop_domain}"
 
+        # 0. Get conversion tag ID (required for WEB_CONVERSION campaigns)
+        conversion_tag_id = self.get_conversion_tag_id(ad_account_id)
+        if not conversion_tag_id:
+            return CampaignCreationResult(
+                success=False,
+                error_message="No conversion tag found. Please set up a Pinterest conversion tag in your ad account."
+            )
+
         # 1. Create Campaign
         campaign_result, error = self._create_campaign(
             ad_account_id=ad_account_id,
@@ -128,11 +136,12 @@ class PinterestCampaignService:
         campaign_id = campaign_result.get('id')
         print(f"      Created campaign: {campaign_id}")
 
-        # 2. Create Ad Group
+        # 2. Create Ad Group with conversion tracking
         ad_group_result, error = self._create_ad_group(
             ad_account_id=ad_account_id,
             campaign_id=campaign_id,
             name=f"{campaign_name} - Ad Group",
+            conversion_tag_id=conversion_tag_id,
             targeting=targeting
         )
 
@@ -175,6 +184,37 @@ class PinterestCampaignService:
             error_message=None if pin_ids else "No pins were created"
         )
 
+    def get_conversion_tag_id(self, ad_account_id: str) -> Optional[str]:
+        """
+        Get the first active conversion tag ID for the ad account.
+        Required for WEB_CONVERSION campaigns.
+        """
+        result, error = self._make_request(
+            'GET',
+            f'ad_accounts/{ad_account_id}/conversion_tags'
+        )
+
+        if error:
+            print(f"      Error fetching conversion tags: {error}")
+            return None
+
+        if result and 'items' in result:
+            # Find first active tag
+            for tag in result['items']:
+                if tag.get('status') == 'ACTIVE':
+                    tag_id = tag.get('id')
+                    print(f"      Found conversion tag: {tag_id} ({tag.get('name', 'unnamed')})")
+                    return tag_id
+
+            # If no active tag, return first tag
+            if result['items']:
+                tag_id = result['items'][0].get('id')
+                print(f"      Using conversion tag: {tag_id}")
+                return tag_id
+
+        print("      No conversion tags found for this ad account")
+        return None
+
     def _create_campaign(
         self,
         ad_account_id: str,
@@ -186,11 +226,12 @@ class PinterestCampaignService:
         budget_micro = int(daily_budget * 1_000_000)
 
         # Pinterest API expects an array of campaigns
+        # WEB_CONVERSION objective for e-commerce conversion tracking
         data = [{
             'ad_account_id': ad_account_id,
             'name': name,
             'status': 'ACTIVE',
-            'objective_type': 'WEB_CONVERSION',  # For e-commerce product campaigns
+            'objective_type': 'WEB_CONVERSION',  # For e-commerce checkout conversions
             'daily_spend_cap': budget_micro,
             'is_campaign_budget_optimization': True
         }]
@@ -226,12 +267,15 @@ class PinterestCampaignService:
         ad_account_id: str,
         campaign_id: str,
         name: str,
+        conversion_tag_id: str,
         targeting: Optional[OriginalCampaignTargeting] = None
     ) -> Tuple[Optional[Dict], Optional[str]]:
-        """Create a Pinterest ad group."""
-        # Validate campaign_id
+        """Create a Pinterest ad group for WEB_CONVERSION campaigns."""
+        # Validate required fields
         if not campaign_id:
             return None, "campaign_id is required but was None"
+        if not conversion_tag_id:
+            return None, "conversion_tag_id is required for WEB_CONVERSION campaigns"
 
         # Use targeting from original campaign or defaults
         if targeting:
@@ -240,18 +284,33 @@ class PinterestCampaignService:
             geo_targets = ['DE']  # Default to Germany
 
         # Pinterest API expects an array of ad groups
+        # For WEB_CONVERSION: billable_event must be IMPRESSION, and optimization_goal_metadata is required
         data = [{
             'ad_account_id': ad_account_id,
             'campaign_id': campaign_id,
             'name': name,
             'status': 'ACTIVE',
-            'billable_event': 'CLICKTHROUGH',  # Required for WEB_CONVERSION campaigns
+            'billable_event': 'IMPRESSION',  # Required for WEB_CONVERSION campaigns
             'auto_targeting_enabled': True,  # Let Pinterest optimize
             'targeting_spec': {
                 'GEO': geo_targets,
                 'LOCALE': ['de-DE']  # German locale
             },
-            'bid_strategy_type': 'AUTOMATIC_BID'  # Let Pinterest set bids
+            'bid_strategy_type': 'AUTOMATIC_BID',  # Let Pinterest set bids
+            'optimization_goal_metadata': {
+                'conversion_tag_v3_goal_metadata': {
+                    'attribution_windows': {
+                        'click_window_days': 30,
+                        'engagement_window_days': 30,
+                        'view_window_days': 1
+                    },
+                    'conversion_event': 'CHECKOUT',  # Optimize for purchases
+                    'conversion_tag_id': conversion_tag_id,
+                    'cpa_goal_value_in_micro_currency': None,  # No CPA goal, use automatic
+                    'is_roas_optimized': False,
+                    'learning_mode_type': 'ACTIVE'
+                }
+            }
         }]
 
         result, error = self._make_request(
