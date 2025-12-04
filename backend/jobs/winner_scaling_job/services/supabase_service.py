@@ -39,23 +39,46 @@ class SupabaseService:
 
         shop_ids = [s['shop_id'] for s in settings_result.data]
 
-        # Get shop details with Pinterest credentials
+        # Get shop details
         shops_result = self.client.table('shops').select(
-            'id, internal_name, shop_domain, pinterest_access_token, pinterest_refresh_token, pinterest_account_id'
-        ).in_('id', shop_ids).not_.is_('pinterest_access_token', 'null').execute()
+            'id, internal_name, shop_domain'
+        ).in_('id', shop_ids).execute()
 
-        return [
-            ShopConfig(
-                shop_id=s['id'],
-                internal_name=s['internal_name'],
-                shop_domain=s['shop_domain'],
-                pinterest_access_token=s['pinterest_access_token'],
-                pinterest_refresh_token=s.get('pinterest_refresh_token'),
-                pinterest_account_id=s['pinterest_account_id']
-            )
-            for s in shops_result.data
-            if s.get('pinterest_access_token') and s.get('pinterest_account_id')
-        ]
+        if not shops_result.data:
+            return []
+
+        # Get Pinterest credentials from pinterest_auth table
+        pinterest_result = self.client.table('pinterest_auth').select(
+            'shop_id, access_token, refresh_token'
+        ).in_('shop_id', shop_ids).eq('is_connected', True).execute()
+
+        # Get Pinterest ad accounts
+        ad_accounts_result = self.client.table('pinterest_ad_accounts').select(
+            'shop_id, pinterest_account_id'
+        ).in_('shop_id', shop_ids).eq('is_selected', True).execute()
+
+        # Build lookup maps
+        pinterest_by_shop = {p['shop_id']: p for p in pinterest_result.data or []}
+        ad_account_by_shop = {a['shop_id']: a for a in ad_accounts_result.data or []}
+
+        shops = []
+        for s in shops_result.data:
+            shop_id = s['id']
+            pinterest = pinterest_by_shop.get(shop_id)
+            ad_account = ad_account_by_shop.get(shop_id)
+
+            # Only include shops with both Pinterest auth and selected ad account
+            if pinterest and pinterest.get('access_token') and ad_account:
+                shops.append(ShopConfig(
+                    shop_id=shop_id,
+                    internal_name=s['internal_name'],
+                    shop_domain=s['shop_domain'],
+                    pinterest_access_token=pinterest['access_token'],
+                    pinterest_refresh_token=pinterest.get('refresh_token'),
+                    pinterest_account_id=ad_account['pinterest_account_id']
+                ))
+
+        return shops
 
     def get_winner_scaling_settings(self, shop_id: str) -> Optional[WinnerScalingSettings]:
         """Get winner scaling settings for a shop."""
