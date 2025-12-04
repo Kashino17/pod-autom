@@ -208,10 +208,15 @@ class PinterestCampaignService:
         # API returns {"items": [...]} - extract first item
         if result and 'items' in result and len(result['items']) > 0:
             item = result['items'][0]
-            # Check if the item contains an error
-            if 'exceptions' in item or 'code' in item:
+            # Check if the item contains errors (non-empty exceptions list or error code)
+            exceptions = item.get('exceptions', [])
+            if exceptions:  # Only error if exceptions list is non-empty
+                return None, f"Campaign creation error: {exceptions}"
+            if 'code' in item and 'data' not in item:  # Error response format
                 return None, f"Campaign creation error: {item}"
-            return item, None
+            # Success - extract data if wrapped, otherwise use item directly
+            campaign_data = item.get('data', item)
+            return campaign_data, None
 
         # Unexpected response format
         return None, f"Unexpected campaign API response: {result}"
@@ -262,10 +267,15 @@ class PinterestCampaignService:
         # API returns {"items": [...]} - extract first item
         if result and 'items' in result and len(result['items']) > 0:
             item = result['items'][0]
-            # Check if the item contains an error
-            if 'exceptions' in item or 'code' in item:
+            # Check if the item contains errors (non-empty exceptions list or error code)
+            exceptions = item.get('exceptions', [])
+            if exceptions:  # Only error if exceptions list is non-empty
+                return None, f"Ad group creation error: {exceptions}"
+            if 'code' in item and 'data' not in item:  # Error response format
                 return None, f"Ad group creation error: {item}"
-            return item, None
+            # Success - extract data if wrapped, otherwise use item directly
+            ad_group_data = item.get('data', item)
+            return ad_group_data, None
 
         # Unexpected response format
         return None, f"Unexpected ad group API response: {result}"
