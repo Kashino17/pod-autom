@@ -25,7 +25,7 @@ from models import (
 )
 from services.supabase_service import SupabaseService
 from services.ai_creative_service import AICreativeService
-from services.pinterest_campaign_service import PinterestCampaignService
+from services.pinterest_campaign_service import PinterestCampaignService, OriginalCampaignSettings
 
 
 # Load environment variables
@@ -267,21 +267,48 @@ class WinnerScalingJob:
 
         print(f"    Need {campaigns_needed} more campaigns (current: {active_campaigns})")
 
-        # Get targeting from original campaign if available
-        targeting = None
-        if winner.original_campaign_id:
-            targeting = pinterest.get_campaign_targeting(
-                ad_account_id=shop.pinterest_account_id,
-                campaign_id=winner.original_campaign_id
-            )
+        # Find original Pinterest campaign for this product via pinterest_sync_log
+        original_campaign_info = self.db.get_original_pinterest_campaign_for_product(
+            shop_id=shop.shop_id,
+            shopify_product_id=product.product_id
+        )
 
-        # Create campaigns with generated creatives
+        if not original_campaign_info:
+            print(f"    WARNING: No original Pinterest campaign found for this product - skipping")
+            self.db.log_action(LogEntry(
+                shop_id=shop.shop_id,
+                winner_product_id=winner_id,
+                action_type='error',
+                details={'error_message': 'No original Pinterest campaign found for product'}
+            ))
+            return
+
+        print(f"    Found original campaign: {original_campaign_info['pinterest_campaign_id']}")
+
+        # Get original campaign settings from Pinterest API
+        original_settings = pinterest.get_original_campaign_settings(
+            ad_account_id=shop.pinterest_account_id,
+            pinterest_campaign_id=original_campaign_info['pinterest_campaign_id'],
+            pinterest_ad_group_id=original_campaign_info.get('pinterest_ad_group_id')
+        )
+
+        if not original_settings:
+            print(f"    WARNING: Could not fetch settings from original campaign - skipping")
+            self.db.log_action(LogEntry(
+                shop_id=shop.shop_id,
+                winner_product_id=winner_id,
+                action_type='error',
+                details={'error_message': 'Could not fetch settings from original Pinterest campaign'}
+            ))
+            return
+
+        # Create campaigns with generated creatives using original campaign settings
         await self._create_campaigns_for_winner(
             shop=shop,
             winner=winner,
             settings=settings,
             pinterest=pinterest,
-            targeting=targeting,
+            original_settings=original_settings,
             campaigns_needed=campaigns_needed
         )
 
@@ -291,7 +318,7 @@ class WinnerScalingJob:
         winner: WinnerProduct,
         settings: WinnerScalingSettings,
         pinterest: PinterestCampaignService,
-        targeting,
+        original_settings: OriginalCampaignSettings,
         campaigns_needed: int
     ):
         """Create campaigns with AI-generated creatives for a winner product."""
@@ -332,7 +359,7 @@ class WinnerScalingJob:
                     creative_type='video',
                     settings=settings,
                     pinterest=pinterest,
-                    targeting=targeting,
+                    original_settings=original_settings,
                     max_campaigns=campaigns_needed - campaigns_created
                 )
 
@@ -367,7 +394,7 @@ class WinnerScalingJob:
                     creative_type='image',
                     settings=settings,
                     pinterest=pinterest,
-                    targeting=targeting,
+                    original_settings=original_settings,
                     max_campaigns=campaigns_needed - campaigns_created
                 )
 
@@ -381,7 +408,7 @@ class WinnerScalingJob:
         creative_type: str,
         settings: WinnerScalingSettings,
         pinterest: PinterestCampaignService,
-        targeting,
+        original_settings: OriginalCampaignSettings,
         max_campaigns: int
     ) -> int:
         """Create Pinterest campaigns with the given creatives."""
@@ -412,7 +439,7 @@ class WinnerScalingJob:
                 link_type=link_type,
                 shop_domain=shop.shop_domain,
                 settings=settings,
-                targeting=targeting
+                original_settings=original_settings
             )
 
             if result.success:

@@ -280,3 +280,46 @@ class SupabaseService:
             update_data['metadata'] = metadata
 
         self.client.table('job_runs').update(update_data).eq('id', job_id).execute()
+
+    def get_original_pinterest_campaign_for_product(
+        self,
+        shop_id: str,
+        shopify_product_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Find the original Pinterest campaign that contains this product.
+        Uses pinterest_sync_log to find campaign_id, then pinterest_campaigns for details.
+
+        Returns dict with:
+            - pinterest_campaign_id: The Pinterest API campaign ID
+            - pinterest_ad_group_id: The Pinterest API ad group ID
+            - campaign_uuid: Our internal campaign UUID
+        """
+        # First, find the campaign from pinterest_sync_log
+        sync_result = self.client.table('pinterest_sync_log').select(
+            'campaign_id, pinterest_ad_group_id'
+        ).eq('shop_id', shop_id).eq(
+            'shopify_product_id', shopify_product_id
+        ).eq('status', 'active').order(
+            'synced_at', desc=True
+        ).limit(1).execute()
+
+        if not sync_result.data or not sync_result.data[0].get('campaign_id'):
+            return None
+
+        campaign_uuid = sync_result.data[0]['campaign_id']
+        pinterest_ad_group_id = sync_result.data[0].get('pinterest_ad_group_id')
+
+        # Now get the Pinterest campaign ID from pinterest_campaigns table
+        campaign_result = self.client.table('pinterest_campaigns').select(
+            'pinterest_campaign_id'
+        ).eq('id', campaign_uuid).single().execute()
+
+        if not campaign_result.data:
+            return None
+
+        return {
+            'pinterest_campaign_id': campaign_result.data['pinterest_campaign_id'],
+            'pinterest_ad_group_id': pinterest_ad_group_id,
+            'campaign_uuid': campaign_uuid
+        }

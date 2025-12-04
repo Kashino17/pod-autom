@@ -1,6 +1,7 @@
 """
 Pinterest Campaign Creation Service for Winner Scaling Job
 Creates campaigns with Pins using generated creatives
+Copies settings from original campaign
 """
 import os
 import requests
@@ -27,6 +28,22 @@ class CampaignCreationResult:
     def __post_init__(self):
         if self.pin_ids is None:
             self.pin_ids = []
+
+
+@dataclass
+class OriginalCampaignSettings:
+    """Settings copied from original Pinterest campaign."""
+    # Campaign settings
+    objective_type: str
+    tracking_urls: Optional[Dict] = None
+
+    # Ad Group settings
+    billable_event: str = 'IMPRESSION'
+    bid_strategy_type: str = 'AUTOMATIC_BID'
+    targeting_spec: Optional[Dict] = None
+    optimization_goal_metadata: Optional[Dict] = None
+    auto_targeting_enabled: bool = True
+    pacing_delivery_type: Optional[str] = None
 
 
 class PinterestCampaignService:
@@ -75,6 +92,89 @@ class PinterestCampaignService:
         except Exception as e:
             return None, f"Request error: {str(e)}"
 
+    def get_campaign_details(self, ad_account_id: str, campaign_id: str) -> Optional[Dict]:
+        """Get full campaign details from Pinterest API."""
+        result, error = self._make_request(
+            'GET',
+            f'ad_accounts/{ad_account_id}/campaigns/{campaign_id}'
+        )
+        if error:
+            print(f"      Error fetching campaign details: {error}")
+            return None
+        return result
+
+    def get_ad_group_details(self, ad_account_id: str, ad_group_id: str) -> Optional[Dict]:
+        """Get full ad group details from Pinterest API."""
+        result, error = self._make_request(
+            'GET',
+            f'ad_accounts/{ad_account_id}/ad_groups/{ad_group_id}'
+        )
+        if error:
+            print(f"      Error fetching ad group details: {error}")
+            return None
+        return result
+
+    def get_ad_groups_for_campaign(self, ad_account_id: str, campaign_id: str) -> Optional[List[Dict]]:
+        """Get all ad groups for a campaign."""
+        result, error = self._make_request(
+            'GET',
+            f'ad_accounts/{ad_account_id}/ad_groups',
+            params={'campaign_ids': campaign_id}
+        )
+        if error:
+            print(f"      Error fetching ad groups: {error}")
+            return None
+        return result.get('items', []) if result else None
+
+    def get_original_campaign_settings(
+        self,
+        ad_account_id: str,
+        pinterest_campaign_id: str,
+        pinterest_ad_group_id: Optional[str] = None
+    ) -> Optional[OriginalCampaignSettings]:
+        """
+        Fetch settings from original campaign and ad group.
+        These settings will be copied to the new winner scaling campaign.
+        """
+        # Get campaign details
+        campaign = self.get_campaign_details(ad_account_id, pinterest_campaign_id)
+        if not campaign:
+            return None
+
+        print(f"      Original campaign: {campaign.get('name')} (objective: {campaign.get('objective_type')})")
+
+        # Get ad group details
+        ad_group = None
+        if pinterest_ad_group_id:
+            ad_group = self.get_ad_group_details(ad_account_id, pinterest_ad_group_id)
+
+        if not ad_group:
+            # Try to get first ad group from campaign
+            ad_groups = self.get_ad_groups_for_campaign(ad_account_id, pinterest_campaign_id)
+            if ad_groups:
+                ad_group = ad_groups[0]
+
+        if not ad_group:
+            print(f"      Warning: No ad group found for original campaign")
+            # Return with just campaign settings
+            return OriginalCampaignSettings(
+                objective_type=campaign.get('objective_type', 'WEB_CONVERSION'),
+                tracking_urls=campaign.get('tracking_urls')
+            )
+
+        print(f"      Original ad group: {ad_group.get('name')} (billable: {ad_group.get('billable_event')})")
+
+        return OriginalCampaignSettings(
+            objective_type=campaign.get('objective_type', 'WEB_CONVERSION'),
+            tracking_urls=campaign.get('tracking_urls'),
+            billable_event=ad_group.get('billable_event', 'IMPRESSION'),
+            bid_strategy_type=ad_group.get('bid_strategy_type', 'AUTOMATIC_BID'),
+            targeting_spec=ad_group.get('targeting_spec'),
+            optimization_goal_metadata=ad_group.get('optimization_goal_metadata'),
+            auto_targeting_enabled=ad_group.get('auto_targeting_enabled', True),
+            pacing_delivery_type=ad_group.get('pacing_delivery_type')
+        )
+
     def create_campaign_with_creatives(
         self,
         ad_account_id: str,
@@ -84,26 +184,13 @@ class PinterestCampaignService:
         link_type: str,  # 'product' or 'collection'
         shop_domain: str,
         settings: WinnerScalingSettings,
-        targeting: Optional[OriginalCampaignTargeting] = None
+        original_settings: Optional[OriginalCampaignSettings] = None
     ) -> CampaignCreationResult:
         """
         Create a Pinterest campaign with ad group and pins.
-
-        Args:
-            ad_account_id: Pinterest ad account ID
-            winner: Winner product info
-            creatives: List of generated creative assets
-            creative_type: 'video' or 'image'
-            link_type: 'product' or 'collection'
-            shop_domain: Shop domain for building product/collection URLs
-            settings: Winner scaling settings
-            targeting: Optional targeting to copy from original campaign
-
-        Returns:
-            CampaignCreationResult with campaign, ad group, and pin IDs
+        Copies settings from original campaign if provided.
         """
         # Build campaign name
-        # Format: "Produktname | 2x Videos | Link to Product"
         creative_count = len(creatives)
         creative_label = f"{creative_count}x {'Videos' if creative_type == 'video' else 'Images'}"
         link_label = "Link to Product" if link_type == 'product' else "Link to Collection"
@@ -115,19 +202,18 @@ class PinterestCampaignService:
         else:
             destination_url = f"https://{shop_domain}/collections/{winner.collection_handle}" if winner.collection_handle else f"https://{shop_domain}"
 
-        # 0. Get conversion tag ID (required for WEB_CONVERSION campaigns)
-        conversion_tag_id = self.get_conversion_tag_id(ad_account_id)
-        if not conversion_tag_id:
+        if not original_settings:
             return CampaignCreationResult(
                 success=False,
-                error_message="No conversion tag found. Please set up a Pinterest conversion tag in your ad account."
+                error_message="No original campaign settings found. Cannot create campaign without reference."
             )
 
-        # 1. Create Campaign
-        campaign_result, error = self._create_campaign(
+        # 1. Create Campaign with copied settings
+        campaign_result, error = self._create_campaign_from_template(
             ad_account_id=ad_account_id,
             name=campaign_name,
-            daily_budget=settings.daily_budget_per_campaign
+            daily_budget=settings.daily_budget_per_campaign,
+            original_settings=original_settings
         )
 
         if error:
@@ -136,13 +222,12 @@ class PinterestCampaignService:
         campaign_id = campaign_result.get('id')
         print(f"      Created campaign: {campaign_id}")
 
-        # 2. Create Ad Group with conversion tracking
-        ad_group_result, error = self._create_ad_group(
+        # 2. Create Ad Group with copied settings
+        ad_group_result, error = self._create_ad_group_from_template(
             ad_account_id=ad_account_id,
             campaign_id=campaign_id,
             name=f"{campaign_name} - Ad Group",
-            conversion_tag_id=conversion_tag_id,
-            targeting=targeting
+            original_settings=original_settings
         )
 
         if error:
@@ -184,57 +269,30 @@ class PinterestCampaignService:
             error_message=None if pin_ids else "No pins were created"
         )
 
-    def get_conversion_tag_id(self, ad_account_id: str) -> Optional[str]:
-        """
-        Get the first active conversion tag ID for the ad account.
-        Required for WEB_CONVERSION campaigns.
-        """
-        result, error = self._make_request(
-            'GET',
-            f'ad_accounts/{ad_account_id}/conversion_tags'
-        )
-
-        if error:
-            print(f"      Error fetching conversion tags: {error}")
-            return None
-
-        if result and 'items' in result:
-            # Find first active tag
-            for tag in result['items']:
-                if tag.get('status') == 'ACTIVE':
-                    tag_id = tag.get('id')
-                    print(f"      Found conversion tag: {tag_id} ({tag.get('name', 'unnamed')})")
-                    return tag_id
-
-            # If no active tag, return first tag
-            if result['items']:
-                tag_id = result['items'][0].get('id')
-                print(f"      Using conversion tag: {tag_id}")
-                return tag_id
-
-        print("      No conversion tags found for this ad account")
-        return None
-
-    def _create_campaign(
+    def _create_campaign_from_template(
         self,
         ad_account_id: str,
         name: str,
-        daily_budget: float
+        daily_budget: float,
+        original_settings: OriginalCampaignSettings
     ) -> Tuple[Optional[Dict], Optional[str]]:
-        """Create a Pinterest campaign."""
-        # Convert budget to micro-currency
+        """Create a Pinterest campaign copying settings from original."""
         budget_micro = int(daily_budget * 1_000_000)
 
-        # Pinterest API expects an array of campaigns
-        # WEB_CONVERSION objective for e-commerce conversion tracking
-        data = [{
+        campaign_data = {
             'ad_account_id': ad_account_id,
             'name': name,
             'status': 'ACTIVE',
-            'objective_type': 'WEB_CONVERSION',  # For e-commerce checkout conversions
+            'objective_type': original_settings.objective_type,
             'daily_spend_cap': budget_micro,
             'is_campaign_budget_optimization': True
-        }]
+        }
+
+        # Copy tracking URLs if present
+        if original_settings.tracking_urls:
+            campaign_data['tracking_urls'] = original_settings.tracking_urls
+
+        data = [campaign_data]
 
         result, error = self._make_request(
             'POST',
@@ -242,70 +300,54 @@ class PinterestCampaignService:
             data=data
         )
 
-        # Handle error from request
         if error:
             return None, error
 
-        # API returns {"items": [...]} - extract first item
         if result and 'items' in result and len(result['items']) > 0:
             item = result['items'][0]
-            # Check if the item contains errors (non-empty exceptions list or error code)
             exceptions = item.get('exceptions', [])
-            if exceptions:  # Only error if exceptions list is non-empty
+            if exceptions:
                 return None, f"Campaign creation error: {exceptions}"
-            if 'code' in item and 'data' not in item:  # Error response format
+            if 'code' in item and 'data' not in item:
                 return None, f"Campaign creation error: {item}"
-            # Success - extract data if wrapped, otherwise use item directly
-            campaign_data = item.get('data', item)
-            return campaign_data, None
+            return item.get('data', item), None
 
-        # Unexpected response format
         return None, f"Unexpected campaign API response: {result}"
 
-    def _create_ad_group(
+    def _create_ad_group_from_template(
         self,
         ad_account_id: str,
         campaign_id: str,
         name: str,
-        conversion_tag_id: str,
-        targeting: Optional[OriginalCampaignTargeting] = None
+        original_settings: OriginalCampaignSettings
     ) -> Tuple[Optional[Dict], Optional[str]]:
-        """Create a Pinterest ad group for WEB_CONVERSION campaigns."""
-        # Validate required fields
+        """Create a Pinterest ad group copying settings from original."""
         if not campaign_id:
             return None, "campaign_id is required but was None"
-        if not conversion_tag_id:
-            return None, "conversion_tag_id is required for WEB_CONVERSION campaigns"
 
-        # Use targeting from original campaign or defaults
-        if targeting:
-            geo_targets = targeting.target_locations
-        else:
-            geo_targets = ['DE']  # Default to Germany
-
-        # Pinterest API expects an array of ad groups
-        # For WEB_CONVERSION: billable_event must be IMPRESSION, and optimization_goal_metadata is required
-        data = [{
+        ad_group_data = {
             'ad_account_id': ad_account_id,
             'campaign_id': campaign_id,
             'name': name,
             'status': 'ACTIVE',
-            'billable_event': 'IMPRESSION',  # Required for WEB_CONVERSION campaigns
-            'auto_targeting_enabled': True,  # Let Pinterest optimize
-            'targeting_spec': {
-                'GEO': geo_targets,
-                'LOCALE': ['de-DE']  # German locale
-            },
-            'bid_strategy_type': 'AUTOMATIC_BID',  # Let Pinterest set bids
-            'optimization_goal_metadata': {
-                'conversion_tag_v3_goal_metadata': {
-                    'conversion_event': 'CHECKOUT',  # Optimize for purchases
-                    'conversion_tag_id': conversion_tag_id,
-                    'is_roas_optimized': False,
-                    'learning_mode_type': 'ACTIVE'
-                }
-            }
-        }]
+            'billable_event': original_settings.billable_event,
+            'bid_strategy_type': original_settings.bid_strategy_type,
+            'auto_targeting_enabled': original_settings.auto_targeting_enabled
+        }
+
+        # Copy targeting spec from original
+        if original_settings.targeting_spec:
+            ad_group_data['targeting_spec'] = original_settings.targeting_spec
+
+        # Copy optimization goal metadata from original (required for WEB_CONVERSION)
+        if original_settings.optimization_goal_metadata:
+            ad_group_data['optimization_goal_metadata'] = original_settings.optimization_goal_metadata
+
+        # Copy pacing delivery type if present
+        if original_settings.pacing_delivery_type:
+            ad_group_data['pacing_delivery_type'] = original_settings.pacing_delivery_type
+
+        data = [ad_group_data]
 
         result, error = self._make_request(
             'POST',
@@ -313,24 +355,18 @@ class PinterestCampaignService:
             data=data
         )
 
-        # Handle error from request
         if error:
             return None, error
 
-        # API returns {"items": [...]} - extract first item
         if result and 'items' in result and len(result['items']) > 0:
             item = result['items'][0]
-            # Check if the item contains errors (non-empty exceptions list or error code)
             exceptions = item.get('exceptions', [])
-            if exceptions:  # Only error if exceptions list is non-empty
+            if exceptions:
                 return None, f"Ad group creation error: {exceptions}"
-            if 'code' in item and 'data' not in item:  # Error response format
+            if 'code' in item and 'data' not in item:
                 return None, f"Ad group creation error: {item}"
-            # Success - extract data if wrapped, otherwise use item directly
-            ad_group_data = item.get('data', item)
-            return ad_group_data, None
+            return item.get('data', item), None
 
-        # Unexpected response format
         return None, f"Unexpected ad group API response: {result}"
 
     def _create_pin(
@@ -350,7 +386,7 @@ class PinterestCampaignService:
                 'title': title,
                 'description': f"{title} - Jetzt entdecken!",
                 'link': destination_url,
-                'board_id': None,  # Will be set to default board
+                'board_id': None,
                 'media_source': {
                     'source_type': 'video_url',
                     'url': creative.url
@@ -397,48 +433,9 @@ class PinterestCampaignService:
         )
 
         if error:
-            # Still return the pin ID even if ad creation fails
             return {'id': pin_id}, f"Ad creation failed: {error}"
 
         return {'id': pin_id, 'ad_id': ad_result.get('id')}, None
-
-    def get_campaign_targeting(self, ad_account_id: str, campaign_id: str) -> Optional[OriginalCampaignTargeting]:
-        """
-        Get targeting settings from an existing campaign to copy.
-
-        Args:
-            ad_account_id: Pinterest ad account ID
-            campaign_id: Campaign ID to copy targeting from
-
-        Returns:
-            OriginalCampaignTargeting or None if failed
-        """
-        try:
-            # Get ad groups for the campaign
-            result, error = self._make_request(
-                'GET',
-                f'ad_accounts/{ad_account_id}/ad_groups',
-                params={'campaign_ids': campaign_id}
-            )
-
-            if error or not result or not result.get('items'):
-                return None
-
-            # Get first ad group's targeting
-            ad_group = result['items'][0]
-            targeting_spec = ad_group.get('targeting_spec', {})
-
-            return OriginalCampaignTargeting(
-                target_locations=targeting_spec.get('GEO', ['DE']),
-                age_group=targeting_spec.get('AGE_BUCKET', ['ALL'])[0] if targeting_spec.get('AGE_BUCKET') else 'ALL',
-                gender=targeting_spec.get('GENDER', [None])[0] if targeting_spec.get('GENDER') else None,
-                interests=targeting_spec.get('INTEREST', []),
-                keywords=targeting_spec.get('KEYWORD', [])
-            )
-
-        except Exception as e:
-            print(f"Error getting campaign targeting: {e}")
-            return None
 
     def pause_campaign(self, ad_account_id: str, campaign_id: str) -> bool:
         """Pause a campaign."""
