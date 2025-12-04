@@ -115,11 +115,12 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
         });
       }
 
-      // Load rules
+      // Load rules (exclude soft-deleted ones)
       const { data: rulesData } = await supabase
         .from('pinterest_campaign_optimization_rules')
         .select('*')
         .eq('shop_id', shopId)
+        .not('name', 'like', '[Gelöscht]%')
         .order('priority', { ascending: false });
 
       setRules(rulesData || []);
@@ -213,12 +214,26 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
     if (!confirm('Regel wirklich löschen?')) return;
 
     try {
+      // First try to delete the rule
       const { error } = await supabase
         .from('pinterest_campaign_optimization_rules')
         .delete()
         .eq('id', ruleId);
 
-      if (error) throw error;
+      if (error) {
+        // If delete fails due to foreign key constraint (rule was used in logs),
+        // do a soft delete by marking it as deleted
+        if (error.code === '23503' || error.message.includes('foreign key')) {
+          const { error: updateError } = await supabase
+            .from('pinterest_campaign_optimization_rules')
+            .update({ is_enabled: false, name: `[Gelöscht] ${rules.find(r => r.id === ruleId)?.name || ''}` })
+            .eq('id', ruleId);
+
+          if (updateError) throw updateError;
+        } else {
+          throw error;
+        }
+      }
       await loadData();
     } catch (err: any) {
       setError(err.message || 'Fehler beim Löschen');
