@@ -84,16 +84,31 @@ class AICreativeService:
                 else:
                     prompt += "Elegant product photography with subtle shadows."
 
-                result = await self._call_dalle3(prompt)
+                dalle_url = await self._call_dalle3(prompt)
 
-                if result:
-                    creatives.append(GeneratedCreative(
-                        url=result,
-                        creative_type='image',
-                        model='dalle-3',
-                        prompt_used=prompt[:500]  # Truncate for storage
-                    ))
-                    print(f"    Generated image {i+1}/{count}")
+                if dalle_url:
+                    # Upload to Supabase Storage (Pinterest blocks OpenAI URLs)
+                    import uuid
+                    filename = f"winner-images/{uuid.uuid4()}.png"
+                    storage_url = await self.download_and_upload_to_storage(dalle_url, filename)
+
+                    if storage_url:
+                        creatives.append(GeneratedCreative(
+                            url=storage_url,
+                            creative_type='image',
+                            model='dalle-3',
+                            prompt_used=prompt[:500]  # Truncate for storage
+                        ))
+                        print(f"    Generated and uploaded image {i+1}/{count}")
+                    else:
+                        # Fallback to original URL if upload fails
+                        creatives.append(GeneratedCreative(
+                            url=dalle_url,
+                            creative_type='image',
+                            model='dalle-3',
+                            prompt_used=prompt[:500]
+                        ))
+                        print(f"    Generated image {i+1}/{count} (upload failed, using original URL)")
                 else:
                     errors.append(f"Failed to generate image {i+1}")
 
