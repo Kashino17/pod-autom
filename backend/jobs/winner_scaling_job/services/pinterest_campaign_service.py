@@ -190,7 +190,7 @@ class PinterestCampaignService:
             'ad_account_id': ad_account_id,
             'name': name,
             'status': 'ACTIVE',
-            'objective_type': 'CATALOG_SALES',  # For e-commerce product campaigns
+            'objective_type': 'WEB_CONVERSION',  # For e-commerce product campaigns
             'daily_spend_cap': budget_micro,
             'is_campaign_budget_optimization': True
         }]
