@@ -19,7 +19,8 @@ import {
   BarChart2,
   Pencil,
   TrendingUp,
-  ChevronRight
+  ChevronRight,
+  Target
 } from 'lucide-react';
 import { Shop, TabId } from '../types';
 
@@ -71,10 +72,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     ]},
     { category: 'Marketing Sync', icon: Share2, items: [
       { id: 'pinterest', label: 'Pinterest Sync', icon: Share2 },
-      { id: 'campaign-optimization', label: 'Pinterest Optimierung', icon: TrendingUp },
       { id: 'meta-ads', label: 'Meta Ads Sync', icon: Facebook },
       { id: 'google-ads', label: 'Google Ads Manager', icon: Search },
       { id: 'product-creation', label: 'Product Creation', icon: Shirt },
+    ]},
+    { category: 'AD Optimierung', icon: Target, items: [
+      { id: 'campaign-optimization', label: 'Pinterest Optimierung', icon: TrendingUp },
     ]},
     { category: 'System', icon: Settings, items: [
       { id: 'limits', label: 'Rate Limits', icon: Gauge },
