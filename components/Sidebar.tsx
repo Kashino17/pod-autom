@@ -20,7 +20,8 @@ import {
   Pencil,
   TrendingUp,
   ChevronRight,
-  Target
+  Target,
+  Award
 } from 'lucide-react';
 import { Shop, TabId } from '../types';
 
@@ -78,6 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     ]},
     { category: 'AD Optimierung', icon: Target, items: [
       { id: 'campaign-optimization', label: 'Pinterest Optimierung', icon: TrendingUp },
+      { id: 'winner-scaling', label: 'Winner Scaling', icon: Award },
     ]},
     { category: 'System', icon: Settings, items: [
       { id: 'limits', label: 'Rate Limits', icon: Gauge },

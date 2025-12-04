@@ -13,7 +13,7 @@ export interface Shop {
   };
 }
 
-export type TabId = 'dashboard' | 'automation-roi' | 'pod-intelligence' | 'marketing-analytics' | 'start-phase' | 'post-phase' | 'general' | 'pinterest' | 'campaign-optimization' | 'meta-ads' | 'google-ads' | 'product-creation' | 'limits';
+export type TabId = 'dashboard' | 'automation-roi' | 'pod-intelligence' | 'marketing-analytics' | 'start-phase' | 'post-phase' | 'general' | 'pinterest' | 'campaign-optimization' | 'winner-scaling' | 'meta-ads' | 'google-ads' | 'product-creation' | 'limits';
 
 export interface StartPhaseConfig {
   deleteThreshold: number;   // <= X: Products below this get replaced
@@ -261,4 +261,121 @@ export interface OptimizationLogEntry {
   };
   error_message?: string;
   executed_at: string;
+}
+
+// =====================================================
+// Winner Scaling Types
+// =====================================================
+
+export interface WinnerScalingSettings {
+  id?: string;
+  shop_id: string;
+  is_enabled: boolean;
+
+  // Winner criteria (4-Bucket System)
+  sales_threshold_3d: number;
+  sales_threshold_7d: number;
+  sales_threshold_10d: number;
+  sales_threshold_14d: number;
+  min_buckets_required: number; // 1-4
+
+  // Campaign limits
+  max_campaigns_per_winner: number;
+
+  // Creative settings
+  video_count: number;
+  image_count: number;
+  campaigns_per_video: number;
+  campaigns_per_image: number;
+
+  // Link settings (A/B Test)
+  link_to_product: boolean;
+  link_to_collection: boolean;
+
+  // Budget
+  daily_budget_per_campaign: number;
+
+  // Platform flags
+  pinterest_enabled: boolean;
+  meta_enabled: boolean;
+  google_enabled: boolean;
+
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface WinnerProduct {
+  id: string;
+  shop_id: string;
+  product_id: string;
+  collection_id: string;
+  product_title: string;
+  product_handle?: string;
+  collection_handle?: string;
+  shopify_image_url?: string;
+
+  identified_at: string;
+  is_active: boolean;
+
+  // Sales snapshot
+  sales_3d: number;
+  sales_7d: number;
+  sales_10d: number;
+  sales_14d: number;
+  buckets_passed: number;
+
+  original_campaign_id?: string;
+
+  // Joined data
+  campaigns?: WinnerCampaign[];
+  active_campaigns_count?: number;
+}
+
+export interface WinnerCampaign {
+  id: string;
+  shop_id: string;
+  winner_product_id: string;
+
+  pinterest_campaign_id: string;
+  pinterest_ad_group_id?: string;
+  campaign_name: string;
+
+  creative_type: 'video' | 'image';
+  creative_count: number;
+  link_type: 'product' | 'collection';
+
+  status: 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
+
+  generated_assets?: {
+    url: string;
+    type: string;
+    pin_id?: string;
+  }[];
+
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type WinnerScalingActionType =
+  | 'job_started'
+  | 'job_completed'
+  | 'winner_identified'
+  | 'campaign_created'
+  | 'creative_generated'
+  | 'api_limit_reached'
+  | 'campaign_status_check'
+  | 'error';
+
+export interface WinnerScalingLogEntry {
+  id: string;
+  shop_id: string;
+  winner_product_id?: string;
+  action_type: WinnerScalingActionType;
+  details: Record<string, any>;
+  executed_at: string;
+
+  // Joined data
+  winner_product?: {
+    product_title: string;
+  };
 }

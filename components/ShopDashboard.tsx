@@ -7,6 +7,7 @@ import { PostPhase } from './tabs/PostPhase';
 import { GeneralSettings } from './tabs/GeneralSettings';
 import { PinterestSync } from './tabs/PinterestSync';
 import { CampaignOptimization } from './tabs/CampaignOptimization';
+import { WinnerScaling } from './tabs/WinnerScaling';
 import { MetaAdsSync } from './tabs/MetaAdsSync';
 import { GoogleAdsManager } from './tabs/GoogleAdsManager';
 import { RateLimits } from './tabs/RateLimits';
@@ -219,6 +220,7 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
       'product-creation': 'Product Creation',
       'pinterest': 'Pinterest Integration',
       'campaign-optimization': 'Pinterest Kampagnen-Optimierung',
+      'winner-scaling': 'Winner Scaling',
       'meta-ads': 'Meta Ads Integration',
       'google-ads': 'Google Ads Manager',
       'limits': 'Limits & Beschränkungen',
@@ -286,6 +288,8 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
             <PinterestSync shopId={shop.id} />
           ) : activeTab === 'campaign-optimization' ? (
             <CampaignOptimization shopId={shop.id} />
+          ) : activeTab === 'winner-scaling' ? (
+            <WinnerScaling shopId={shop.id} />
           ) : activeTab === 'meta-ads' ? (
             <MetaAdsSync 
                config={metaConfig} 
