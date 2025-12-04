@@ -4,7 +4,7 @@ Handles all database operations
 """
 import os
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from supabase import create_client, Client
 
 import sys
@@ -113,56 +113,41 @@ class SupabaseService:
 
     def get_products_with_sales(self, shop_id: str) -> List[ProductSalesData]:
         """
-        Get products with their sales data from product_sales table.
-        Aggregates sales over the last 3, 7, 10, and 14 days.
+        Get products with their sales data from sales_data table.
+        The sales_data table already has pre-aggregated sales buckets.
         """
-        now = datetime.now(timezone.utc)
-
-        # Get sales from last 14 days
-        start_date = (now - timedelta(days=14)).isoformat()
-
-        result = self.client.table('product_sales').select(
-            'product_id, collection_id, product_title, product_handle, '
-            'collection_handle, shopify_image_url, quantity, sale_date, '
-            'original_campaign_id'
-        ).eq('shop_id', shop_id).gte('sale_date', start_date).execute()
+        # Query the sales_data table which has pre-computed rolling sales
+        result = self.client.table('sales_data').select(
+            'product_id, collection_id, product_title, '
+            'sales_last_3_days, sales_last_7_days, sales_last_10_days, sales_last_14_days'
+        ).eq('shop_id', shop_id).execute()
 
         if not result.data:
             return []
 
-        # Aggregate by product+collection
-        products: Dict[str, ProductSalesData] = {}
+        products = []
+        for row in result.data:
+            # Only include products that have at least some sales
+            if (row.get('sales_last_3_days', 0) > 0 or
+                row.get('sales_last_7_days', 0) > 0 or
+                row.get('sales_last_10_days', 0) > 0 or
+                row.get('sales_last_14_days', 0) > 0):
 
-        for sale in result.data:
-            key = f"{sale['product_id']}_{sale['collection_id']}"
+                products.append(ProductSalesData(
+                    product_id=row['product_id'],
+                    collection_id=row['collection_id'],
+                    product_title=row.get('product_title', ''),
+                    product_handle=None,  # Not in sales_data table
+                    collection_handle=None,  # Not in sales_data table
+                    shopify_image_url=None,  # Not in sales_data table
+                    original_campaign_id=None,  # Not in sales_data table
+                    sales_3d=row.get('sales_last_3_days', 0) or 0,
+                    sales_7d=row.get('sales_last_7_days', 0) or 0,
+                    sales_10d=row.get('sales_last_10_days', 0) or 0,
+                    sales_14d=row.get('sales_last_14_days', 0) or 0
+                ))
 
-            if key not in products:
-                products[key] = ProductSalesData(
-                    product_id=sale['product_id'],
-                    collection_id=sale['collection_id'],
-                    product_title=sale.get('product_title', ''),
-                    product_handle=sale.get('product_handle'),
-                    collection_handle=sale.get('collection_handle'),
-                    shopify_image_url=sale.get('shopify_image_url'),
-                    original_campaign_id=sale.get('original_campaign_id')
-                )
-
-            # Calculate days ago
-            sale_date = datetime.fromisoformat(sale['sale_date'].replace('Z', '+00:00'))
-            days_ago = (now - sale_date).days
-            quantity = sale.get('quantity', 1)
-
-            # Add to appropriate buckets
-            if days_ago <= 3:
-                products[key].sales_3d += quantity
-            if days_ago <= 7:
-                products[key].sales_7d += quantity
-            if days_ago <= 10:
-                products[key].sales_10d += quantity
-            if days_ago <= 14:
-                products[key].sales_14d += quantity
-
-        return list(products.values())
+        return products
 
     def get_existing_winners(self, shop_id: str) -> Dict[str, WinnerProduct]:
         """Get all existing winner products for a shop, keyed by product_id_collection_id."""
