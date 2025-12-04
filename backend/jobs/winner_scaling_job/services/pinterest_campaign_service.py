@@ -299,11 +299,6 @@ class PinterestCampaignService:
             'bid_strategy_type': 'AUTOMATIC_BID',  # Let Pinterest set bids
             'optimization_goal_metadata': {
                 'conversion_tag_v3_goal_metadata': {
-                    'attribution_windows': {
-                        'click_window_days': 30,
-                        'engagement_window_days': 30,
-                        'view_window_days': 1
-                    },
                     'conversion_event': 'CHECKOUT',  # Optimize for purchases
                     'conversion_tag_id': conversion_tag_id,
                     'is_roas_optimized': False,
