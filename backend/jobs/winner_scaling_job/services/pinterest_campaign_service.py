@@ -691,35 +691,59 @@ class PinterestCampaignService:
         # VIDEO for video pins, REGULAR for image pins
         ad_creative_type = 'VIDEO' if creative.creative_type == 'video' else 'REGULAR'
 
+        # For video pins, wait for Pinterest to transcode before creating ad
+        # Pinterest needs time to process the video after pin creation
+        if creative.creative_type == 'video':
+            import time
+            print(f"      Waiting for video pin transcoding...")
+            time.sleep(15)  # Initial wait
+
         # Now create the ad (promoted pin) - API expects an array
-        ad_data = [{
-            'ad_account_id': ad_account_id,
-            'ad_group_id': ad_group_id,
-            'creative_type': ad_creative_type,
-            'pin_id': pin_id,
-            'name': f"{title} - Ad {index + 1}",
-            'status': 'ACTIVE'
-        }]
+        # For video pins, retry if transcoding is not complete
+        max_retries = 5 if creative.creative_type == 'video' else 1
+        retry_delay = 10
 
-        ad_result, error = self._make_request(
-            'POST',
-            f'ad_accounts/{ad_account_id}/ads',
-            data=ad_data
-        )
+        for attempt in range(max_retries):
+            ad_data = [{
+                'ad_account_id': ad_account_id,
+                'ad_group_id': ad_group_id,
+                'creative_type': ad_creative_type,
+                'pin_id': pin_id,
+                'name': f"{title} - Ad {index + 1}",
+                'status': 'ACTIVE'
+            }]
 
-        if error:
-            return {'id': pin_id}, f"Ad creation failed: {error}"
+            ad_result, error = self._make_request(
+                'POST',
+                f'ad_accounts/{ad_account_id}/ads',
+                data=ad_data
+            )
 
-        # Extract ad ID from array response
-        if ad_result and 'items' in ad_result and len(ad_result['items']) > 0:
-            item = ad_result['items'][0]
-            exceptions = item.get('exceptions', [])
-            if exceptions:
-                return {'id': pin_id}, f"Ad creation error: {exceptions}"
-            ad_id = item.get('data', item).get('id') if isinstance(item.get('data', item), dict) else item.get('id')
-            return {'id': pin_id, 'ad_id': ad_id}, None
+            if error:
+                return {'id': pin_id}, f"Ad creation failed: {error}"
 
-        return {'id': pin_id}, f"Unexpected ad API response: {ad_result}"
+            # Extract ad ID from array response
+            if ad_result and 'items' in ad_result and len(ad_result['items']) > 0:
+                item = ad_result['items'][0]
+                exceptions = item.get('exceptions', [])
+
+                # Check for transcoding error (code 2945)
+                if exceptions:
+                    error_code = exceptions[0].get('code') if exceptions else None
+                    if error_code == 2945 and attempt < max_retries - 1:
+                        # Video still transcoding, wait and retry
+                        import time
+                        print(f"      Video still transcoding, retrying in {retry_delay}s... (attempt {attempt + 2}/{max_retries})")
+                        time.sleep(retry_delay)
+                        continue
+                    return {'id': pin_id}, f"Ad creation error: {exceptions}"
+
+                ad_id = item.get('data', item).get('id') if isinstance(item.get('data', item), dict) else item.get('id')
+                return {'id': pin_id, 'ad_id': ad_id}, None
+
+            return {'id': pin_id}, f"Unexpected ad API response: {ad_result}"
+
+        return {'id': pin_id}, f"Ad creation failed after {max_retries} retries - video transcoding timeout"
 
     def pause_campaign(self, ad_account_id: str, campaign_id: str) -> bool:
         """Pause a campaign."""
