@@ -306,7 +306,6 @@ class PinterestCampaignService:
                     },
                     'conversion_event': 'CHECKOUT',  # Optimize for purchases
                     'conversion_tag_id': conversion_tag_id,
-                    'cpa_goal_value_in_micro_currency': None,  # No CPA goal, use automatic
                     'is_roas_optimized': False,
                     'learning_mode_type': 'ACTIVE'
                 }
