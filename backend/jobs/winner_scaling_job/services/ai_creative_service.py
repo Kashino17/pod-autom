@@ -336,6 +336,7 @@ Requirements:
         Call Google Veo 3.1 API to generate a video using the official GenAI SDK.
 
         Video generation is asynchronous - we start the operation and poll until complete.
+        If a reference image is provided, it will be used as the starting frame.
 
         Returns:
             URL/path of the generated video or None if failed
@@ -351,16 +352,40 @@ Requirements:
 
             print(f"    Starting Veo 3.1 video generation...")
 
+            # Prepare image parameter if reference image is provided
+            image_param = None
+            if reference_image_url:
+                try:
+                    # Download the reference image
+                    img_response = requests.get(reference_image_url, timeout=30)
+                    img_response.raise_for_status()
+
+                    # Create an Image object from the downloaded bytes
+                    image_param = types.Image(
+                        image_bytes=img_response.content,
+                        mime_type=img_response.headers.get('content-type', 'image/jpeg')
+                    )
+                    print(f"    Using product image as starting frame for video")
+                except Exception as img_err:
+                    print(f"    Warning: Could not load reference image for video: {img_err}")
+                    image_param = None
+
             # Start video generation (asynchronous operation)
             # Use veo-3.1-generate-preview model
-            operation = client.models.generate_videos(
-                model="veo-3.1-generate-preview",
-                prompt=prompt,
-                config=types.GenerateVideosConfig(
+            generate_params = {
+                "model": "veo-3.1-generate-preview",
+                "prompt": prompt,
+                "config": types.GenerateVideosConfig(
                     aspect_ratio="9:16",  # Vertical for Pinterest
                     number_of_videos=1,
                 )
-            )
+            }
+
+            # Add image parameter if we have a reference image
+            if image_param:
+                generate_params["image"] = image_param
+
+            operation = client.models.generate_videos(**generate_params)
 
             # Poll until the video is ready (with timeout)
             max_wait_time = 300  # 5 minutes max
