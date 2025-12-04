@@ -231,8 +231,11 @@ class SupabaseService:
 
     def log_action(self, entry: LogEntry):
         """Log an action to the winner_scaling_log table."""
+        # shop_id must be a valid UUID or None (for system-level logs)
+        shop_id = entry.shop_id if entry.shop_id and entry.shop_id != 'system' else None
+
         self.client.table('winner_scaling_log').insert({
-            'shop_id': entry.shop_id,
+            'shop_id': shop_id,
             'winner_product_id': entry.winner_product_id,
             'action_type': entry.action_type,
             'details': entry.details
