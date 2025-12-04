@@ -201,10 +201,20 @@ class PinterestCampaignService:
             data=data
         )
 
+        # Handle error from request
+        if error:
+            return None, error
+
         # API returns {"items": [...]} - extract first item
         if result and 'items' in result and len(result['items']) > 0:
-            return result['items'][0], None
-        return result, error
+            item = result['items'][0]
+            # Check if the item contains an error
+            if 'exceptions' in item or 'code' in item:
+                return None, f"Campaign creation error: {item}"
+            return item, None
+
+        # Unexpected response format
+        return None, f"Unexpected campaign API response: {result}"
 
     def _create_ad_group(
         self,
@@ -214,6 +224,10 @@ class PinterestCampaignService:
         targeting: Optional[OriginalCampaignTargeting] = None
     ) -> Tuple[Optional[Dict], Optional[str]]:
         """Create a Pinterest ad group."""
+        # Validate campaign_id
+        if not campaign_id:
+            return None, "campaign_id is required but was None"
+
         # Use targeting from original campaign or defaults
         if targeting:
             geo_targets = targeting.target_locations
@@ -226,6 +240,7 @@ class PinterestCampaignService:
             'campaign_id': campaign_id,
             'name': name,
             'status': 'ACTIVE',
+            'billable_event': 'CLICKTHROUGH',  # Required for WEB_CONVERSION campaigns
             'auto_targeting_enabled': True,  # Let Pinterest optimize
             'targeting_spec': {
                 'GEO': geo_targets,
@@ -240,10 +255,20 @@ class PinterestCampaignService:
             data=data
         )
 
+        # Handle error from request
+        if error:
+            return None, error
+
         # API returns {"items": [...]} - extract first item
         if result and 'items' in result and len(result['items']) > 0:
-            return result['items'][0], None
-        return result, error
+            item = result['items'][0]
+            # Check if the item contains an error
+            if 'exceptions' in item or 'code' in item:
+                return None, f"Ad group creation error: {item}"
+            return item, None
+
+        # Unexpected response format
+        return None, f"Unexpected ad group API response: {result}"
 
     def _create_pin(
         self,
