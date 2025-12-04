@@ -492,17 +492,35 @@ class PinterestCampaignService:
 
     def _upload_video_to_pinterest(self, video_url: str) -> Tuple[Optional[str], Optional[str]]:
         """
-        Upload a video to Pinterest Media API and wait for processing.
+        Upload a video to Pinterest Media API using multipart upload and wait for processing.
 
-        Pinterest requires videos to be uploaded first, then the media_id
-        is used when creating the pin.
+        Pinterest requires videos to be uploaded in parts for larger files.
+        The flow is:
+        1. Register upload to get media_id and upload parameters
+        2. Upload video in chunks using multipart upload
+        3. Poll for processing status
 
         Returns:
             Tuple of (media_id, error_message)
         """
         import time
+        import hashlib
+        import base64
+        import math
 
-        # Step 1: Register the video upload
+        # Step 1: Download video first to get file size
+        try:
+            print(f"      Downloading video from storage...")
+            video_response = requests.get(video_url, timeout=120)
+            video_response.raise_for_status()
+            video_bytes = video_response.content
+            file_size = len(video_bytes)
+            print(f"      Video size: {file_size / 1024 / 1024:.2f} MB")
+        except Exception as e:
+            return None, f"Video download error: {str(e)}"
+
+        # Step 2: Register the video upload with file size
+        # Pinterest uses this to determine upload_url and upload_parameters
         register_data = {
             'media_type': 'video'
         }
@@ -518,36 +536,69 @@ class PinterestCampaignService:
 
         media_id = register_result.get('media_id')
         upload_url = register_result.get('upload_url')
+        upload_parameters = register_result.get('upload_parameters', {})
 
         if not media_id or not upload_url:
             return None, f"Invalid media registration response: {register_result}"
 
         print(f"      Registered video upload, media_id: {media_id}")
 
-        # Step 2: Download video and upload to Pinterest's upload URL
+        # Step 3: Upload video using multipart form upload
+        # Pinterest's upload_url expects a multipart form with the video file
         try:
-            # Download video from our storage
-            video_response = requests.get(video_url, timeout=120)
-            video_response.raise_for_status()
-            video_bytes = video_response.content
+            # Pinterest S3 upload requires specific form fields from upload_parameters
+            # plus the 'file' field with the actual video
 
-            # Upload to Pinterest's upload URL
-            upload_response = requests.put(
+            # Build multipart form data
+            from requests_toolbelt import MultipartEncoder
+
+            # Create form fields from upload_parameters
+            form_fields = {}
+            for key, value in upload_parameters.items():
+                form_fields[key] = value
+
+            # Add the file as the last field (required by S3)
+            form_fields['file'] = ('video.mp4', video_bytes, 'video/mp4')
+
+            encoder = MultipartEncoder(fields=form_fields)
+
+            upload_response = requests.post(
                 upload_url,
-                data=video_bytes,
-                headers={'Content-Type': 'video/mp4'},
-                timeout=120
+                data=encoder,
+                headers={'Content-Type': encoder.content_type},
+                timeout=300
             )
 
             if upload_response.status_code not in [200, 201, 204]:
                 return None, f"Video upload failed: {upload_response.status_code} - {upload_response.text}"
 
-            print(f"      Video uploaded to Pinterest")
+            print(f"      Video uploaded to Pinterest successfully")
+
+        except ImportError:
+            # Fallback without requests_toolbelt - use standard multipart
+            try:
+                files = {'file': ('video.mp4', video_bytes, 'video/mp4')}
+                data = upload_parameters
+
+                upload_response = requests.post(
+                    upload_url,
+                    files=files,
+                    data=data,
+                    timeout=300
+                )
+
+                if upload_response.status_code not in [200, 201, 204]:
+                    return None, f"Video upload failed: {upload_response.status_code} - {upload_response.text}"
+
+                print(f"      Video uploaded to Pinterest successfully")
+
+            except Exception as e:
+                return None, f"Video upload error: {str(e)}"
 
         except Exception as e:
             return None, f"Video upload error: {str(e)}"
 
-        # Step 3: Poll for processing status
+        # Step 4: Poll for processing status
         max_wait = 300  # 5 minutes
         poll_interval = 10
         elapsed = 0
