@@ -687,11 +687,15 @@ class PinterestCampaignService:
 
         pin_id = pin_result.get('id')
 
+        # Determine ad creative type based on pin media type
+        # VIDEO for video pins, REGULAR for image pins
+        ad_creative_type = 'VIDEO' if creative.creative_type == 'video' else 'REGULAR'
+
         # Now create the ad (promoted pin) - API expects an array
         ad_data = [{
             'ad_account_id': ad_account_id,
             'ad_group_id': ad_group_id,
-            'creative_type': 'REGULAR',
+            'creative_type': ad_creative_type,
             'pin_id': pin_id,
             'name': f"{title} - Ad {index + 1}",
             'status': 'ACTIVE'
