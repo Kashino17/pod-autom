@@ -26,6 +26,7 @@ from models import (
 from services.supabase_service import SupabaseService
 from services.ai_creative_service import AICreativeService
 from services.pinterest_campaign_service import PinterestCampaignService, OriginalCampaignSettings
+from services.shopify_service import ShopifyService
 
 
 # Load environment variables
@@ -152,6 +153,16 @@ class WinnerScalingJob:
                 refresh_token=shop.pinterest_refresh_token
             )
 
+            # Initialize Shopify service for handle lookups
+            shopify = None
+            if shop.shopify_access_token:
+                shopify = ShopifyService(
+                    shop_domain=shop.shop_domain,
+                    access_token=shop.shopify_access_token
+                )
+            else:
+                print(f"  WARNING: No Shopify access token - handle lookups will fail")
+
             # Process each product
             for product in products:
                 await self._process_product(
@@ -159,7 +170,8 @@ class WinnerScalingJob:
                     product=product,
                     settings=settings,
                     existing_winners=existing_winners,
-                    pinterest=pinterest
+                    pinterest=pinterest,
+                    shopify=shopify
                 )
 
             self.job_metrics.shops_processed += 1
@@ -187,7 +199,8 @@ class WinnerScalingJob:
         product: ProductSalesData,
         settings: WinnerScalingSettings,
         existing_winners: Dict[str, WinnerProduct],
-        pinterest: PinterestCampaignService
+        pinterest: PinterestCampaignService,
+        shopify: Optional[ShopifyService] = None
     ):
         """Process a single product for winner identification and campaign creation."""
 
@@ -301,6 +314,29 @@ class WinnerScalingJob:
                 details={'error_message': 'Could not fetch settings from original Pinterest campaign'}
             ))
             return
+
+        # Fetch handles from Shopify API if not already set
+        if shopify:
+            print(f"    Fetching handles from Shopify API...")
+            product_handle, collection_handle, image_url, position = shopify.get_handles_for_product(
+                product_id=product.product_id,
+                collection_id=product.collection_id
+            )
+
+            # Update product data with fetched handles
+            if product_handle:
+                product.product_handle = product_handle
+                winner.product_handle = product_handle
+            if collection_handle:
+                product.collection_handle = collection_handle
+                winner.collection_handle = collection_handle
+            if image_url:
+                product.shopify_image_url = image_url
+                winner.shopify_image_url = image_url
+            if position > 0:
+                product.position_in_collection = position
+
+            print(f"    Product handle: {product.product_handle}, Collection handle: {product.collection_handle}")
 
         # Create campaigns with generated creatives using original campaign settings
         await self._create_campaigns_for_winner(

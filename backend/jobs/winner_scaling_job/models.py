@@ -51,13 +51,14 @@ class PinterestSettings:
 
 @dataclass
 class ShopConfig:
-    """Shop configuration with Pinterest credentials."""
+    """Shop configuration with Pinterest and Shopify credentials."""
     shop_id: str
     internal_name: str
     shop_domain: str
     pinterest_access_token: str
     pinterest_refresh_token: Optional[str]
     pinterest_account_id: str
+    shopify_access_token: Optional[str] = None
     pinterest_settings: Optional[PinterestSettings] = None
 
 

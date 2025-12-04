@@ -39,9 +39,9 @@ class SupabaseService:
 
         shop_ids = [s['shop_id'] for s in settings_result.data]
 
-        # Get shop details
+        # Get shop details including Shopify access token
         shops_result = self.client.table('shops').select(
-            'id, internal_name, shop_domain'
+            'id, internal_name, shop_domain, access_token'
         ).in_('id', shop_ids).execute()
 
         if not shops_result.data:
@@ -92,6 +92,7 @@ class SupabaseService:
                     pinterest_access_token=pinterest['access_token'],
                     pinterest_refresh_token=pinterest.get('refresh_token'),
                     pinterest_account_id=ad_account['pinterest_account_id'],
+                    shopify_access_token=s.get('access_token'),
                     pinterest_settings=pinterest_settings
                 ))
 
