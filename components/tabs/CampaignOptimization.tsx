@@ -125,15 +125,21 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
 
       setRules(rulesData || []);
 
-      // Load logs
+      // Load logs with campaign name
       const { data: logsData } = await supabase
         .from('pinterest_campaign_optimization_log')
-        .select('*')
+        .select('*, pinterest_campaigns(name)')
         .eq('shop_id', shopId)
         .order('executed_at', { ascending: false })
         .limit(50);
 
-      setLogs(logsData || []);
+      // Flatten the campaign name into each log entry
+      const logsWithCampaignName = logsData?.map(log => ({
+        ...log,
+        campaign_name: log.pinterest_campaigns?.name || 'Unbekannte Kampagne'
+      })) || [];
+
+      setLogs(logsWithCampaignName);
 
       // Load campaigns for test mode selection
       const { data: campaignsData } = await supabase
@@ -746,6 +752,12 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
                   <span className="text-xs text-zinc-500">
                     {new Date(log.executed_at).toLocaleString('de-DE')}
                   </span>
+                </div>
+
+                {/* Campaign Name */}
+                <div className="mt-2 text-sm text-zinc-300">
+                  <span className="text-zinc-500">Kampagne:</span>{' '}
+                  <span className="font-medium">{log.campaign_name}</span>
                 </div>
 
                 <div className="mt-2 text-sm text-zinc-400">
