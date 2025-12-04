@@ -350,7 +350,8 @@ class PinterestCampaignService:
                 title=winner.product_title,
                 destination_url=destination_url,
                 index=i,
-                board_id=default_board_id
+                board_id=default_board_id,
+                cover_image_url=winner.shopify_image_url
             )
 
             if error:
@@ -633,7 +634,8 @@ class PinterestCampaignService:
         title: str,
         destination_url: str,
         index: int,
-        board_id: Optional[str] = None
+        board_id: Optional[str] = None,
+        cover_image_url: Optional[str] = None
     ) -> Tuple[Optional[Dict], Optional[str]]:
         """Create a Pinterest Pin with the generated creative."""
 
@@ -657,7 +659,8 @@ class PinterestCampaignService:
                 'board_id': board_id,
                 'media_source': {
                     'source_type': 'video_id',
-                    'media_id': media_id
+                    'media_id': media_id,
+                    'cover_image_url': cover_image_url
                 }
             }
         else:
