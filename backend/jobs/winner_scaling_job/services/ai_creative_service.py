@@ -333,59 +333,114 @@ Requirements:
 
     async def _call_veo31(self, prompt: str, reference_image_url: Optional[str] = None) -> Optional[str]:
         """
-        Call Google Veo 3.1 API to generate a video.
+        Call Google Veo 3.1 API to generate a video using the official GenAI SDK.
 
-        Note: This is a placeholder implementation as Veo 3.1 API details
-        may vary. Update when actual API is available.
+        Video generation is asynchronous - we start the operation and poll until complete.
 
         Returns:
-            URL of the generated video or None if failed
+            URL/path of the generated video or None if failed
         """
         try:
-            # Veo 3.1 API endpoint (placeholder - update with actual endpoint)
-            endpoint = "https://generativelanguage.googleapis.com/v1beta/models/veo-3.1:generateVideo"
+            from google import genai
+            from google.genai import types
+            import time
+            import uuid
 
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.google_api_key}"
-            }
+            # Initialize the GenAI client with API key
+            client = genai.Client(api_key=self.google_api_key)
 
-            payload = {
-                "prompt": prompt,
-                "aspectRatio": "9:16",  # Vertical for Pinterest
-                "durationSeconds": 8,
-                "quality": "high"
-            }
+            print(f"    Starting Veo 3.1 video generation...")
 
-            # If we have a reference image, include it
-            if reference_image_url:
-                payload["referenceImage"] = reference_image_url
-
-            # Note: Actual Veo 3.1 API may use different request format
-            # This is a placeholder that should be updated when API is finalized
-
-            response = requests.post(
-                endpoint,
-                headers=headers,
-                json=payload,
-                timeout=120  # Video generation takes longer
+            # Start video generation (asynchronous operation)
+            # Use veo-3.1-generate-preview model
+            operation = client.models.generate_videos(
+                model="veo-3.1-generate-preview",
+                prompt=prompt,
+                config=types.GenerateVideosConfig(
+                    aspect_ratio="9:16",  # Vertical for Pinterest
+                    number_of_videos=1,
+                )
             )
 
-            if response.status_code == 200:
-                data = response.json()
-                # Extract video URL from response (format may vary)
-                return data.get('videoUrl') or data.get('video', {}).get('url')
+            # Poll until the video is ready (with timeout)
+            max_wait_time = 300  # 5 minutes max
+            poll_interval = 10  # Check every 10 seconds
+            elapsed = 0
 
-            elif response.status_code == 429:
-                raise Exception("Rate limit exceeded for Veo 3.1")
+            while not operation.done and elapsed < max_wait_time:
+                print(f"    Waiting for video generation... ({elapsed}s)")
+                await asyncio.sleep(poll_interval)
+                elapsed += poll_interval
+                operation = client.operations.get(operation)
 
-            else:
-                print(f"Veo 3.1 API error: {response.status_code} - {response.text}")
+            if not operation.done:
+                print(f"    Video generation timed out after {max_wait_time}s")
                 return None
 
-        except requests.exceptions.RequestException as e:
-            print(f"Veo 3.1 request error: {e}")
-            raise
+            # Check for errors
+            if operation.error:
+                print(f"    Veo 3.1 error: {operation.error}")
+                return None
+
+            # Get the generated video
+            if operation.response and operation.response.generated_videos:
+                video = operation.response.generated_videos[0]
+
+                # Download the video to a temp file
+                video_data = client.files.download(file=video.video)
+
+                # Upload to Supabase Storage
+                filename = f"winner-videos/{uuid.uuid4()}.mp4"
+                storage_url = await self._upload_video_to_storage(video_data, filename)
+
+                if storage_url:
+                    print(f"    Video generated and uploaded: {filename}")
+                    return storage_url
+                else:
+                    print(f"    Failed to upload video to storage")
+                    return None
+            else:
+                print(f"    No video generated in response")
+                return None
+
+        except ImportError:
+            print(f"    Veo 3.1 error: google-genai package not installed. Run: pip install google-genai")
+            return None
+        except Exception as e:
+            error_msg = str(e)
+            if 'quota' in error_msg.lower() or 'rate' in error_msg.lower():
+                raise Exception(f"Veo 3.1 rate limit: {error_msg}")
+            print(f"Veo 3.1 API error: {e}")
+            return None
+
+    async def _upload_video_to_storage(
+        self,
+        video_data: bytes,
+        filename: str,
+        storage_bucket: str = "winner-creatives"
+    ) -> Optional[str]:
+        """Upload video bytes to Supabase Storage."""
+        try:
+            from supabase import create_client
+            supabase = create_client(
+                os.environ.get('SUPABASE_URL'),
+                os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+            )
+
+            # Upload file
+            result = supabase.storage.from_(storage_bucket).upload(
+                filename,
+                video_data,
+                {"content-type": "video/mp4"}
+            )
+
+            # Get public URL
+            public_url = supabase.storage.from_(storage_bucket).get_public_url(filename)
+            return public_url
+
+        except Exception as e:
+            print(f"Error uploading video to storage: {e}")
+            return None
 
     async def download_and_upload_to_storage(
         self,
