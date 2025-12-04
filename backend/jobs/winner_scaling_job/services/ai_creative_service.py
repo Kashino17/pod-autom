@@ -212,24 +212,21 @@ class AICreativeService:
 
     def _create_image_prompt(self, product_title: str, product_image_url: Optional[str]) -> str:
         """Create an optimized prompt for Pinterest product images."""
-        prompt = f"""Create a high-quality Pinterest-optimized product advertisement image.
+        prompt = f"""Create a high-quality, Pinterest-optimized product advertisement image of the following fashion item. The product in the generated image must exactly match the reference image — no changes in color, design, shape, texture, or any other visual attributes.
 
-Product: {product_title}
+Product title: {product_title}
+Reference image: {product_image_url if product_image_url else 'N/A'}
 
 Requirements:
-- Pinterest format: vertical 2:3 aspect ratio (1000x1500px)
-- Professional e-commerce photography style
-- Clean, uncluttered composition
-- Soft, flattering lighting
-- Modern, aspirational aesthetic
-- No text overlays
-- Product should be the clear focal point
-- Subtle background that doesn't distract
-- High contrast and vibrant but natural colors
+    •    Format: vertical 2:3 aspect ratio (1000×1500 pixels)
+    •    Style: professional e-commerce photography
+    •    Lighting: soft and flattering
+    •    Composition: clean, minimal, with the product as the central focus
+    •    Aesthetic: modern, aspirational, lifestyle-inspired
+    •    Colors: vibrant yet natural; high contrast
+    •    Background: neutral, elegant, and unobtrusive (do not distract from the product)
+    •    No text, logos, watermarks, or graphic overlays of any kind
 """
-
-        if product_image_url:
-            prompt += f"\nReference the style and product from: {product_image_url}"
 
         return prompt
 
