@@ -369,6 +369,26 @@ class PinterestCampaignService:
 
         return None, f"Unexpected ad group API response: {result}"
 
+    def get_first_board_id(self) -> Optional[str]:
+        """Get the first available board ID from the user's account."""
+        result, error = self._make_request(
+            'GET',
+            'boards',
+            params={'page_size': 1}
+        )
+
+        if error:
+            print(f"      Error fetching boards: {error}")
+            return None
+
+        if result and 'items' in result and len(result['items']) > 0:
+            board_id = result['items'][0].get('id')
+            print(f"      Using board: {result['items'][0].get('name', 'Unknown')} ({board_id})")
+            return board_id
+
+        print("      No boards found on account")
+        return None
+
     def _create_pin(
         self,
         ad_account_id: str,
@@ -376,17 +396,24 @@ class PinterestCampaignService:
         creative: GeneratedCreative,
         title: str,
         destination_url: str,
-        index: int
+        index: int,
+        board_id: Optional[str] = None
     ) -> Tuple[Optional[Dict], Optional[str]]:
         """Create a Pinterest Pin with the generated creative."""
 
+        # Get a board_id if not provided
+        if not board_id:
+            board_id = self.get_first_board_id()
+            if not board_id:
+                return None, "No board available - cannot create pin without a board"
+
         # First, create the organic pin
-        # Note: board_id is optional - if not provided, pin is created without a board
         if creative.creative_type == 'video':
             pin_data = {
                 'title': title,
                 'description': f"{title} - Jetzt entdecken!",
                 'link': destination_url,
+                'board_id': board_id,
                 'media_source': {
                     'source_type': 'video_url',
                     'url': creative.url
@@ -397,6 +424,7 @@ class PinterestCampaignService:
                 'title': title,
                 'description': f"{title} - Jetzt entdecken!",
                 'link': destination_url,
+                'board_id': board_id,
                 'media_source': {
                     'source_type': 'image_url',
                     'url': creative.url
