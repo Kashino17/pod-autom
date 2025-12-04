@@ -232,22 +232,18 @@ Requirements:
 
     def _create_video_prompt(self, product_title: str, product_image_url: Optional[str]) -> str:
         """Create an optimized prompt for Pinterest product videos."""
-        prompt = f"""Create a 6-10 second Pinterest-optimized product showcase video.
+        prompt = f"""Create an 8-second vertical product showcase video optimized for Pinterest, featuring the exact fashion product shown in the reference image. The product's design, colors, textures, and overall appearance must perfectly match the image — no alterations are allowed.
 
-Product: {product_title}
-
-Requirements:
-- Vertical 9:16 aspect ratio for Pinterest
-- Professional product reveal with smooth camera movement
-- Clean, minimal background
-- Elegant lighting that highlights product details
-- No text overlays or music description needed
-- Subtle motion graphics or transitions
-- End with clear product shot
+Specifications:
+    •    Aspect ratio: 9:16, resolution 1000x1500px
+    •    Use the product image as the absolute visual reference: {product_image_url if product_image_url else 'N/A'}
+    •    Elegant, minimal background to enhance focus on the product
+    •    Smooth and professional camera movements (e.g., slow pans, subtle zooms, or reveals)
+    •    Sophisticated studio lighting to accentuate material, silhouette, and craftsmanship
+    •    No text, no music cues — keep it visually clean
+    •    Optional: tasteful, subtle transitions or light motion graphics
+    •    Final frame should clearly showcase the product from a flattering angle
 """
-
-        if product_image_url:
-            prompt += f"\nUse this product image as the main reference: {product_image_url}"
 
         return prompt
 
