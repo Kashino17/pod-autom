@@ -5,7 +5,7 @@ Handles Analytics retrieval and Campaign budget/status updates
 import os
 import requests
 from typing import Dict, Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -78,8 +78,13 @@ class PinterestAPIClient:
         Returns:
             CampaignMetrics with spend, checkouts, roas
         """
-        end_date = datetime.now().strftime('%Y-%m-%d')
-        start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+        # Use Pinterest's timezone (GMT+4 / Dubai) for date calculations
+        # This ensures our date range matches what Pinterest Ads Manager shows
+        pinterest_tz = timezone(timedelta(hours=4))
+        now_pinterest = datetime.now(pinterest_tz)
+
+        end_date = now_pinterest.strftime('%Y-%m-%d')
+        start_date = (now_pinterest - timedelta(days=days)).strftime('%Y-%m-%d')
 
         params = {
             'campaign_ids': campaign_id,
