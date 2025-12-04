@@ -185,20 +185,26 @@ class PinterestCampaignService:
         # Convert budget to micro-currency
         budget_micro = int(daily_budget * 1_000_000)
 
-        data = {
+        # Pinterest API expects an array of campaigns
+        data = [{
             'ad_account_id': ad_account_id,
             'name': name,
             'status': 'ACTIVE',
             'objective_type': 'SHOPPING',  # Shopping objective for e-commerce
             'daily_spend_cap': budget_micro,
             'is_campaign_budget_optimization': True
-        }
+        }]
 
-        return self._make_request(
+        result, error = self._make_request(
             'POST',
             f'ad_accounts/{ad_account_id}/campaigns',
             data=data
         )
+
+        # API returns {"items": [...]} - extract first item
+        if result and 'items' in result and len(result['items']) > 0:
+            return result['items'][0], None
+        return result, error
 
     def _create_ad_group(
         self,
@@ -214,7 +220,8 @@ class PinterestCampaignService:
         else:
             geo_targets = ['DE']  # Default to Germany
 
-        data = {
+        # Pinterest API expects an array of ad groups
+        data = [{
             'ad_account_id': ad_account_id,
             'campaign_id': campaign_id,
             'name': name,
@@ -225,13 +232,18 @@ class PinterestCampaignService:
                 'LOCALE': ['de-DE']  # German locale
             },
             'bid_strategy_type': 'AUTOMATIC_BID'  # Let Pinterest set bids
-        }
+        }]
 
-        return self._make_request(
+        result, error = self._make_request(
             'POST',
             f'ad_accounts/{ad_account_id}/ad_groups',
             data=data
         )
+
+        # API returns {"items": [...]} - extract first item
+        if result and 'items' in result and len(result['items']) > 0:
+            return result['items'][0], None
+        return result, error
 
     def _create_pin(
         self,
