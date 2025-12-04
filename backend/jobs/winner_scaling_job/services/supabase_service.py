@@ -264,7 +264,7 @@ class SupabaseService:
             'status': status,
             'shops_processed': shops_processed,
             'shops_failed': shops_failed,
-            'finished_at': datetime.now(timezone.utc).isoformat()
+            'completed_at': datetime.now(timezone.utc).isoformat()
         }
         if error_log:
             update_data['error_log'] = error_log
