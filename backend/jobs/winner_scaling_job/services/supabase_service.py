@@ -11,7 +11,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import (
     WinnerScalingSettings, ShopConfig, ProductSalesData,
-    WinnerProduct, WinnerCampaign, LogEntry
+    WinnerProduct, WinnerCampaign, LogEntry, PinterestSettings
 )
 
 
@@ -57,25 +57,42 @@ class SupabaseService:
             'shop_id, pinterest_account_id'
         ).in_('shop_id', shop_ids).eq('is_selected', True).execute()
 
+        # Get Pinterest settings
+        pinterest_settings_result = self.client.table('pinterest_settings').select(
+            'shop_id, url_prefix, default_board_id, products_per_page'
+        ).in_('shop_id', shop_ids).execute()
+
         # Build lookup maps
         pinterest_by_shop = {p['shop_id']: p for p in pinterest_result.data or []}
         ad_account_by_shop = {a['shop_id']: a for a in ad_accounts_result.data or []}
+        pinterest_settings_by_shop = {p['shop_id']: p for p in pinterest_settings_result.data or []}
 
         shops = []
         for s in shops_result.data:
             shop_id = s['id']
             pinterest = pinterest_by_shop.get(shop_id)
             ad_account = ad_account_by_shop.get(shop_id)
+            p_settings = pinterest_settings_by_shop.get(shop_id)
 
             # Only include shops with both Pinterest auth and selected ad account
             if pinterest and pinterest.get('access_token') and ad_account:
+                # Build PinterestSettings if available
+                pinterest_settings = None
+                if p_settings:
+                    pinterest_settings = PinterestSettings(
+                        url_prefix=p_settings.get('url_prefix') or '',
+                        default_board_id=p_settings.get('default_board_id'),
+                        products_per_page=p_settings.get('products_per_page') or 10
+                    )
+
                 shops.append(ShopConfig(
                     shop_id=shop_id,
                     internal_name=s['internal_name'],
                     shop_domain=s['shop_domain'],
                     pinterest_access_token=pinterest['access_token'],
                     pinterest_refresh_token=pinterest.get('refresh_token'),
-                    pinterest_account_id=ad_account['pinterest_account_id']
+                    pinterest_account_id=ad_account['pinterest_account_id'],
+                    pinterest_settings=pinterest_settings
                 ))
 
         return shops
@@ -115,6 +132,7 @@ class SupabaseService:
         """
         Get products with their sales data from product_sales table.
         The product_sales table has pre-aggregated rolling sales buckets.
+        Also enriches with product/collection handles from pinterest_sync_log.
         """
         # Query the product_sales table which has pre-computed rolling sales
         result = self.client.table('product_sales').select(
@@ -125,6 +143,21 @@ class SupabaseService:
         if not result.data:
             return []
 
+        # Get product details from pinterest_sync_log for handles and image URLs
+        product_ids = [row['product_id'] for row in result.data]
+        sync_log_result = self.client.table('pinterest_sync_log').select(
+            'shopify_product_id, shopify_collection_id, product_handle, collection_handle, '
+            'product_image_url, position_in_collection'
+        ).eq('shop_id', shop_id).in_(
+            'shopify_product_id', product_ids
+        ).eq('status', 'active').execute()
+
+        # Build lookup map keyed by product_id + collection_id
+        sync_log_by_product = {}
+        for s in sync_log_result.data or []:
+            key = f"{s['shopify_product_id']}_{s['shopify_collection_id']}"
+            sync_log_by_product[key] = s
+
         products = []
         for row in result.data:
             # Only include products that have at least some sales
@@ -133,18 +166,23 @@ class SupabaseService:
                 row.get('sales_last_10_days', 0) > 0 or
                 row.get('sales_last_14_days', 0) > 0):
 
+                # Get enriched data from sync_log
+                key = f"{row['product_id']}_{row['collection_id']}"
+                sync_data = sync_log_by_product.get(key, {})
+
                 products.append(ProductSalesData(
                     product_id=row['product_id'],
                     collection_id=row['collection_id'],
                     product_title=row.get('product_title', ''),
-                    product_handle=None,  # Not in sales_data table
-                    collection_handle=None,  # Not in sales_data table
-                    shopify_image_url=None,  # Not in sales_data table
-                    original_campaign_id=None,  # Not in sales_data table
+                    product_handle=sync_data.get('product_handle'),
+                    collection_handle=sync_data.get('collection_handle'),
+                    shopify_image_url=sync_data.get('product_image_url'),
+                    original_campaign_id=None,
                     sales_3d=row.get('sales_last_3_days', 0) or 0,
                     sales_7d=row.get('sales_last_7_days', 0) or 0,
                     sales_10d=row.get('sales_last_10_days', 0) or 0,
-                    sales_14d=row.get('sales_last_14_days', 0) or 0
+                    sales_14d=row.get('sales_last_14_days', 0) or 0,
+                    position_in_collection=sync_data.get('position_in_collection', 0) or 0
                 ))
 
         return products

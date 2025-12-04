@@ -42,6 +42,14 @@ class WinnerScalingSettings:
 
 
 @dataclass
+class PinterestSettings:
+    """Pinterest settings for a shop."""
+    url_prefix: str = ''
+    default_board_id: Optional[str] = None
+    products_per_page: int = 10
+
+
+@dataclass
 class ShopConfig:
     """Shop configuration with Pinterest credentials."""
     shop_id: str
@@ -50,6 +58,7 @@ class ShopConfig:
     pinterest_access_token: str
     pinterest_refresh_token: Optional[str]
     pinterest_account_id: str
+    pinterest_settings: Optional[PinterestSettings] = None
 
 
 @dataclass
@@ -70,6 +79,9 @@ class ProductSalesData:
 
     # Original campaign info (for targeting copy)
     original_campaign_id: Optional[str] = None
+
+    # Position in collection (for pagination calculation)
+    position_in_collection: int = 0
 
     def calculate_buckets_passed(self, settings: WinnerScalingSettings) -> int:
         """Calculate how many bucket thresholds are passed."""

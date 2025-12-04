@@ -12,7 +12,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import (
     WinnerProduct, WinnerCampaign, GeneratedCreative,
-    WinnerScalingSettings, OriginalCampaignTargeting
+    WinnerScalingSettings, OriginalCampaignTargeting, PinterestSettings
 )
 
 
@@ -175,6 +175,39 @@ class PinterestCampaignService:
             pacing_delivery_type=ad_group.get('pacing_delivery_type')
         )
 
+    def _build_product_url(
+        self,
+        shop_domain: str,
+        product_handle: str,
+        url_prefix: str = ''
+    ) -> str:
+        """Build product URL with optional prefix."""
+        base_url = f"https://{shop_domain}"
+        if url_prefix:
+            base_url = f"{base_url}/{url_prefix.strip('/')}"
+        return f"{base_url}/products/{product_handle}"
+
+    def _build_collection_url(
+        self,
+        shop_domain: str,
+        collection_handle: str,
+        position_in_collection: int,
+        products_per_page: int,
+        url_prefix: str = ''
+    ) -> str:
+        """Build collection URL with page parameter based on product position."""
+        base_url = f"https://{shop_domain}"
+        if url_prefix:
+            base_url = f"{base_url}/{url_prefix.strip('/')}"
+
+        # Calculate page number (1-indexed)
+        page = (position_in_collection // products_per_page) + 1
+
+        url = f"{base_url}/collections/{collection_handle}"
+        if page > 1:
+            url = f"{url}?page={page}"
+        return url
+
     def create_campaign_with_creatives(
         self,
         ad_account_id: str,
@@ -184,23 +217,46 @@ class PinterestCampaignService:
         link_type: str,  # 'product' or 'collection'
         shop_domain: str,
         settings: WinnerScalingSettings,
-        original_settings: Optional[OriginalCampaignSettings] = None
+        original_settings: Optional[OriginalCampaignSettings] = None,
+        pinterest_settings: Optional[PinterestSettings] = None,
+        position_in_collection: int = 0
     ) -> CampaignCreationResult:
         """
         Create a Pinterest campaign with ad group and pins.
         Copies settings from original campaign if provided.
+        Creates pins for both product and collection links if enabled.
         """
+        # Get Pinterest settings values
+        url_prefix = pinterest_settings.url_prefix if pinterest_settings else ''
+        products_per_page = pinterest_settings.products_per_page if pinterest_settings else 10
+        default_board_id = pinterest_settings.default_board_id if pinterest_settings else None
+
         # Build campaign name
         creative_count = len(creatives)
         creative_label = f"{creative_count}x {'Videos' if creative_type == 'video' else 'Images'}"
         link_label = "Link to Product" if link_type == 'product' else "Link to Collection"
         campaign_name = f"{winner.product_title[:50]} | {creative_label} | {link_label}"
 
-        # Build destination URL
+        # Build destination URL based on link type
         if link_type == 'product':
-            destination_url = f"https://{shop_domain}/products/{winner.product_handle}" if winner.product_handle else f"https://{shop_domain}"
+            if not winner.product_handle:
+                return CampaignCreationResult(
+                    success=False,
+                    error_message="No product_handle available for product link"
+                )
+            destination_url = self._build_product_url(shop_domain, winner.product_handle, url_prefix)
         else:
-            destination_url = f"https://{shop_domain}/collections/{winner.collection_handle}" if winner.collection_handle else f"https://{shop_domain}"
+            if not winner.collection_handle:
+                return CampaignCreationResult(
+                    success=False,
+                    error_message="No collection_handle available for collection link"
+                )
+            destination_url = self._build_collection_url(
+                shop_domain, winner.collection_handle,
+                position_in_collection, products_per_page, url_prefix
+            )
+
+        print(f"      Destination URL: {destination_url}")
 
         if not original_settings:
             return CampaignCreationResult(
@@ -249,7 +305,8 @@ class PinterestCampaignService:
                 creative=creative,
                 title=winner.product_title,
                 destination_url=destination_url,
-                index=i
+                index=i,
+                board_id=default_board_id
             )
 
             if error:

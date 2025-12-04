@@ -309,7 +309,8 @@ class WinnerScalingJob:
             settings=settings,
             pinterest=pinterest,
             original_settings=original_settings,
-            campaigns_needed=campaigns_needed
+            campaigns_needed=campaigns_needed,
+            position_in_collection=product.position_in_collection
         )
 
     async def _create_campaigns_for_winner(
@@ -319,7 +320,8 @@ class WinnerScalingJob:
         settings: WinnerScalingSettings,
         pinterest: PinterestCampaignService,
         original_settings: OriginalCampaignSettings,
-        campaigns_needed: int
+        campaigns_needed: int,
+        position_in_collection: int = 0
     ):
         """Create campaigns with AI-generated creatives for a winner product."""
 
@@ -360,7 +362,8 @@ class WinnerScalingJob:
                     settings=settings,
                     pinterest=pinterest,
                     original_settings=original_settings,
-                    max_campaigns=campaigns_needed - campaigns_created
+                    max_campaigns=campaigns_needed - campaigns_created,
+                    position_in_collection=position_in_collection
                 )
 
         # Image campaigns
@@ -395,7 +398,8 @@ class WinnerScalingJob:
                     settings=settings,
                     pinterest=pinterest,
                     original_settings=original_settings,
-                    max_campaigns=campaigns_needed - campaigns_created
+                    max_campaigns=campaigns_needed - campaigns_created,
+                    position_in_collection=position_in_collection
                 )
 
         print(f"    Created {campaigns_created} campaigns for this winner")
@@ -409,7 +413,8 @@ class WinnerScalingJob:
         settings: WinnerScalingSettings,
         pinterest: PinterestCampaignService,
         original_settings: OriginalCampaignSettings,
-        max_campaigns: int
+        max_campaigns: int,
+        position_in_collection: int = 0
     ) -> int:
         """Create Pinterest campaigns with the given creatives."""
 
@@ -439,7 +444,9 @@ class WinnerScalingJob:
                 link_type=link_type,
                 shop_domain=shop.shop_domain,
                 settings=settings,
-                original_settings=original_settings
+                original_settings=original_settings,
+                pinterest_settings=shop.pinterest_settings,
+                position_in_collection=position_in_collection
             )
 
             if result.success:
