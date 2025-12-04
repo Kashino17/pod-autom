@@ -113,11 +113,11 @@ class SupabaseService:
 
     def get_products_with_sales(self, shop_id: str) -> List[ProductSalesData]:
         """
-        Get products with their sales data from sales_data table.
-        The sales_data table already has pre-aggregated sales buckets.
+        Get products with their sales data from product_sales table.
+        The product_sales table has pre-aggregated rolling sales buckets.
         """
-        # Query the sales_data table which has pre-computed rolling sales
-        result = self.client.table('sales_data').select(
+        # Query the product_sales table which has pre-computed rolling sales
+        result = self.client.table('product_sales').select(
             'product_id, collection_id, product_title, '
             'sales_last_3_days, sales_last_7_days, sales_last_10_days, sales_last_14_days'
         ).eq('shop_id', shop_id).execute()
