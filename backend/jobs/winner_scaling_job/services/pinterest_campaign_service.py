@@ -381,12 +381,12 @@ class PinterestCampaignService:
         """Create a Pinterest Pin with the generated creative."""
 
         # First, create the organic pin
+        # Note: board_id is optional - if not provided, pin is created without a board
         if creative.creative_type == 'video':
             pin_data = {
                 'title': title,
                 'description': f"{title} - Jetzt entdecken!",
                 'link': destination_url,
-                'board_id': None,
                 'media_source': {
                     'source_type': 'video_url',
                     'url': creative.url
@@ -397,7 +397,6 @@ class PinterestCampaignService:
                 'title': title,
                 'description': f"{title} - Jetzt entdecken!",
                 'link': destination_url,
-                'board_id': None,
                 'media_source': {
                     'source_type': 'image_url',
                     'url': creative.url
