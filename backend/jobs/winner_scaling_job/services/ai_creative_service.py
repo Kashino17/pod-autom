@@ -68,6 +68,12 @@ class AICreativeService:
         creatives = []
         errors = []
 
+        # Log the product image URL being used
+        if product_image_url:
+            print(f"    Using product image as reference: {product_image_url}")
+        else:
+            print(f"    WARNING: No product image URL provided - generating without reference")
+
         # Generate prompt based on product
         base_prompt = self._create_image_prompt(product_title, product_image_url)
 
@@ -84,31 +90,31 @@ class AICreativeService:
                 else:
                     prompt += "Elegant product photography with subtle shadows."
 
-                dalle_url = await self._call_dalle3(prompt)
+                # Call GPT-Image-1 with reference image
+                result = await self._call_gpt_image(prompt, product_image_url)
 
-                if dalle_url:
-                    # Upload to Supabase Storage (Pinterest blocks OpenAI URLs)
+                if result:
                     import uuid
                     filename = f"winner-images/{uuid.uuid4()}.png"
-                    storage_url = await self.download_and_upload_to_storage(dalle_url, filename)
+
+                    # Check if result is base64 or URL
+                    if result.startswith('http'):
+                        # It's a URL - download and upload
+                        storage_url = await self.download_and_upload_to_storage(result, filename)
+                    else:
+                        # It's base64 - upload directly
+                        storage_url = await self.upload_base64_to_storage(result, filename)
 
                     if storage_url:
                         creatives.append(GeneratedCreative(
                             url=storage_url,
                             creative_type='image',
-                            model='dalle-3',
+                            model='gpt-image-1',
                             prompt_used=prompt[:500]  # Truncate for storage
                         ))
-                        print(f"    Generated and uploaded image {i+1}/{count}")
+                        print(f"    Generated and uploaded image {i+1}/{count} with GPT-Image-1")
                     else:
-                        # Fallback to original URL if upload fails
-                        creatives.append(GeneratedCreative(
-                            url=dalle_url,
-                            creative_type='image',
-                            model='dalle-3',
-                            prompt_used=prompt[:500]
-                        ))
-                        print(f"    Generated image {i+1}/{count} (upload failed, using original URL)")
+                        errors.append(f"Failed to upload image {i+1} to storage")
                 else:
                     errors.append(f"Failed to generate image {i+1}")
 
@@ -248,32 +254,81 @@ Requirements:
 
         return prompt
 
-    async def _call_dalle3(self, prompt: str) -> Optional[str]:
+    async def _call_gpt_image(self, prompt: str, reference_image_url: Optional[str] = None) -> Optional[str]:
         """
-        Call DALL-E 3 API to generate an image.
+        Call GPT-Image-1 API to generate an image with optional reference image.
+
+        Uses images.edit() when reference image is provided (as per OpenAI API docs),
+        otherwise uses images.generate() for pure text-to-image.
+
+        Args:
+            prompt: The text prompt describing what to generate
+            reference_image_url: Optional Shopify product image URL to use as reference
 
         Returns:
-            URL of the generated image or None if failed
+            Base64 encoded image data or None if failed
         """
         try:
             import openai
+            from io import BytesIO
             client = openai.OpenAI(api_key=self.openai_api_key)
 
-            response = client.images.generate(
-                model="dall-e-3",
-                prompt=prompt,
-                size="1024x1792",  # Closest to Pinterest 2:3 ratio
-                quality="hd",
-                n=1
-            )
+            # If we have a reference image, use images.edit()
+            if reference_image_url:
+                try:
+                    # Download the reference image
+                    img_response = requests.get(reference_image_url, timeout=30)
+                    img_response.raise_for_status()
+
+                    # Create a file-like object from the image bytes
+                    image_file = BytesIO(img_response.content)
+                    image_file.name = "reference.png"  # OpenAI requires a name attribute
+
+                    print(f"    Using reference image with GPT-Image-1 (images.edit)")
+
+                    # Use images.edit with reference image
+                    response = client.images.edit(
+                        model="gpt-image-1",
+                        image=image_file,
+                        prompt=prompt,
+                        size="1024x1536",  # Portrait format for Pinterest
+                        quality="high",
+                        n=1
+                    )
+
+                except Exception as img_err:
+                    print(f"    Warning: Could not use reference image, falling back to generate: {img_err}")
+                    # Fall back to generate without reference
+                    response = client.images.generate(
+                        model="gpt-image-1",
+                        prompt=prompt,
+                        size="1024x1536",
+                        quality="high",
+                        n=1
+                    )
+            else:
+                # No reference image - use standard generate
+                print(f"    Generating image with GPT-Image-1 (no reference)")
+                response = client.images.generate(
+                    model="gpt-image-1",
+                    prompt=prompt,
+                    size="1024x1536",  # Portrait format for Pinterest
+                    quality="high",
+                    n=1
+                )
 
             if response.data and len(response.data) > 0:
-                return response.data[0].url
+                # GPT-Image-1 returns base64 encoded image
+                image_data = response.data[0]
+                if hasattr(image_data, 'b64_json') and image_data.b64_json:
+                    return image_data.b64_json
+                elif hasattr(image_data, 'url') and image_data.url:
+                    return image_data.url
 
             return None
 
         except Exception as e:
-            print(f"DALL-E 3 API error: {e}")
+            print(f"GPT-Image-1 API error: {e}")
             raise
 
     async def _call_veo31(self, prompt: str, reference_image_url: Optional[str] = None) -> Optional[str]:
@@ -336,10 +391,12 @@ Requirements:
         self,
         url: str,
         filename: str,
-        storage_bucket: str = "winner-creatives"
+        storage_bucket: str = "winner-creatives",
+        resize_to: tuple = (PINTEREST_WIDTH, PINTEREST_HEIGHT)
     ) -> Optional[str]:
         """
         Download a generated creative and upload to Supabase Storage.
+        Resizes to Pinterest dimensions (1000x1500).
 
         This ensures creatives are stored permanently, as AI API URLs may expire.
 
@@ -347,14 +404,31 @@ Requirements:
             url: URL of the generated creative
             filename: Desired filename in storage
             storage_bucket: Supabase storage bucket name
+            resize_to: Target dimensions (width, height) - default Pinterest 1000x1500
 
         Returns:
             Public URL of the uploaded file or None if failed
         """
         try:
+            from PIL import Image
+            from io import BytesIO
+
             # Download the file
             response = requests.get(url, timeout=60)
             response.raise_for_status()
+
+            image_bytes = response.content
+
+            # Resize image to Pinterest dimensions (1000x1500)
+            if resize_to and 'image' in response.headers.get('content-type', ''):
+                img = Image.open(BytesIO(image_bytes))
+                img_resized = img.resize(resize_to, Image.Resampling.LANCZOS)
+
+                # Save to bytes
+                output_buffer = BytesIO()
+                img_resized.save(output_buffer, format='PNG', optimize=True)
+                image_bytes = output_buffer.getvalue()
+                print(f"    Resized downloaded image to {resize_to[0]}x{resize_to[1]}")
 
             # Upload to Supabase Storage
             from supabase import create_client
@@ -366,8 +440,8 @@ Requirements:
             # Upload file
             result = supabase.storage.from_(storage_bucket).upload(
                 filename,
-                response.content,
-                {"content-type": response.headers.get('content-type', 'application/octet-stream')}
+                image_bytes,
+                {"content-type": "image/png"}
             )
 
             # Get public URL
@@ -376,4 +450,65 @@ Requirements:
 
         except Exception as e:
             print(f"Error uploading creative to storage: {e}")
+            return None
+
+    async def upload_base64_to_storage(
+        self,
+        base64_data: str,
+        filename: str,
+        storage_bucket: str = "winner-creatives",
+        resize_to: tuple = (PINTEREST_WIDTH, PINTEREST_HEIGHT)
+    ) -> Optional[str]:
+        """
+        Upload base64 encoded image directly to Supabase Storage.
+        Optionally resizes to Pinterest dimensions (1000x1500).
+
+        Args:
+            base64_data: Base64 encoded image data (from GPT-Image-1)
+            filename: Desired filename in storage
+            storage_bucket: Supabase storage bucket name
+            resize_to: Target dimensions (width, height) - default Pinterest 1000x1500
+
+        Returns:
+            Public URL of the uploaded file or None if failed
+        """
+        try:
+            from PIL import Image
+            from io import BytesIO
+
+            # Decode base64 to bytes
+            image_bytes = base64.b64decode(base64_data)
+
+            # Resize image to Pinterest dimensions (1000x1500)
+            if resize_to:
+                img = Image.open(BytesIO(image_bytes))
+                img_resized = img.resize(resize_to, Image.Resampling.LANCZOS)
+
+                # Save to bytes
+                output_buffer = BytesIO()
+                img_resized.save(output_buffer, format='PNG', optimize=True)
+                image_bytes = output_buffer.getvalue()
+                print(f"    Resized image to {resize_to[0]}x{resize_to[1]}")
+
+            # Upload to Supabase Storage
+            from supabase import create_client
+            supabase = create_client(
+                os.environ.get('SUPABASE_URL'),
+                os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+            )
+
+            # Upload file
+            result = supabase.storage.from_(storage_bucket).upload(
+                filename,
+                image_bytes,
+                {"content-type": "image/png"}
+            )
+
+            # Get public URL
+            public_url = supabase.storage.from_(storage_bucket).get_public_url(filename)
+            print(f"    Uploaded image to storage: {filename}")
+            return public_url
+
+        except Exception as e:
+            print(f"Error uploading base64 image to storage: {e}")
             return None

@@ -181,11 +181,32 @@ class PinterestCampaignService:
         product_handle: str,
         url_prefix: str = ''
     ) -> str:
-        """Build product URL with optional prefix."""
-        base_url = f"https://{shop_domain}"
+        """Build product URL with optional prefix.
+
+        If url_prefix is set, use it as the base domain.
+        Otherwise fallback to shop_domain (myshopify.com domain).
+        """
+        print(f"      [DEBUG] _build_product_url: url_prefix='{url_prefix}', shop_domain='{shop_domain}', handle='{product_handle}'")
+
         if url_prefix:
-            base_url = f"{base_url}/{url_prefix.strip('/')}"
-        return f"{base_url}/products/{product_handle}"
+            # Clean up the prefix
+            prefix = url_prefix.strip().rstrip('/')
+
+            # Check if url_prefix is a full URL with protocol
+            if prefix.startswith('http://') or prefix.startswith('https://'):
+                url = f"{prefix}/products/{product_handle}"
+                print(f"      [DEBUG] Using url_prefix with protocol: {url}")
+                return url
+            elif '.' in prefix:
+                # It's a domain without protocol (e.g., "dresswithsoul.com")
+                url = f"https://{prefix}/products/{product_handle}"
+                print(f"      [DEBUG] Using url_prefix as domain: {url}")
+                return url
+
+        # Fallback to shop_domain (only if no url_prefix)
+        url = f"https://{shop_domain}/products/{product_handle}"
+        print(f"      [DEBUG] Fallback to shop_domain: {url}")
+        return url
 
     def _build_collection_url(
         self,
@@ -195,10 +216,31 @@ class PinterestCampaignService:
         products_per_page: int,
         url_prefix: str = ''
     ) -> str:
-        """Build collection URL with page parameter based on product position."""
-        base_url = f"https://{shop_domain}"
+        """Build collection URL with page parameter based on product position.
+
+        If url_prefix is set, use it as the base domain.
+        Otherwise fallback to shop_domain (myshopify.com domain).
+        """
+        print(f"      [DEBUG] _build_collection_url: url_prefix='{url_prefix}', shop_domain='{shop_domain}', handle='{collection_handle}'")
+
         if url_prefix:
-            base_url = f"{base_url}/{url_prefix.strip('/')}"
+            # Clean up the prefix
+            prefix = url_prefix.strip().rstrip('/')
+
+            # Check if url_prefix is a full URL with protocol
+            if prefix.startswith('http://') or prefix.startswith('https://'):
+                base_url = prefix
+                print(f"      [DEBUG] Using url_prefix with protocol: {base_url}")
+            elif '.' in prefix:
+                # It's a domain without protocol (e.g., "dresswithsoul.com")
+                base_url = f"https://{prefix}"
+                print(f"      [DEBUG] Using url_prefix as domain: {base_url}")
+            else:
+                base_url = f"https://{shop_domain}"
+                print(f"      [DEBUG] url_prefix invalid, fallback to shop_domain: {base_url}")
+        else:
+            base_url = f"https://{shop_domain}"
+            print(f"      [DEBUG] No url_prefix, using shop_domain: {base_url}")
 
         # Calculate page number (1-indexed)
         page = (position_in_collection // products_per_page) + 1
@@ -230,6 +272,8 @@ class PinterestCampaignService:
         url_prefix = pinterest_settings.url_prefix if pinterest_settings else ''
         products_per_page = pinterest_settings.products_per_page if pinterest_settings else 10
         default_board_id = pinterest_settings.default_board_id if pinterest_settings else None
+
+        print(f"      [DEBUG] Pinterest Settings - url_prefix: '{url_prefix}', products_per_page: {products_per_page}, board_id: {default_board_id}")
 
         # Build campaign name
         creative_count = len(creatives)
