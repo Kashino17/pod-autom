@@ -437,8 +437,89 @@ Specifications:
         filename: str,
         storage_bucket: str = "winner-creatives"
     ) -> Optional[str]:
-        """Upload video bytes to Supabase Storage."""
+        """
+        Upload video bytes to Supabase Storage after resizing to Pinterest dimensions.
+
+        Pinterest requires exact 1000x1500 (2:3) for optimal display without black bars.
+        We use ffmpeg to resize/crop the video to these dimensions.
+        """
         try:
+            import subprocess
+            import tempfile
+            import os as os_module
+
+            # Write video to temp file
+            with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_input:
+                temp_input.write(video_data)
+                input_path = temp_input.name
+
+            # Output temp file
+            output_path = input_path.replace('.mp4', '_resized.mp4')
+
+            try:
+                # Try to get ffmpeg path from imageio-ffmpeg (provides bundled ffmpeg)
+                try:
+                    import imageio_ffmpeg
+                    ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+                    print(f"    Using imageio-ffmpeg: {ffmpeg_path}")
+                except ImportError:
+                    ffmpeg_path = 'ffmpeg'  # Fallback to system ffmpeg
+
+                # Use ffmpeg to resize video to exactly 1000x1500
+                # Using crop approach for better visual (no black bars):
+                # 1. Scale so the smaller dimension fits (covers the frame)
+                # 2. Crop to center 1000x1500
+                ffmpeg_cmd = [
+                    ffmpeg_path, '-y', '-i', input_path,
+                    '-vf', (
+                        # Scale to cover 1000x1500 (one dimension will be >= target)
+                        # Then crop to exact 1000x1500 from center
+                        'scale=1000:1500:force_original_aspect_ratio=increase,'
+                        'crop=1000:1500:(iw-1000)/2:(ih-1500)/2'
+                    ),
+                    '-c:v', 'libx264',
+                    '-preset', 'fast',
+                    '-crf', '23',
+                    '-c:a', 'aac',
+                    '-b:a', '128k',
+                    '-movflags', '+faststart',
+                    output_path
+                ]
+
+                result = subprocess.run(
+                    ffmpeg_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=120
+                )
+
+                if result.returncode != 0:
+                    print(f"    ffmpeg resize warning: {result.stderr[:200]}")
+                    # If ffmpeg fails, use original video
+                    output_path = input_path
+                else:
+                    print(f"    Resized video to 1000x1500px")
+
+                # Read the output file
+                with open(output_path, 'rb') as f:
+                    final_video_data = f.read()
+
+            except FileNotFoundError:
+                print(f"    Warning: ffmpeg not found, uploading original video")
+                final_video_data = video_data
+            except subprocess.TimeoutExpired:
+                print(f"    Warning: ffmpeg timeout, uploading original video")
+                final_video_data = video_data
+            finally:
+                # Clean up temp files
+                try:
+                    os_module.unlink(input_path)
+                    if os_module.path.exists(output_path) and output_path != input_path:
+                        os_module.unlink(output_path)
+                except:
+                    pass
+
+            # Upload to Supabase Storage
             from supabase import create_client
             supabase = create_client(
                 os.environ.get('SUPABASE_URL'),
@@ -448,7 +529,7 @@ Specifications:
             # Upload file
             result = supabase.storage.from_(storage_bucket).upload(
                 filename,
-                video_data,
+                final_video_data,
                 {"content-type": "video/mp4"}
             )
 
