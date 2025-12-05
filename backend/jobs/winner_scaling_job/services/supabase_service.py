@@ -355,29 +355,20 @@ class SupabaseService:
 
             if ad_account_result.data:
                 ad_account_uuid = ad_account_result.data['id']
-                print(f"    [DB] Inserting winner campaign into pinterest_campaigns...")
-                print(f"    [DB] shop_id={campaign.shop_id}, pinterest_campaign_id={campaign.pinterest_campaign_id}")
-                print(f"    [DB] ad_account_id={ad_account_uuid}, campaign_type=winner_campaign")
 
                 # Insert/update in pinterest_campaigns with campaign_type='winner_campaign'
-                upsert_result = self.client.table('pinterest_campaigns').upsert({
+                self.client.table('pinterest_campaigns').upsert({
                     'shop_id': campaign.shop_id,
                     'pinterest_campaign_id': campaign.pinterest_campaign_id,
                     'ad_account_id': ad_account_uuid,
                     'name': campaign.campaign_name,
                     'status': campaign.status,
-                    'daily_budget': 0,  # Will be updated by sync
+                    'daily_budget': 0,
                     'campaign_type': 'winner_campaign'
                 }, on_conflict='shop_id,pinterest_campaign_id').execute()
 
-                print(f"    [DB] Upsert result: {upsert_result.data}")
-            else:
-                print(f"    [DB] Warning: No ad account found for shop {campaign.shop_id}")
-
         except Exception as e:
-            import traceback
-            print(f"    [DB] ERROR inserting winner campaign into pinterest_campaigns: {e}")
-            print(f"    [DB] Traceback: {traceback.format_exc()}")
+            print(f"Warning: Could not insert winner campaign into pinterest_campaigns: {e}")
 
         return winner_campaign_id
 
