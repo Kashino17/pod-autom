@@ -465,17 +465,29 @@ Specifications:
                 except ImportError:
                     ffmpeg_path = 'ffmpeg'  # Fallback to system ffmpeg
 
-                # Use ffmpeg to resize video to exactly 1000x1500
-                # Using crop approach for better visual (no black bars):
-                # 1. Scale so the smaller dimension fits (covers the frame)
-                # 2. Crop to center 1000x1500
+                # Use ffmpeg to resize video to exactly 1000x1500 (2:3 aspect ratio)
+                # Veo 3.1 generates 9:16 videos (e.g., 1080x1920) which is narrower than 2:3
+                #
+                # 9:16 = 0.5625 aspect ratio (narrower/taller)
+                # 2:3  = 0.6667 aspect ratio (wider/shorter)
+                #
+                # To convert 9:16 to 2:3 without black bars:
+                # 1. Scale to fill the 2:3 frame (video will overflow top/bottom)
+                # 2. Crop the center to exact 1000x1500
+                #
+                # For 9:16 source: scale height to 1500, width becomes 843.75
+                # But we need width=1000, so scale width to 1000 -> height becomes 1778
+                # Then crop center 1000x1500
                 ffmpeg_cmd = [
                     ffmpeg_path, '-y', '-i', input_path,
                     '-vf', (
-                        # Scale to cover 1000x1500 (one dimension will be >= target)
-                        # Then crop to exact 1000x1500 from center
-                        'scale=1000:1500:force_original_aspect_ratio=increase,'
-                        'crop=1000:1500:(iw-1000)/2:(ih-1500)/2'
+                        # Force scale to exactly 1000 width, keeping aspect ratio
+                        # This will make 9:16 video taller than 1500
+                        'scale=1000:-1,'
+                        # Pad height to at least 1500 if needed (shouldn't be for 9:16)
+                        'pad=1000:max(ih\\,1500):0:(oh-ih)/2,'
+                        # Crop center to exactly 1000x1500
+                        'crop=1000:1500:0:(ih-1500)/2'
                     ),
                     '-c:v', 'libx264',
                     '-preset', 'fast',
