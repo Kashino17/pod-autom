@@ -81,20 +81,20 @@ class PinterestAPIClient:
         # Use Pinterest's timezone (GMT+4 / Dubai) for date calculations
         # This ensures our date range matches what Pinterest Ads Manager shows
         #
-        # Pinterest API returns data EXCLUSIVE of end_date, so:
-        # - end_date = tomorrow (to include today's data)
-        # - start_date = today - (days - 1) to get exactly N days
+        # "Last N days" = the N complete days BEFORE today (today excluded)
+        # Pinterest API end_date is EXCLUSIVE
         #
-        # Example for "last 7 days" when today is Dec 5:
-        # end_date = Dec 6, start_date = Nov 29
-        # API returns: Nov 29, Nov 30, Dec 1, Dec 2, Dec 3, Dec 4, Dec 5 (7 days)
+        # Example for "last 7 days" when today is Dec 5 (GMT+4):
+        # end_date = Dec 5 (exclusive, so up to Dec 4)
+        # start_date = Nov 28
+        # API returns: Nov 28, Nov 29, Nov 30, Dec 1, Dec 2, Dec 3, Dec 4 (7 full days)
         pinterest_tz = timezone(timedelta(hours=4))
         now_pinterest = datetime.now(pinterest_tz)
 
-        # End date is tomorrow (exclusive) to include today
-        end_date = (now_pinterest + timedelta(days=1)).strftime('%Y-%m-%d')
-        # Start date is (days - 1) days ago to get exactly N days including today
-        start_date = (now_pinterest - timedelta(days=days - 1)).strftime('%Y-%m-%d')
+        # End date is today (exclusive) - data up to yesterday
+        end_date = now_pinterest.strftime('%Y-%m-%d')
+        # Start date is N days before today
+        start_date = (now_pinterest - timedelta(days=days)).strftime('%Y-%m-%d')
 
         params = {
             'campaign_ids': campaign_id,
@@ -103,6 +103,8 @@ class PinterestAPIClient:
             'columns': 'SPEND_IN_MICRO_DOLLAR,TOTAL_CHECKOUT,TOTAL_CHECKOUT_VALUE_IN_MICRO_DOLLAR',
             'granularity': 'TOTAL'
         }
+
+        print(f"      [DEBUG] Pinterest API request: start_date={start_date}, end_date={end_date}, days={days}")
 
         result = self._make_request(
             'GET',
