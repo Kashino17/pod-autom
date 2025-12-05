@@ -344,6 +344,22 @@ class SupabaseService:
             print(f"Error getting sync log entries: {e}")
             return []
 
+    def get_batch_assignments_for_campaign(self, campaign_id: str) -> List[Dict]:
+        """
+        Get all campaign_batch_assignments entries for a campaign.
+        Returns list of assignments with collection_id info.
+        """
+        try:
+            result = self.client.table('campaign_batch_assignments').select(
+                'id, shopify_collection_id, assigned_shop'
+            ).eq('campaign_id', campaign_id).execute()
+
+            return result.data or []
+
+        except Exception as e:
+            print(f"Error getting batch assignments: {e}")
+            return []
+
     def delete_batch_assignments_for_campaign(self, campaign_id: str) -> int:
         """
         Delete all campaign_batch_assignments entries for a campaign.
@@ -369,30 +385,34 @@ class SupabaseService:
             print(f"Error deleting batch assignments: {e}")
             return 0
 
-    def delete_product_sales_for_campaign(self, shop_id: str, campaign_id: str) -> int:
+    def delete_product_sales_for_collections(self, shop_id: str, collection_ids: List[str]) -> int:
         """
-        Delete product_sales entries for products that were synced via this campaign.
-        First gets the product IDs from pinterest_sync_log, then deletes matching product_sales.
+        Delete product_sales entries for specific collections.
+
+        Args:
+            shop_id: The shop ID
+            collection_ids: List of collection IDs to delete sales for
+
         Returns the number of deleted entries.
         """
+        if not collection_ids:
+            return 0
+
         try:
-            # Get product IDs from sync log
-            sync_entries = self.get_sync_log_entries_for_campaign(campaign_id)
+            # Count before deletion
+            count_response = self.client.table('product_sales').select(
+                'id'
+            ).eq('shop_id', shop_id).in_('collection_id', collection_ids).execute()
 
-            if not sync_entries:
-                return 0
+            count = len(count_response.data) if count_response.data else 0
 
-            product_ids = [entry['shopify_product_id'] for entry in sync_entries if entry.get('shopify_product_id')]
+            if count > 0:
+                # Delete product_sales entries for these collections
+                self.client.table('product_sales').delete().eq(
+                    'shop_id', shop_id
+                ).in_('collection_id', collection_ids).execute()
 
-            if not product_ids:
-                return 0
-
-            # Delete product_sales entries for these products
-            self.client.table('product_sales').delete().eq(
-                'shop_id', shop_id
-            ).in_('product_id', product_ids).execute()
-
-            return len(product_ids)
+            return count
 
         except Exception as e:
             print(f"Error deleting product sales: {e}")
@@ -401,8 +421,9 @@ class SupabaseService:
     def cleanup_paused_campaign_sync(self, shop_id: str, campaign_id: str, campaign_name: str) -> Dict:
         """
         Full cleanup when a campaign is paused:
-        1. Delete campaign_batch_assignments entries (Kampagnen-Kollektions Verknüpfung)
-        2. Delete product_sales entries for synced products
+        1. Get collection IDs from campaign_batch_assignments
+        2. Delete product_sales entries for those collections
+        3. Delete campaign_batch_assignments entries
 
         NOTE: pinterest_sync_log entries are NOT deleted - they serve as history.
 
@@ -414,10 +435,24 @@ class SupabaseService:
         }
 
         try:
-            # First delete product_sales (needs sync_log data to find product IDs)
-            result['product_sales_deleted'] = self.delete_product_sales_for_campaign(shop_id, campaign_id)
+            # First get the batch assignments to find collection IDs
+            assignments = self.get_batch_assignments_for_campaign(campaign_id)
 
-            # Delete campaign_batch_assignments (Kampagnen-Kollektions Verknüpfung)
+            if assignments:
+                # Extract unique collection IDs
+                collection_ids = list(set(
+                    a['shopify_collection_id']
+                    for a in assignments
+                    if a.get('shopify_collection_id')
+                ))
+
+                # Delete product_sales for these collections
+                if collection_ids:
+                    result['product_sales_deleted'] = self.delete_product_sales_for_collections(
+                        shop_id, collection_ids
+                    )
+
+            # Delete campaign_batch_assignments
             result['batch_assignments_deleted'] = self.delete_batch_assignments_for_campaign(campaign_id)
 
             if result['batch_assignments_deleted'] > 0 or result['product_sales_deleted'] > 0:
