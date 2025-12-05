@@ -60,7 +60,9 @@ class OptimizationRule:
     action_unit: Optional[str]  # 'amount' or 'percent'
     min_budget: float = 5.00
     max_budget: float = 1000.00
-    min_campaign_age_days: int = 0  # Minimum days campaign must exist before rule applies
+    # Campaign age restrictions (null/None = disabled)
+    min_campaign_age_days: Optional[int] = None  # Minimum days campaign must exist before rule applies
+    max_campaign_age_days: Optional[int] = None  # Maximum days - rule only applies to campaigns younger than this
 
     @classmethod
     def from_db_row(cls, row: Dict) -> 'OptimizationRule':
@@ -87,7 +89,8 @@ class OptimizationRule:
             action_unit=row.get('action_unit'),
             min_budget=row.get('min_budget', 5.00),
             max_budget=row.get('max_budget', 1000.00),
-            min_campaign_age_days=row.get('min_campaign_age_days', 0)
+            min_campaign_age_days=row.get('min_campaign_age_days'),  # None = disabled
+            max_campaign_age_days=row.get('max_campaign_age_days')   # None = disabled
         )
 
 

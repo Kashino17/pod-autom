@@ -144,8 +144,12 @@ def find_matching_rule(rules: List[OptimizationRule],
         if not rule.is_enabled:
             continue
 
-        # Check minimum campaign age requirement
-        if rule.min_campaign_age_days > 0 and campaign_age_days < rule.min_campaign_age_days:
+        # Check minimum campaign age requirement (only if enabled/set)
+        if rule.min_campaign_age_days is not None and campaign_age_days < rule.min_campaign_age_days:
+            continue
+
+        # Check maximum campaign age requirement (only if enabled/set)
+        if rule.max_campaign_age_days is not None and campaign_age_days > rule.max_campaign_age_days:
             continue
 
         if evaluate_conditions(rule.conditions, metrics):

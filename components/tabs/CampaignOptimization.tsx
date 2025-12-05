@@ -275,7 +275,8 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
       action_unit: 'percent',
       min_budget: 5,
       max_budget: 1000,
-      min_campaign_age_days: 0
+      min_campaign_age_days: null,
+      max_campaign_age_days: null
     };
     setEditingRule(newRule);
     setIsCreatingNew(true);
@@ -573,7 +574,8 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
                           <h4 className="font-medium text-zinc-200">{rule.name}</h4>
                           <p className="text-xs text-zinc-500">
                             Priorität: {rule.priority} | {rule.conditions.length} Bedingung(en)
-                            {rule.min_campaign_age_days > 0 && ` | Min. ${rule.min_campaign_age_days} Tage`}
+                            {rule.min_campaign_age_days !== null && ` | Min. ${rule.min_campaign_age_days} Tage`}
+                            {rule.max_campaign_age_days !== null && ` | Max. ${rule.max_campaign_age_days} Tage`}
                           </p>
                         </div>
                       </div>
@@ -786,28 +788,95 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel, isSavin
             />
           </div>
 
-          {/* Priority and Campaign Age */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-2">Priorität</label>
-              <input
-                type="number"
-                value={editedRule.priority}
-                onChange={(e) => setEditedRule({ ...editedRule, priority: parseInt(e.target.value) || 0 })}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-primary/50"
-              />
-              <p className="text-xs text-zinc-500 mt-1">Höhere Priorität wird zuerst geprüft</p>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-2">Mindestalter Kampagne (Tage)</label>
-              <input
-                type="number"
-                min="0"
-                value={editedRule.min_campaign_age_days || 0}
-                onChange={(e) => setEditedRule({ ...editedRule, min_campaign_age_days: parseInt(e.target.value) || 0 })}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-primary/50"
-              />
-              <p className="text-xs text-zinc-500 mt-1">Kampagne muss mindestens X Tage aktiv sein</p>
+          {/* Priority */}
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-2">Priorität</label>
+            <input
+              type="number"
+              value={editedRule.priority}
+              onChange={(e) => setEditedRule({ ...editedRule, priority: parseInt(e.target.value) || 0 })}
+              className="w-32 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-primary/50"
+            />
+            <p className="text-xs text-zinc-500 mt-1">Höhere Priorität wird zuerst geprüft</p>
+          </div>
+
+          {/* Campaign Age Restrictions */}
+          <div className="bg-zinc-950/50 border border-zinc-800 rounded-xl p-4">
+            <label className="block text-xs font-medium text-zinc-400 mb-3">Kampagnenalter-Einschränkungen</label>
+            <div className="grid grid-cols-2 gap-4">
+              {/* Min Age */}
+              <div className={`p-3 rounded-lg border transition-all ${editedRule.min_campaign_age_days !== null ? 'bg-zinc-900 border-primary/30' : 'bg-zinc-950 border-zinc-800'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-zinc-300">Mindestalter</span>
+                  <button
+                    onClick={() => setEditedRule({
+                      ...editedRule,
+                      min_campaign_age_days: editedRule.min_campaign_age_days !== null ? null : 7
+                    })}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                      editedRule.min_campaign_age_days !== null ? 'bg-primary' : 'bg-zinc-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform shadow ${
+                        editedRule.min_campaign_age_days !== null ? 'translate-x-5' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+                {editedRule.min_campaign_age_days !== null && (
+                  <>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editedRule.min_campaign_age_days}
+                      onChange={(e) => setEditedRule({ ...editedRule, min_campaign_age_days: parseInt(e.target.value) || 0 })}
+                      className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-primary/50"
+                    />
+                    <p className="text-xs text-zinc-500 mt-1">Mind. X Tage alt</p>
+                  </>
+                )}
+                {editedRule.min_campaign_age_days === null && (
+                  <p className="text-xs text-zinc-600">Deaktiviert</p>
+                )}
+              </div>
+
+              {/* Max Age */}
+              <div className={`p-3 rounded-lg border transition-all ${editedRule.max_campaign_age_days !== null ? 'bg-zinc-900 border-primary/30' : 'bg-zinc-950 border-zinc-800'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-zinc-300">Maximalalter</span>
+                  <button
+                    onClick={() => setEditedRule({
+                      ...editedRule,
+                      max_campaign_age_days: editedRule.max_campaign_age_days !== null ? null : 30
+                    })}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                      editedRule.max_campaign_age_days !== null ? 'bg-primary' : 'bg-zinc-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform shadow ${
+                        editedRule.max_campaign_age_days !== null ? 'translate-x-5' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+                {editedRule.max_campaign_age_days !== null && (
+                  <>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editedRule.max_campaign_age_days}
+                      onChange={(e) => setEditedRule({ ...editedRule, max_campaign_age_days: parseInt(e.target.value) || 0 })}
+                      className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-primary/50"
+                    />
+                    <p className="text-xs text-zinc-500 mt-1">Max. X Tage alt</p>
+                  </>
+                )}
+                {editedRule.max_campaign_age_days === null && (
+                  <p className="text-xs text-zinc-600">Deaktiviert</p>
+                )}
+              </div>
             </div>
           </div>
 
