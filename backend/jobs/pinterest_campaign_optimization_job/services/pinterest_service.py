@@ -80,11 +80,21 @@ class PinterestAPIClient:
         """
         # Use Pinterest's timezone (GMT+4 / Dubai) for date calculations
         # This ensures our date range matches what Pinterest Ads Manager shows
+        #
+        # Pinterest API returns data EXCLUSIVE of end_date, so:
+        # - end_date = tomorrow (to include today's data)
+        # - start_date = today - (days - 1) to get exactly N days
+        #
+        # Example for "last 7 days" when today is Dec 5:
+        # end_date = Dec 6, start_date = Nov 29
+        # API returns: Nov 29, Nov 30, Dec 1, Dec 2, Dec 3, Dec 4, Dec 5 (7 days)
         pinterest_tz = timezone(timedelta(hours=4))
         now_pinterest = datetime.now(pinterest_tz)
 
-        end_date = now_pinterest.strftime('%Y-%m-%d')
-        start_date = (now_pinterest - timedelta(days=days)).strftime('%Y-%m-%d')
+        # End date is tomorrow (exclusive) to include today
+        end_date = (now_pinterest + timedelta(days=1)).strftime('%Y-%m-%d')
+        # Start date is (days - 1) days ago to get exactly N days including today
+        start_date = (now_pinterest - timedelta(days=days - 1)).strftime('%Y-%m-%d')
 
         params = {
             'campaign_ids': campaign_id,
