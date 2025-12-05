@@ -367,7 +367,9 @@ Use this product image as the main reference: {product_image_url if product_imag
             print(f"    Starting Veo 3.1 video generation...")
 
             # Prepare image parameter if reference image is provided
-            # Resize to 1000x1500 (9:16) to match video format
+            # IMPORTANT: Resize to exact 9:16 aspect ratio to match video config
+            # 9:16 = 0.5625 ratio (e.g., 1080x1920, 720x1280)
+            # Using 1080x1920 for Full HD vertical
             image_param = None
             if reference_image_url:
                 try:
@@ -378,16 +380,17 @@ Use this product image as the main reference: {product_image_url if product_imag
                     img_response = requests.get(reference_image_url, timeout=30)
                     img_response.raise_for_status()
 
-                    # Open and resize to 1000x1500 (9:16 aspect ratio)
+                    # Open image
                     img = Image.open(BytesIO(img_response.content))
 
-                    # Target dimensions for 9:16 video
-                    target_width = 1000
-                    target_height = 1500
+                    # Target dimensions for EXACT 9:16 video (matches API config)
+                    # 9:16 ratio = 1080x1920 (Full HD Vertical)
+                    target_width = 1080
+                    target_height = 1920
 
                     # Resize with crop to fill (no black bars)
                     img_ratio = img.width / img.height
-                    target_ratio = target_width / target_height
+                    target_ratio = target_width / target_height  # 0.5625
 
                     if img_ratio > target_ratio:
                         # Image is wider - crop sides
@@ -415,7 +418,7 @@ Use this product image as the main reference: {product_image_url if product_imag
                         image_bytes=resized_bytes,
                         mime_type='image/jpeg'
                     )
-                    print(f"    Reference image resized to 1000x1500 for Veo 3.1")
+                    print(f"    Reference image resized to {target_width}x{target_height} (9:16) for Veo 3.1")
                 except Exception as img_err:
                     print(f"    Warning: Could not load/resize reference image for video: {img_err}")
                     image_param = None
