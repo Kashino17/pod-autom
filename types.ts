@@ -279,14 +279,24 @@ export interface WinnerScalingSettings {
   sales_threshold_14d: number;
   min_buckets_required: number; // 1-4
 
-  // Campaign limits
+  // Campaign limits (legacy - still used as fallback)
   max_campaigns_per_winner: number;
 
-  // Creative settings
+  // AI Creative Settings - Video (Veo 3.1)
+  video_enabled: boolean;
+  max_campaigns_per_winner_video: number;
   video_count: number;
-  image_count: number;
   campaigns_per_video: number;
+
+  // AI Creative Settings - Image (GPT-Image)
+  image_enabled: boolean;
+  max_campaigns_per_winner_image: number;
+  image_count: number;
   campaigns_per_image: number;
+
+  // Custom prompts for AI generation
+  video_prompt?: string;
+  image_prompt?: string;
 
   // Link settings (A/B Test)
   link_to_product: boolean;

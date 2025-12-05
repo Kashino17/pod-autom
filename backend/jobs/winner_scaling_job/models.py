@@ -19,14 +19,24 @@ class WinnerScalingSettings:
     sales_threshold_14d: int = 20
     min_buckets_required: int = 3  # 1-4
 
-    # Campaign limits
+    # Campaign limits (legacy - still used as fallback)
     max_campaigns_per_winner: int = 4
 
-    # Creative settings
+    # AI Creative Settings - Video (Veo 3.1)
+    video_enabled: bool = True
+    max_campaigns_per_winner_video: int = 2
     video_count: int = 2          # Number of videos with Veo 3.1
-    image_count: int = 4          # Number of images with GPT-Image
     campaigns_per_video: int = 1  # Campaigns per video set
+
+    # AI Creative Settings - Image (GPT-Image)
+    image_enabled: bool = True
+    max_campaigns_per_winner_image: int = 4
+    image_count: int = 4          # Number of images with GPT-Image
     campaigns_per_image: int = 2  # Campaigns per image set
+
+    # Custom prompts for AI generation
+    video_prompt: Optional[str] = None
+    image_prompt: Optional[str] = None
 
     # Link settings (A/B Test)
     link_to_product: bool = True

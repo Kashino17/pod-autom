@@ -117,10 +117,19 @@ class SupabaseService:
             sales_threshold_14d=d.get('sales_threshold_14d', 20),
             min_buckets_required=d.get('min_buckets_required', 3),
             max_campaigns_per_winner=d.get('max_campaigns_per_winner', 4),
+            # AI Creative Settings - Video (Veo 3.1)
+            video_enabled=d.get('video_enabled', True),
+            max_campaigns_per_winner_video=d.get('max_campaigns_per_winner_video', 2),
             video_count=d.get('video_count', 2),
-            image_count=d.get('image_count', 4),
             campaigns_per_video=d.get('campaigns_per_video', 1),
+            # AI Creative Settings - Image (GPT-Image)
+            image_enabled=d.get('image_enabled', True),
+            max_campaigns_per_winner_image=d.get('max_campaigns_per_winner_image', 4),
+            image_count=d.get('image_count', 4),
             campaigns_per_image=d.get('campaigns_per_image', 2),
+            # Custom prompts
+            video_prompt=d.get('video_prompt'),
+            image_prompt=d.get('image_prompt'),
             link_to_product=d.get('link_to_product', True),
             link_to_collection=d.get('link_to_collection', True),
             daily_budget_per_campaign=float(d.get('daily_budget_per_campaign', 10)),

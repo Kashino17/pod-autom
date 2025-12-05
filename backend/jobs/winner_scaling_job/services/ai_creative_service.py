@@ -45,7 +45,8 @@ class AICreativeService:
         self,
         product_title: str,
         product_image_url: Optional[str],
-        count: int = 4
+        count: int = 4,
+        custom_prompt: Optional[str] = None
     ) -> CreativeGenerationResult:
         """
         Generate Pinterest-optimized images using GPT-Image (DALL-E 3).
@@ -54,6 +55,7 @@ class AICreativeService:
             product_title: Title of the product
             product_image_url: Shopify product image URL to use as reference
             count: Number of images to generate
+            custom_prompt: Optional custom prompt from settings (replaces default)
 
         Returns:
             CreativeGenerationResult with generated images
@@ -74,8 +76,13 @@ class AICreativeService:
         else:
             print(f"    WARNING: No product image URL provided - generating without reference")
 
-        # Generate prompt based on product
-        base_prompt = self._create_image_prompt(product_title, product_image_url)
+        # Generate prompt based on product - use custom prompt if provided
+        if custom_prompt:
+            # Append product info to custom prompt
+            base_prompt = f"{custom_prompt}\n\nProduct title: {product_title}\nReference image: {product_image_url if product_image_url else 'N/A'}"
+            print(f"    Using custom image prompt from settings")
+        else:
+            base_prompt = self._create_image_prompt(product_title, product_image_url)
 
         for i in range(count):
             try:
@@ -142,7 +149,8 @@ class AICreativeService:
         self,
         product_title: str,
         product_image_url: Optional[str],
-        count: int = 2
+        count: int = 2,
+        custom_prompt: Optional[str] = None
     ) -> CreativeGenerationResult:
         """
         Generate Pinterest-optimized videos using Google Veo 3.1.
@@ -151,6 +159,7 @@ class AICreativeService:
             product_title: Title of the product
             product_image_url: Shopify product image URL to use as reference
             count: Number of videos to generate
+            custom_prompt: Optional custom prompt from settings (replaces default)
 
         Returns:
             CreativeGenerationResult with generated videos
@@ -165,8 +174,13 @@ class AICreativeService:
         creatives = []
         errors = []
 
-        # Generate video prompts
-        base_prompt = self._create_video_prompt(product_title, product_image_url)
+        # Generate video prompts - use custom prompt if provided
+        if custom_prompt:
+            # Append product info to custom prompt
+            base_prompt = f"{custom_prompt}\n\nUse this product image as the main reference: {product_image_url if product_image_url else 'N/A'}"
+            print(f"    Using custom video prompt from settings")
+        else:
+            base_prompt = self._create_video_prompt(product_title, product_image_url)
 
         for i in range(count):
             try:

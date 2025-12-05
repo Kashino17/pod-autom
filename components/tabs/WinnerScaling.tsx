@@ -33,7 +33,9 @@ import {
   TrendingUp,
   AlertTriangle,
   Clock,
-  Hash
+  Hash,
+  Edit2,
+  FileText
 } from 'lucide-react';
 import { supabase } from '../../src/lib/supabase';
 
@@ -56,6 +58,66 @@ export const WinnerScaling: React.FC<WinnerScalingProps> = ({ shopId }) => {
 
   // Expanded winner for detail view
   const [expandedWinnerId, setExpandedWinnerId] = useState<string | null>(null);
+
+  // Prompt editor modal state
+  const [promptModalOpen, setPromptModalOpen] = useState(false);
+  const [promptModalType, setPromptModalType] = useState<'video' | 'image'>('video');
+  const [editingPrompt, setEditingPrompt] = useState('');
+
+  // Default prompts (used when no custom prompt is set)
+  const DEFAULT_VIDEO_PROMPT = `Create an 8-second vertical fashion product showcase video optimized for Pinterest, in full 2:3 aspect ratio (1000x1500px), with no black bars or letterboxing.
+
+Use the provided product image strictly as a visual reference for design accuracy — the product's shape, color, material, and details must exactly match the reference image. Do not use the image dimensions or background as framing; instead, generate a fully native vertical video composition.
+
+Video Requirements:
+    •    1000x1500px resolution, true 2:3 vertical layout
+    •    Clean, minimal background to enhance product visibility
+    •    Sophisticated, elegant lighting to highlight product details
+    •    Cinematic camera movement: smooth pans, gentle zoom-ins or reveals
+    •    No text overlays, music, or captions
+    •    Optionally include subtle transitions or motion graphics
+    •    Final frame must clearly display the product, well-lit and centered
+
+Critical constraint: The product must appear identical to the image — no changes in color, texture, cut, or design.`;
+
+  const DEFAULT_IMAGE_PROMPT = `Create a high-quality, Pinterest-optimized product advertisement image of the following fashion item. The product in the generated image must exactly match the reference image — no changes in color, design, shape, texture, or any other visual attributes.
+
+Requirements:
+    •    Format: vertical 2:3 aspect ratio (1000×1500 pixels)
+    •    Style: professional e-commerce photography
+    •    Lighting: soft and flattering
+    •    Composition: clean, minimal, with the product as the central focus
+    •    Aesthetic: modern, aspirational, lifestyle-inspired
+    •    Colors: vibrant yet natural; high contrast
+    •    Background: neutral, elegant, and unobtrusive (do not distract from the product)
+    •    No text, logos, watermarks, or graphic overlays of any kind`;
+
+  const openPromptModal = (type: 'video' | 'image') => {
+    setPromptModalType(type);
+    if (settings) {
+      const currentPrompt = type === 'video'
+        ? (settings.video_prompt || DEFAULT_VIDEO_PROMPT)
+        : (settings.image_prompt || DEFAULT_IMAGE_PROMPT);
+      setEditingPrompt(currentPrompt);
+    }
+    setPromptModalOpen(true);
+  };
+
+  const savePrompt = () => {
+    if (settings) {
+      if (promptModalType === 'video') {
+        setSettings({ ...settings, video_prompt: editingPrompt });
+      } else {
+        setSettings({ ...settings, image_prompt: editingPrompt });
+      }
+    }
+    setPromptModalOpen(false);
+  };
+
+  const resetPromptToDefault = () => {
+    const defaultPrompt = promptModalType === 'video' ? DEFAULT_VIDEO_PROMPT : DEFAULT_IMAGE_PROMPT;
+    setEditingPrompt(defaultPrompt);
+  };
 
   // Load data on mount
   useEffect(() => {
@@ -86,10 +148,16 @@ export const WinnerScaling: React.FC<WinnerScalingProps> = ({ shopId }) => {
           sales_threshold_10d: 15,
           sales_threshold_14d: 20,
           min_buckets_required: 3,
-          max_campaigns_per_winner: 4,
+          max_campaigns_per_winner: 6, // legacy fallback
+          // Video Settings
+          video_enabled: true,
+          max_campaigns_per_winner_video: 2,
           video_count: 2,
-          image_count: 4,
           campaigns_per_video: 1,
+          // Image Settings
+          image_enabled: true,
+          max_campaigns_per_winner_image: 4,
+          image_count: 4,
           campaigns_per_image: 2,
           link_to_product: true,
           link_to_collection: true,
@@ -423,97 +491,228 @@ export const WinnerScaling: React.FC<WinnerScalingProps> = ({ shopId }) => {
             </div>
           </div>
 
-          {/* Creative Settings */}
+          {/* Creative Settings - Video */}
           <div className="col-span-12 lg:col-span-6">
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
+            <div className={`bg-zinc-900/50 border rounded-xl overflow-hidden transition-all ${
+              settings.video_enabled ? 'border-purple-500/30' : 'border-zinc-800 opacity-75'
+            }`}>
               <div className="p-5 border-b border-zinc-800/50 bg-zinc-900/50">
-                <div className="flex items-center gap-2">
-                  <Video className="w-4 h-4 text-purple-400" />
-                  <h3 className="font-semibold text-zinc-200">AI Creative Einstellungen</h3>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Video className="w-4 h-4 text-purple-400" />
+                    <h3 className="font-semibold text-zinc-200">Video Generierung (Veo 3.1)</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => openPromptModal('video')}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-purple-400 bg-purple-500/10 border border-purple-500/20 rounded-lg hover:bg-purple-500/20 transition-colors"
+                      title="Prompt bearbeiten"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                      Prompt
+                    </button>
+                    <button
+                      onClick={() => setSettings({ ...settings, video_enabled: !settings.video_enabled })}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                        settings.video_enabled ? 'bg-purple-500' : 'bg-zinc-700'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                          settings.video_enabled ? 'translate-x-5' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div className="p-6 space-y-4">
-
-                {/* Video Settings */}
-                <div className="p-4 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Video className="w-4 h-4 text-purple-400" />
-                    <span className="text-sm font-medium text-zinc-300">Videos (Veo 3.1)</span>
+              <div className={`p-6 space-y-4 ${!settings.video_enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-zinc-500 mb-1">Anzahl Videos</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="5"
+                      value={settings.video_count}
+                      onChange={(e) => setSettings({ ...settings, video_count: parseInt(e.target.value) || 0 })}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-purple-500/50"
+                    />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs text-zinc-500 mb-1">Anzahl Videos</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="5"
-                        value={settings.video_count}
-                        onChange={(e) => setSettings({ ...settings, video_count: parseInt(e.target.value) || 0 })}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-purple-500/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-zinc-500 mb-1">Kampagnen/Video</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="5"
-                        value={settings.campaigns_per_video}
-                        onChange={(e) => setSettings({ ...settings, campaigns_per_video: parseInt(e.target.value) || 1 })}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-purple-500/50"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-xs text-zinc-500 mb-1">Kampagnen/Video</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="5"
+                      value={settings.campaigns_per_video}
+                      onChange={(e) => setSettings({ ...settings, campaigns_per_video: parseInt(e.target.value) || 1 })}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-purple-500/50"
+                    />
                   </div>
                 </div>
 
-                {/* Image Settings */}
-                <div className="p-4 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Image className="w-4 h-4 text-blue-400" />
-                    <span className="text-sm font-medium text-zinc-300">Bilder (GPT-Image)</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs text-zinc-500 mb-1">Anzahl Bilder</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="10"
-                        value={settings.image_count}
-                        onChange={(e) => setSettings({ ...settings, image_count: parseInt(e.target.value) || 0 })}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-blue-500/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-zinc-500 mb-1">Kampagnen/Bildset</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="5"
-                        value={settings.campaigns_per_image}
-                        onChange={(e) => setSettings({ ...settings, campaigns_per_image: parseInt(e.target.value) || 1 })}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-blue-500/50"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Max Campaigns */}
-                <div>
+                {/* Max Video Campaigns */}
+                <div className="pt-3 border-t border-zinc-800">
                   <label className="block text-xs font-medium text-zinc-400 mb-2">
-                    Max. Kampagnen pro Winner
+                    Kampagnen pro Winner (Video)
                   </label>
                   <input
                     type="number"
-                    min="1"
-                    max="20"
-                    value={settings.max_campaigns_per_winner}
-                    onChange={(e) => setSettings({ ...settings, max_campaigns_per_winner: parseInt(e.target.value) || 4 })}
-                    className="w-32 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-amber-500/50"
+                    min="0"
+                    max="10"
+                    value={settings.max_campaigns_per_winner_video}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value) || 0;
+                      setSettings({
+                        ...settings,
+                        max_campaigns_per_winner_video: value,
+                        max_campaigns_per_winner: value + settings.max_campaigns_per_winner_image
+                      });
+                    }}
+                    className="w-24 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-purple-500/50"
                   />
                   <p className="text-xs text-zinc-500 mt-1">
-                    Pausierte Kampagnen werden automatisch durch neue ersetzt
+                    Maximale Video-Kampagnen pro Winner Produkt
                   </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Creative Settings - Image */}
+          <div className="col-span-12 lg:col-span-6">
+            <div className={`bg-zinc-900/50 border rounded-xl overflow-hidden transition-all ${
+              settings.image_enabled ? 'border-blue-500/30' : 'border-zinc-800 opacity-75'
+            }`}>
+              <div className="p-5 border-b border-zinc-800/50 bg-zinc-900/50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Image className="w-4 h-4 text-blue-400" />
+                    <h3 className="font-semibold text-zinc-200">Bild Generierung (GPT-Image)</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => openPromptModal('image')}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-colors"
+                      title="Prompt bearbeiten"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                      Prompt
+                    </button>
+                    <button
+                      onClick={() => setSettings({ ...settings, image_enabled: !settings.image_enabled })}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                        settings.image_enabled ? 'bg-blue-500' : 'bg-zinc-700'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                          settings.image_enabled ? 'translate-x-5' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className={`p-6 space-y-4 ${!settings.image_enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-zinc-500 mb-1">Anzahl Bilder</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      value={settings.image_count}
+                      onChange={(e) => setSettings({ ...settings, image_count: parseInt(e.target.value) || 0 })}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-blue-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-zinc-500 mb-1">Kampagnen/Bildset</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="5"
+                      value={settings.campaigns_per_image}
+                      onChange={(e) => setSettings({ ...settings, campaigns_per_image: parseInt(e.target.value) || 1 })}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-blue-500/50"
+                    />
+                  </div>
+                </div>
+
+                {/* Max Image Campaigns */}
+                <div className="pt-3 border-t border-zinc-800">
+                  <label className="block text-xs font-medium text-zinc-400 mb-2">
+                    Kampagnen pro Winner (Bild)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="10"
+                    value={settings.max_campaigns_per_winner_image}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value) || 0;
+                      setSettings({
+                        ...settings,
+                        max_campaigns_per_winner_image: value,
+                        max_campaigns_per_winner: settings.max_campaigns_per_winner_video + value
+                      });
+                    }}
+                    className="w-24 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-blue-500/50"
+                  />
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Maximale Bild-Kampagnen pro Winner Produkt
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Validation Warning */}
+          {!settings.video_enabled && !settings.image_enabled && (
+            <div className="col-span-12">
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-3 text-amber-400">
+                <AlertTriangle className="w-5 h-5 shrink-0" />
+                <span className="text-sm">
+                  Mindestens eine Creative-Art (Video oder Bild) muss aktiviert sein, damit Winner Scaling funktioniert.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Total Campaigns Summary */}
+          <div className="col-span-12">
+            <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-medium text-zinc-300">Kampagnen-Zusammenfassung pro Winner</h4>
+                  <p className="text-xs text-zinc-500 mt-0.5">Pausierte Kampagnen werden automatisch durch neue ersetzt</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  {settings.video_enabled && (
+                    <div className="text-center">
+                      <span className="text-lg font-bold text-purple-400">{settings.max_campaigns_per_winner_video}</span>
+                      <span className="block text-[10px] text-zinc-500">Video</span>
+                    </div>
+                  )}
+                  {settings.video_enabled && settings.image_enabled && (
+                    <span className="text-zinc-600">+</span>
+                  )}
+                  {settings.image_enabled && (
+                    <div className="text-center">
+                      <span className="text-lg font-bold text-blue-400">{settings.max_campaigns_per_winner_image}</span>
+                      <span className="block text-[10px] text-zinc-500">Bild</span>
+                    </div>
+                  )}
+                  <span className="text-zinc-600">=</span>
+                  <div className="text-center px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                    <span className="text-lg font-bold text-amber-400">
+                      {(settings.video_enabled ? settings.max_campaigns_per_winner_video : 0) +
+                       (settings.image_enabled ? settings.max_campaigns_per_winner_image : 0)}
+                    </span>
+                    <span className="block text-[10px] text-zinc-500">Gesamt</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -950,6 +1149,99 @@ export const WinnerScaling: React.FC<WinnerScalingProps> = ({ shopId }) => {
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {/* Prompt Editor Modal */}
+      {promptModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setPromptModalOpen(false)}
+          />
+
+          {/* Modal Content */}
+          <div className="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${
+                  promptModalType === 'video'
+                    ? 'bg-purple-500/10 border border-purple-500/20'
+                    : 'bg-blue-500/10 border border-blue-500/20'
+                }`}>
+                  {promptModalType === 'video' ? (
+                    <Video className="w-5 h-5 text-purple-400" />
+                  ) : (
+                    <Image className="w-5 h-5 text-blue-400" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">
+                    {promptModalType === 'video' ? 'Video Prompt bearbeiten' : 'Bild Prompt bearbeiten'}
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    {promptModalType === 'video' ? 'Veo 3.1 Video-Generierung' : 'GPT-Image Bild-Generierung'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPromptModalOpen(false)}
+                className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 p-5 overflow-y-auto">
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-zinc-300">
+                  AI-Generierungs-Prompt
+                </label>
+                <textarea
+                  value={editingPrompt}
+                  onChange={(e) => setEditingPrompt(e.target.value)}
+                  className="w-full h-72 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-white text-sm font-mono leading-relaxed focus:outline-none focus:border-amber-500/50 resize-none"
+                  placeholder="Gib hier deinen Custom Prompt ein..."
+                />
+                <p className="text-xs text-zinc-500">
+                  Der Prompt wird automatisch mit Produkttitel und Bild-URL ergänzt.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between p-5 border-t border-zinc-800 bg-zinc-900/50">
+              <button
+                onClick={resetPromptToDefault}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Auf Standard zurücksetzen
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPromptModalOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={savePrompt}
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${
+                    promptModalType === 'video'
+                      ? 'bg-purple-500 hover:bg-purple-600'
+                      : 'bg-blue-500 hover:bg-blue-600'
+                  }`}
+                >
+                  <Save className="w-4 h-4" />
+                  Speichern
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
