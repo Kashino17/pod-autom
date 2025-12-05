@@ -363,7 +363,7 @@ class SupabaseService:
                     'ad_account_id': ad_account_uuid,
                     'name': campaign.campaign_name,
                     'status': campaign.status,
-                    'daily_budget': 0,
+                    'daily_budget': campaign.daily_budget,
                     'campaign_type': 'winner_campaign'
                 }, on_conflict='shop_id,pinterest_campaign_id').execute()
 

@@ -634,6 +634,7 @@ class WinnerScalingJob:
                     creative_count=len(creatives),
                     link_type=link_type,
                     status='ACTIVE',
+                    daily_budget=settings.daily_budget_per_campaign,
                     generated_assets=creatives
                 )
 

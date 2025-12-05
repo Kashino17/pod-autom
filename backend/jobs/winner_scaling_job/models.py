@@ -166,6 +166,7 @@ class WinnerCampaign:
     link_type: str = "product"  # 'product' or 'collection'
 
     status: str = "ACTIVE"  # ACTIVE, PAUSED, ARCHIVED
+    daily_budget: float = 0.0  # Daily budget in Euro
 
     generated_assets: List[GeneratedCreative] = field(default_factory=list)
 
