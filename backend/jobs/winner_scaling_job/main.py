@@ -221,19 +221,46 @@ class WinnerScalingJob:
         existing_winner = existing_winners.get(key)
 
         if existing_winner:
-            # Update sales snapshot
-            self.db.update_winner_product_sales(
-                winner_id=existing_winner.id,
-                product=product,
-                buckets_passed=buckets_passed
-            )
+            # Verify the winner still exists in database (may have been deleted)
+            if not self.db.winner_exists(existing_winner.id):
+                print(f"\n  Winner record was deleted from DB, re-creating: {product.product_title}")
+                # Re-insert the winner
+                winner_id = self.db.insert_winner_product(
+                    shop_id=shop.shop_id,
+                    product=product,
+                    buckets_passed=buckets_passed
+                )
+                winner = WinnerProduct(
+                    id=winner_id,
+                    shop_id=shop.shop_id,
+                    product_id=product.product_id,
+                    collection_id=product.collection_id,
+                    product_title=product.product_title,
+                    product_handle=product.product_handle,
+                    collection_handle=product.collection_handle,
+                    shopify_image_url=product.shopify_image_url,
+                    sales_3d=product.sales_3d,
+                    sales_7d=product.sales_7d,
+                    sales_10d=product.sales_10d,
+                    sales_14d=product.sales_14d,
+                    buckets_passed=buckets_passed,
+                    original_campaign_id=product.original_campaign_id
+                )
+                self.job_metrics.winners_identified += 1
+            else:
+                # Update sales snapshot
+                self.db.update_winner_product_sales(
+                    winner_id=existing_winner.id,
+                    product=product,
+                    buckets_passed=buckets_passed
+                )
 
-            if not existing_winner.is_active:
-                return  # Winner is deactivated, skip
+                if not existing_winner.is_active:
+                    return  # Winner is deactivated, skip
 
-            winner_id = existing_winner.id
-            winner = existing_winner
-            print(f"\n  Existing winner: {product.product_title}")
+                winner_id = existing_winner.id
+                winner = existing_winner
+                print(f"\n  Existing winner: {product.product_title}")
         else:
             # Insert new winner
             winner_id = self.db.insert_winner_product(

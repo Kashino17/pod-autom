@@ -499,6 +499,85 @@ class PinterestCampaignService:
         print("      No boards found on account")
         return None
 
+    def _resize_video_for_pinterest(self, video_bytes: bytes) -> bytes:
+        """
+        Resize video to Pinterest optimal format (1000x1500, 2:3 aspect ratio).
+
+        Uses ffmpeg to resize the video from 9:16 (1080x1920) to 2:3 (1000x1500).
+        This crops from 9:16 to 2:3 by removing some height.
+
+        Args:
+            video_bytes: Original video bytes (9:16 format from Veo 3.1)
+
+        Returns:
+            Resized video bytes (2:3 format for Pinterest)
+        """
+        import subprocess
+        import tempfile
+        import os
+
+        try:
+            print(f"      Resizing video to 1000x1500 (2:3) for Pinterest...")
+
+            # Create temp files for input and output
+            with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as input_file:
+                input_file.write(video_bytes)
+                input_path = input_file.name
+
+            output_path = input_path.replace('.mp4', '_resized.mp4')
+
+            # ffmpeg command to resize video:
+            # - Scale to 1000 width while maintaining aspect ratio
+            # - Crop to 1000x1500 (2:3) from center
+            # - Use high quality encoding
+            ffmpeg_cmd = [
+                'ffmpeg',
+                '-i', input_path,
+                '-vf', 'scale=1000:-1,crop=1000:1500',
+                '-c:v', 'libx264',
+                '-preset', 'medium',
+                '-crf', '23',
+                '-c:a', 'aac',
+                '-b:a', '128k',
+                '-y',  # Overwrite output
+                output_path
+            ]
+
+            # Run ffmpeg
+            result = subprocess.run(
+                ffmpeg_cmd,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+
+            if result.returncode != 0:
+                print(f"      ffmpeg error: {result.stderr}")
+                # Return original if resize fails
+                os.unlink(input_path)
+                return video_bytes
+
+            # Read resized video
+            with open(output_path, 'rb') as f:
+                resized_bytes = f.read()
+
+            # Cleanup temp files
+            os.unlink(input_path)
+            os.unlink(output_path)
+
+            print(f"      Video resized successfully to 1000x1500")
+            return resized_bytes
+
+        except FileNotFoundError:
+            print(f"      Warning: ffmpeg not found, using original video")
+            return video_bytes
+        except subprocess.TimeoutExpired:
+            print(f"      Warning: ffmpeg timeout, using original video")
+            return video_bytes
+        except Exception as e:
+            print(f"      Warning: Video resize failed ({e}), using original video")
+            return video_bytes
+
     def _upload_video_to_pinterest(self, video_url: str) -> Tuple[Optional[str], Optional[str]]:
         """
         Upload a video to Pinterest Media API using multipart upload and wait for processing.
@@ -525,6 +604,12 @@ class PinterestCampaignService:
             video_bytes = video_response.content
             file_size = len(video_bytes)
             print(f"      Video size: {file_size / 1024 / 1024:.2f} MB")
+
+            # Resize video to Pinterest optimal format (1000x1500, 2:3 aspect ratio)
+            video_bytes = self._resize_video_for_pinterest(video_bytes)
+            file_size = len(video_bytes)
+            print(f"      Resized video size: {file_size / 1024 / 1024:.2f} MB")
+
         except Exception as e:
             return None, f"Video download error: {str(e)}"
 

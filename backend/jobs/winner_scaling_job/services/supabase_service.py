@@ -263,6 +263,13 @@ class SupabaseService:
             'buckets_passed': buckets_passed
         }).eq('id', winner_id).execute()
 
+    def winner_exists(self, winner_id: str) -> bool:
+        """Check if a winner product exists in the database."""
+        result = self.client.table('winner_products').select(
+            'id', count='exact'
+        ).eq('id', winner_id).execute()
+        return (result.count or 0) > 0
+
     def get_active_campaigns_for_winner(self, winner_id: str) -> int:
         """Get count of active campaigns for a winner product."""
         result = self.client.table('winner_campaigns').select(
