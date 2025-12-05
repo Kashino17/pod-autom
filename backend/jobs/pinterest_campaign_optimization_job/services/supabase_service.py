@@ -498,15 +498,20 @@ class SupabaseService:
             print(f"Error getting ad account: {e}")
             return None
 
-    def sync_campaigns_from_pinterest(
+    def sync_campaigns_status_from_pinterest(
         self,
         shop_id: str,
         ad_account_uuid: str,
         campaigns: List[Dict]
-    ) -> int:
+    ) -> Dict[str, int]:
         """
-        Sync campaigns from Pinterest API to database.
-        Only syncs ACTIVE campaigns.
+        Sync campaign STATUS and BUDGET from Pinterest API to database.
+        IMPORTANT: Does NOT modify campaign_type - that is only set by Pinterest Sync Job
+        and Winner Scaling Job.
+
+        This method:
+        1. Updates status and budget for existing campaigns
+        2. Updates status to PAUSED/ARCHIVED for campaigns not in the active list
 
         Args:
             shop_id: Internal shop ID
@@ -514,46 +519,77 @@ class SupabaseService:
             campaigns: List of campaigns from Pinterest API
 
         Returns:
-            Number of campaigns synced
+            Dict with 'updated' and 'marked_inactive' counts
         """
-        synced_count = 0
+        result = {'updated': 0, 'marked_inactive': 0}
 
         try:
+            # Build a map of pinterest_campaign_id -> campaign data from API
+            api_campaigns_map = {}
             for campaign in campaigns:
-                # Only sync ACTIVE campaigns
-                status = campaign.get('status', 'UNKNOWN')
-                if status != 'ACTIVE':
+                campaign_id = campaign.get('id')
+                if campaign_id:
+                    api_campaigns_map[campaign_id] = campaign
+
+            # Get all campaigns from our DB for this shop
+            db_campaigns = self.client.table('pinterest_campaigns').select(
+                'id, pinterest_campaign_id, status'
+            ).eq('shop_id', shop_id).execute()
+
+            if not db_campaigns.data:
+                return result
+
+            for db_campaign in db_campaigns.data:
+                pinterest_campaign_id = db_campaign.get('pinterest_campaign_id')
+                db_status = db_campaign.get('status')
+                campaign_uuid = db_campaign.get('id')
+
+                if not pinterest_campaign_id:
                     continue
 
-                campaign_id = campaign.get('id')
+                api_campaign = api_campaigns_map.get(pinterest_campaign_id)
 
-                # Get daily spend cap (budget) - convert from micro-currency
-                daily_spend_cap = campaign.get('daily_spend_cap', 0)
-                if daily_spend_cap:
-                    daily_budget = daily_spend_cap / 1_000_000
-                else:
-                    daily_budget = 0
+                if api_campaign:
+                    # Campaign exists in Pinterest API - update status and budget
+                    api_status = api_campaign.get('status', 'UNKNOWN')
 
-                # Get created_time (Unix timestamp in seconds from Pinterest API)
-                created_time = campaign.get('created_time')
+                    # Get daily spend cap (budget) - convert from micro-currency
+                    daily_spend_cap = api_campaign.get('daily_spend_cap', 0)
+                    if daily_spend_cap:
+                        daily_budget = daily_spend_cap / 1_000_000
+                    else:
+                        daily_budget = 0
 
-                # Upsert campaign
-                # campaign_type is set based on source: 'replace_campaign' from Pinterest Sync
-                self.client.table('pinterest_campaigns').upsert({
-                    'shop_id': shop_id,
-                    'pinterest_campaign_id': campaign_id,
-                    'ad_account_id': ad_account_uuid,
-                    'name': campaign.get('name', 'Unnamed Campaign'),
-                    'status': status,
-                    'daily_budget': daily_budget,
-                    'created_time': created_time,
-                    'campaign_type': 'replace_campaign'
-                }, on_conflict='shop_id,pinterest_campaign_id').execute()
+                    # Update status and budget only (NOT campaign_type!)
+                    self.client.table('pinterest_campaigns').update({
+                        'status': api_status,
+                        'daily_budget': daily_budget,
+                        'name': api_campaign.get('name', 'Unnamed Campaign')
+                    }).eq('id', campaign_uuid).execute()
 
-                synced_count += 1
+                    result['updated'] += 1
 
-            return synced_count
+                    if db_status == 'ACTIVE' and api_status != 'ACTIVE':
+                        result['marked_inactive'] += 1
+
+            return result
 
         except Exception as e:
-            print(f"Error syncing campaigns: {e}")
-            return synced_count
+            print(f"Error syncing campaign status: {e}")
+            return result
+
+    def get_campaigns_for_status_check(self, shop_id: str) -> List[Dict]:
+        """
+        Get all campaigns from DB that need status verification.
+        Returns campaigns that are marked as ACTIVE in our database.
+        """
+        try:
+            response = self.client.table('pinterest_campaigns').select(
+                'id, pinterest_campaign_id, name, status, daily_budget, campaign_type'
+            ).eq('shop_id', shop_id).eq('status', 'ACTIVE').execute()
+
+            return response.data or []
+
+        except Exception as e:
+            print(f"Error getting campaigns for status check: {e}")
+            return []

@@ -121,17 +121,18 @@ class PinterestCampaignOptimizationJob:
                 refresh_token=shop.pinterest_refresh_token
             )
 
-            # Sync campaigns from Pinterest API to database
-            print(f"  Syncing campaigns from Pinterest...")
+            # Sync campaign STATUS from Pinterest API to database
+            # IMPORTANT: This only updates status/budget, NOT campaign_type
+            print(f"  Syncing campaign status from Pinterest API...")
             ad_account = self.db.get_ad_account_for_shop(shop.shop_id)
             if ad_account:
                 pinterest_campaigns = pinterest.get_all_campaigns(shop.pinterest_account_id)
-                synced_count = self.db.sync_campaigns_from_pinterest(
+                sync_result = self.db.sync_campaigns_status_from_pinterest(
                     shop_id=shop.shop_id,
                     ad_account_uuid=ad_account['id'],
                     campaigns=pinterest_campaigns
                 )
-                print(f"  Synced {synced_count} active campaigns from Pinterest")
+                print(f"  Updated {sync_result['updated']} campaigns, {sync_result['marked_inactive']} marked inactive")
             else:
                 print(f"  No ad account selected - skipping campaign sync")
 
