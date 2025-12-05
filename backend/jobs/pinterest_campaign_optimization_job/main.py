@@ -213,8 +213,9 @@ class PinterestCampaignOptimizationJob:
             # Get metrics for all possible time ranges
             time_ranges = set()
             for rule in rules:
-                for cond in rule.conditions:
-                    time_ranges.add(cond.time_range_days)
+                for group in rule.condition_groups:
+                    for cond in group.conditions:
+                        time_ranges.add(cond.time_range_days)
 
             if not time_ranges:
                 time_ranges = {7}
