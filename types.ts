@@ -221,6 +221,7 @@ export interface OptimizationRule {
   action_unit: OptimizationActionUnit | null;
   min_budget: number;
   max_budget: number;
+  min_campaign_age_days: number;
   created_at?: string;
   updated_at?: string;
 }

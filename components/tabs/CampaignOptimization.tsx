@@ -274,7 +274,8 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
       action_value: 20,
       action_unit: 'percent',
       min_budget: 5,
-      max_budget: 1000
+      max_budget: 1000,
+      min_campaign_age_days: 0
     };
     setEditingRule(newRule);
     setIsCreatingNew(true);
@@ -572,6 +573,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
                           <h4 className="font-medium text-zinc-200">{rule.name}</h4>
                           <p className="text-xs text-zinc-500">
                             Priorität: {rule.priority} | {rule.conditions.length} Bedingung(en)
+                            {rule.min_campaign_age_days > 0 && ` | Min. ${rule.min_campaign_age_days} Tage`}
                           </p>
                         </div>
                       </div>
@@ -784,16 +786,29 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel, isSavin
             />
           </div>
 
-          {/* Priority */}
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-2">Priorität</label>
-            <input
-              type="number"
-              value={editedRule.priority}
-              onChange={(e) => setEditedRule({ ...editedRule, priority: parseInt(e.target.value) || 0 })}
-              className="w-32 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-primary/50"
-            />
-            <p className="text-xs text-zinc-500 mt-1">Höhere Priorität wird zuerst geprüft</p>
+          {/* Priority and Campaign Age */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-2">Priorität</label>
+              <input
+                type="number"
+                value={editedRule.priority}
+                onChange={(e) => setEditedRule({ ...editedRule, priority: parseInt(e.target.value) || 0 })}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-primary/50"
+              />
+              <p className="text-xs text-zinc-500 mt-1">Höhere Priorität wird zuerst geprüft</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-2">Mindestalter Kampagne (Tage)</label>
+              <input
+                type="number"
+                min="0"
+                value={editedRule.min_campaign_age_days || 0}
+                onChange={(e) => setEditedRule({ ...editedRule, min_campaign_age_days: parseInt(e.target.value) || 0 })}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white text-center focus:outline-none focus:border-primary/50"
+              />
+              <p className="text-xs text-zinc-500 mt-1">Kampagne muss mindestens X Tage aktiv sein</p>
+            </div>
           </div>
 
           {/* Conditions */}

@@ -60,6 +60,7 @@ class OptimizationRule:
     action_unit: Optional[str]  # 'amount' or 'percent'
     min_budget: float = 5.00
     max_budget: float = 1000.00
+    min_campaign_age_days: int = 0  # Minimum days campaign must exist before rule applies
 
     @classmethod
     def from_db_row(cls, row: Dict) -> 'OptimizationRule':
@@ -85,7 +86,8 @@ class OptimizationRule:
             action_value=row.get('action_value'),
             action_unit=row.get('action_unit'),
             min_budget=row.get('min_budget', 5.00),
-            max_budget=row.get('max_budget', 1000.00)
+            max_budget=row.get('max_budget', 1000.00),
+            min_campaign_age_days=row.get('min_campaign_age_days', 0)
         )
 
 
@@ -120,6 +122,7 @@ class Campaign:
     daily_budget: float  # In Euro
     ad_account_id: str
     shop_id: str
+    created_time: Optional[int] = None  # Unix timestamp when campaign was created on Pinterest
 
     @classmethod
     def from_db_row(cls, row: Dict) -> 'Campaign':
@@ -138,8 +141,18 @@ class Campaign:
             status=row.get('status', 'ACTIVE'),
             daily_budget=daily_budget,
             ad_account_id=row.get('ad_account_id', ''),
-            shop_id=row.get('shop_id', '')
+            shop_id=row.get('shop_id', ''),
+            created_time=row.get('created_time')
         )
+
+    def get_age_days(self) -> int:
+        """Calculate campaign age in days from created_time."""
+        if not self.created_time:
+            return 0
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        created = datetime.fromtimestamp(self.created_time, tz=timezone.utc)
+        return (now - created).days
 
 
 @dataclass

@@ -124,13 +124,15 @@ def filter_metrics_by_timerange(full_metrics: Dict[int, CampaignMetrics],
 
 
 def find_matching_rule(rules: List[OptimizationRule],
-                       metrics: Dict) -> OptimizationRule | None:
+                       metrics: Dict,
+                       campaign_age_days: int = 0) -> OptimizationRule | None:
     """
     Find the first matching rule (by priority).
 
     Args:
         rules: List of rules sorted by priority (highest first)
         metrics: Campaign metrics
+        campaign_age_days: Age of the campaign in days (from created_time)
 
     Returns:
         The first matching rule or None
@@ -140,6 +142,10 @@ def find_matching_rule(rules: List[OptimizationRule],
 
     for rule in sorted_rules:
         if not rule.is_enabled:
+            continue
+
+        # Check minimum campaign age requirement
+        if rule.min_campaign_age_days > 0 and campaign_age_days < rule.min_campaign_age_days:
             continue
 
         if evaluate_conditions(rule.conditions, metrics):

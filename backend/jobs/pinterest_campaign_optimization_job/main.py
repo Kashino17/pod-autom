@@ -193,8 +193,12 @@ class PinterestCampaignOptimizationJob:
         pinterest: PinterestAPIClient
     ):
         """Process a single campaign against rules."""
+        # Calculate campaign age
+        campaign_age_days = campaign.get_age_days()
+
         print(f"\n  Campaign: {campaign.name}")
         print(f"    Current budget: €{campaign.daily_budget}")
+        print(f"    Campaign age: {campaign_age_days} days")
 
         self.job_metrics.campaigns_evaluated += 1
 
@@ -226,8 +230,8 @@ class PinterestCampaignOptimizationJob:
             print(f"    Real metrics (last {max_days} days): spend=€{metrics.get('spend', 0)}, "
                   f"checkouts={metrics.get('checkouts', 0)}, roas={metrics.get('roas', 0)}")
 
-        # Find matching rule
-        matching_rule = find_matching_rule(rules, metrics)
+        # Find matching rule (includes campaign age check)
+        matching_rule = find_matching_rule(rules, metrics, campaign_age_days)
 
         if not matching_rule:
             print(f"    No rule matched - no action taken")

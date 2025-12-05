@@ -135,7 +135,7 @@ class SupabaseService:
 
         try:
             response = self.client.table('pinterest_campaigns').select(
-                'id, pinterest_campaign_id, name, status, daily_budget, ad_account_id, shop_id'
+                'id, pinterest_campaign_id, name, status, daily_budget, ad_account_id, shop_id, created_time'
             ).eq('shop_id', shop_id).eq('status', 'ACTIVE').execute()
 
             if response.data:
@@ -152,7 +152,7 @@ class SupabaseService:
         """Get a specific campaign by internal ID."""
         try:
             response = self.client.table('pinterest_campaigns').select(
-                'id, pinterest_campaign_id, name, status, daily_budget, ad_account_id, shop_id'
+                'id, pinterest_campaign_id, name, status, daily_budget, ad_account_id, shop_id, created_time'
             ).eq('id', campaign_id).single().execute()
 
             if response.data:
@@ -519,6 +519,9 @@ class SupabaseService:
                 else:
                     daily_budget = 0
 
+                # Get created_time (Unix timestamp in seconds from Pinterest API)
+                created_time = campaign.get('created_time')
+
                 # Upsert campaign
                 self.client.table('pinterest_campaigns').upsert({
                     'shop_id': shop_id,
@@ -526,7 +529,8 @@ class SupabaseService:
                     'ad_account_id': ad_account_uuid,
                     'name': campaign.get('name', 'Unnamed Campaign'),
                     'status': status,
-                    'daily_budget': daily_budget
+                    'daily_budget': daily_budget,
+                    'created_time': created_time
                 }, on_conflict='shop_id,pinterest_campaign_id').execute()
 
                 synced_count += 1
