@@ -438,97 +438,31 @@ Specifications:
         storage_bucket: str = "winner-creatives"
     ) -> Optional[str]:
         """
-        Upload video bytes to Supabase Storage after resizing to Pinterest dimensions.
+        Upload video bytes directly to Supabase Storage without any resizing.
 
-        Pinterest requires exact 1000x1500 (2:3) for optimal display without black bars.
-        We use ffmpeg to resize/crop the video to these dimensions.
+        The original video from Veo 3.1 (9:16 aspect ratio) is uploaded as-is.
+        Pinterest will handle the display appropriately.
         """
         try:
-            import subprocess
-            import tempfile
-            import os as os_module
-
-            # Write video to temp file
-            with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_input:
-                temp_input.write(video_data)
-                input_path = temp_input.name
-
-            # Output temp file
-            output_path = input_path.replace('.mp4', '_resized.mp4')
-
-            try:
-                # Try to get ffmpeg path from imageio-ffmpeg (provides bundled ffmpeg)
-                try:
-                    import imageio_ffmpeg
-                    ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
-                    print(f"    Using imageio-ffmpeg: {ffmpeg_path}")
-                except ImportError:
-                    ffmpeg_path = 'ffmpeg'  # Fallback to system ffmpeg
-
-                # Use ffmpeg to resize video to exactly 1000x1500 (2:3 aspect ratio)
-                # Force exact dimensions - slight stretch is acceptable for Pinterest
-                # This guarantees no black bars
-                ffmpeg_cmd = [
-                    ffmpeg_path, '-y', '-i', input_path,
-                    '-vf', 'scale=1000:1500',  # Force exact size
-                    '-c:v', 'libx264',
-                    '-preset', 'fast',
-                    '-crf', '23',
-                    '-c:a', 'aac',
-                    '-b:a', '128k',
-                    '-movflags', '+faststart',
-                    output_path
-                ]
-
-                result = subprocess.run(
-                    ffmpeg_cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=120
-                )
-
-                if result.returncode != 0:
-                    print(f"    ffmpeg resize warning: {result.stderr[:200]}")
-                    # If ffmpeg fails, use original video
-                    output_path = input_path
-                else:
-                    print(f"    Resized video to 1000x1500px")
-
-                # Read the output file
-                with open(output_path, 'rb') as f:
-                    final_video_data = f.read()
-
-            except FileNotFoundError:
-                print(f"    Warning: ffmpeg not found, uploading original video")
-                final_video_data = video_data
-            except subprocess.TimeoutExpired:
-                print(f"    Warning: ffmpeg timeout, uploading original video")
-                final_video_data = video_data
-            finally:
-                # Clean up temp files
-                try:
-                    os_module.unlink(input_path)
-                    if os_module.path.exists(output_path) and output_path != input_path:
-                        os_module.unlink(output_path)
-                except:
-                    pass
-
-            # Upload to Supabase Storage
+            # Upload to Supabase Storage directly - no resizing
             from supabase import create_client
             supabase = create_client(
                 os.environ.get('SUPABASE_URL'),
                 os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
             )
 
+            print(f"    Uploading original video to storage (no resize)...")
+
             # Upload file
             result = supabase.storage.from_(storage_bucket).upload(
                 filename,
-                final_video_data,
+                video_data,
                 {"content-type": "video/mp4"}
             )
 
             # Get public URL
             public_url = supabase.storage.from_(storage_bucket).get_public_url(filename)
+            print(f"    Video uploaded successfully: {filename}")
             return public_url
 
         except Exception as e:
