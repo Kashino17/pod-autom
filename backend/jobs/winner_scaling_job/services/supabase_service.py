@@ -278,6 +278,50 @@ class SupabaseService:
 
         return result.count or 0
 
+    def get_active_campaigns_for_winner_by_type(self, winner_id: str) -> Dict[str, int]:
+        """
+        Get count of active campaigns for a winner product, separated by creative type.
+
+        Returns:
+            Dict with 'video' and 'image' counts
+        """
+        result = self.client.table('winner_campaigns').select(
+            'creative_type'
+        ).eq('winner_product_id', winner_id).eq('status', 'ACTIVE').execute()
+
+        counts = {'video': 0, 'image': 0}
+        for campaign in result.data or []:
+            creative_type = campaign.get('creative_type', '').lower()
+            if creative_type in counts:
+                counts[creative_type] += 1
+
+        return counts
+
+    def get_winner_campaigns(self, winner_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all campaigns for a winner product.
+
+        Returns:
+            List of campaign dicts with id, pinterest_campaign_id, status, creative_type
+        """
+        result = self.client.table('winner_campaigns').select(
+            'id, pinterest_campaign_id, pinterest_ad_group_id, status, creative_type, campaign_name'
+        ).eq('winner_product_id', winner_id).execute()
+
+        return result.data or []
+
+    def update_campaign_status(self, campaign_id: str, new_status: str):
+        """
+        Update the status of a winner campaign in the database.
+
+        Args:
+            campaign_id: Our internal campaign UUID
+            new_status: New status ('ACTIVE', 'PAUSED', 'ARCHIVED', etc.)
+        """
+        self.client.table('winner_campaigns').update({
+            'status': new_status
+        }).eq('id', campaign_id).execute()
+
     def insert_winner_campaign(self, campaign: WinnerCampaign) -> str:
         """Insert a new winner campaign and return its ID."""
         result = self.client.table('winner_campaigns').insert({

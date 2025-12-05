@@ -943,3 +943,25 @@ class PinterestCampaignService:
         )
 
         return error is None
+
+    def get_campaign_status(self, ad_account_id: str, campaign_id: str) -> Optional[str]:
+        """
+        Get the current status of a Pinterest campaign.
+
+        Returns:
+            Status string ('ACTIVE', 'PAUSED', 'ARCHIVED', etc.) or None on error
+        """
+        result = self.get_campaign_details(ad_account_id, campaign_id)
+        if result:
+            return result.get('status')
+        return None
+
+    def is_campaign_active(self, ad_account_id: str, campaign_id: str) -> bool:
+        """
+        Check if a Pinterest campaign is currently active.
+
+        Returns:
+            True if campaign status is 'ACTIVE', False otherwise
+        """
+        status = self.get_campaign_status(ad_account_id, campaign_id)
+        return status == 'ACTIVE'

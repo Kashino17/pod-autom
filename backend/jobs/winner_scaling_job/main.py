@@ -304,25 +304,43 @@ class WinnerScalingJob:
                 }
             ))
 
-        # Check if we need more campaigns (now separate for video and image)
-        active_campaigns = self.db.get_active_campaigns_for_winner(winner_id)
+        # Sync campaign status with Pinterest API before checking counts
+        # This ensures we detect manually paused/deactivated campaigns
+        await self._sync_campaign_status_with_pinterest(
+            winner_id=winner_id,
+            shop=shop,
+            pinterest=pinterest
+        )
 
-        # Calculate total max campaigns based on separate limits
-        total_max_campaigns = 0
-        if settings.video_enabled:
-            total_max_campaigns += settings.max_campaigns_per_winner_video
-        if settings.image_enabled:
-            total_max_campaigns += settings.max_campaigns_per_winner_image
+        # Check if we need more campaigns (now separate for video and image)
+        # Use type-specific counts for accurate refill logic
+        active_by_type = self.db.get_active_campaigns_for_winner_by_type(winner_id)
+        active_video = active_by_type.get('video', 0)
+        active_image = active_by_type.get('image', 0)
+        total_active = active_video + active_image
+
+        # Calculate max campaigns per type
+        max_video = settings.max_campaigns_per_winner_video if settings.video_enabled else 0
+        max_image = settings.max_campaigns_per_winner_image if settings.image_enabled else 0
+        total_max_campaigns = max_video + max_image
 
         if total_max_campaigns == 0:
             print(f"    Both video and image generation disabled - skipping")
             return
 
-        if active_campaigns >= total_max_campaigns:
-            print(f"    Already at max campaigns ({active_campaigns}/{total_max_campaigns})")
+        # Check if we need to refill any type
+        need_video = max_video - active_video if settings.video_enabled else 0
+        need_image = max_image - active_image if settings.image_enabled else 0
+
+        if need_video <= 0 and need_image <= 0:
+            print(f"    Already at max campaigns (Video: {active_video}/{max_video}, Image: {active_image}/{max_image})")
             return
 
-        print(f"    Need campaigns (current: {active_campaigns}, max: {total_max_campaigns})")
+        print(f"    Campaign status - Video: {active_video}/{max_video}, Image: {active_image}/{max_image}")
+        if need_video > 0:
+            print(f"    Need {need_video} more video campaign(s)")
+        if need_image > 0:
+            print(f"    Need {need_image} more image campaign(s)")
 
         # Find original Pinterest campaign for this product via pinterest_sync_log
         original_campaign_info = self.db.get_original_pinterest_campaign_for_product(
@@ -383,16 +401,71 @@ class WinnerScalingJob:
             print(f"    Product handle: {product.product_handle}, Collection handle: {product.collection_handle}")
 
         # Create campaigns with generated creatives using original campaign settings
-        # Pass active_campaigns count so we can track separate limits for video/image
+        # Pass the needed counts for video/image refill
         await self._create_campaigns_for_winner(
             shop=shop,
             winner=winner,
             settings=settings,
             pinterest=pinterest,
             original_settings=original_settings,
-            active_campaigns=active_campaigns,
+            need_video=need_video,
+            need_image=need_image,
             position_in_collection=product.position_in_collection
         )
+
+    async def _sync_campaign_status_with_pinterest(
+        self,
+        winner_id: str,
+        shop: ShopConfig,
+        pinterest: PinterestCampaignService
+    ):
+        """
+        Sync campaign status from Pinterest API to our database.
+        Detects manually paused/deactivated campaigns and updates their status.
+        """
+        campaigns = self.db.get_winner_campaigns(winner_id)
+
+        if not campaigns:
+            return
+
+        print(f"    Checking Pinterest status for {len(campaigns)} existing campaign(s)...")
+
+        for campaign in campaigns:
+            db_status = campaign.get('status', 'ACTIVE')
+            pinterest_campaign_id = campaign.get('pinterest_campaign_id')
+            campaign_id = campaign.get('id')
+            campaign_name = campaign.get('campaign_name', 'Unknown')
+
+            if not pinterest_campaign_id:
+                continue
+
+            # Only check campaigns that we think are active
+            if db_status != 'ACTIVE':
+                continue
+
+            # Check actual Pinterest status
+            pinterest_status = pinterest.get_campaign_status(
+                ad_account_id=shop.pinterest_account_id,
+                campaign_id=pinterest_campaign_id
+            )
+
+            if pinterest_status and pinterest_status != 'ACTIVE':
+                # Campaign was paused/archived on Pinterest - update our DB
+                print(f"      Campaign '{campaign_name[:40]}...' is {pinterest_status} on Pinterest - updating DB")
+                self.db.update_campaign_status(campaign_id, pinterest_status)
+
+                # Log the status change
+                self.db.log_action(LogEntry(
+                    shop_id=shop.shop_id,
+                    winner_product_id=winner_id,
+                    action_type='campaign_status_synced',
+                    details={
+                        'campaign_name': campaign_name,
+                        'pinterest_campaign_id': pinterest_campaign_id,
+                        'old_status': db_status,
+                        'new_status': pinterest_status
+                    }
+                ))
 
     async def _create_campaigns_for_winner(
         self,
@@ -401,7 +474,8 @@ class WinnerScalingJob:
         settings: WinnerScalingSettings,
         pinterest: PinterestCampaignService,
         original_settings: OriginalCampaignSettings,
-        active_campaigns: int = 0,
+        need_video: int = 0,
+        need_image: int = 0,
         position_in_collection: int = 0
     ):
         """Create campaigns with AI-generated creatives for a winner product.
@@ -409,98 +483,98 @@ class WinnerScalingJob:
         Uses separate limits for video and image campaigns:
         - video_enabled + max_campaigns_per_winner_video for video campaigns
         - image_enabled + max_campaigns_per_winner_image for image campaigns
+
+        Args:
+            need_video: Number of video campaigns needed to reach max
+            need_image: Number of image campaigns needed to reach max
         """
 
         video_campaigns_created = 0
         image_campaigns_created = 0
 
-        # Video campaigns - only if video_enabled is True
-        if settings.video_enabled and settings.video_count > 0:
-            video_campaigns_needed = settings.max_campaigns_per_winner_video
+        # Video campaigns - only if video_enabled and we need more
+        if settings.video_enabled and settings.video_count > 0 and need_video > 0:
+            print(f"    [VIDEO] Generating {settings.video_count} videos (need {need_video} campaigns)...")
 
-            if video_campaigns_needed > 0:
-                print(f"    [VIDEO] Generating {settings.video_count} videos (max {video_campaigns_needed} campaigns)...")
+            video_result = await self.ai_service.generate_videos(
+                product_title=winner.product_title,
+                product_image_url=winner.shopify_image_url,
+                count=settings.video_count,
+                custom_prompt=settings.video_prompt
+            )
 
-                video_result = await self.ai_service.generate_videos(
-                    product_title=winner.product_title,
-                    product_image_url=winner.shopify_image_url,
-                    count=settings.video_count,
-                    custom_prompt=settings.video_prompt
+            if video_result.api_limit_reached:
+                self.job_metrics.api_limits_hit += 1
+                self.db.log_action(LogEntry(
+                    shop_id=shop.shop_id,
+                    winner_product_id=winner.id,
+                    action_type='api_limit_reached',
+                    details={'api': 'veo-3.1', 'error': video_result.error_message}
+                ))
+                print(f"    [VIDEO] API limit reached for video generation")
+
+            if video_result.creatives:
+                self.job_metrics.creatives_generated += len(video_result.creatives)
+
+                # Create campaigns with videos using need_video as limit
+                video_campaigns_created = await self._create_campaigns_with_creatives(
+                    shop=shop,
+                    winner=winner,
+                    creatives=video_result.creatives,
+                    creative_type='video',
+                    settings=settings,
+                    pinterest=pinterest,
+                    original_settings=original_settings,
+                    max_campaigns=need_video,
+                    position_in_collection=position_in_collection
                 )
+                print(f"    [VIDEO] Created {video_campaigns_created} video campaigns")
+        elif not settings.video_enabled:
+            print(f"    [VIDEO] Video generation disabled")
+        elif need_video <= 0:
+            print(f"    [VIDEO] Already at max video campaigns")
 
-                if video_result.api_limit_reached:
-                    self.job_metrics.api_limits_hit += 1
-                    self.db.log_action(LogEntry(
-                        shop_id=shop.shop_id,
-                        winner_product_id=winner.id,
-                        action_type='api_limit_reached',
-                        details={'api': 'veo-3.1', 'error': video_result.error_message}
-                    ))
-                    print(f"    [VIDEO] API limit reached for video generation")
+        # Image campaigns - only if image_enabled and we need more
+        if settings.image_enabled and settings.image_count > 0 and need_image > 0:
+            print(f"    [IMAGE] Generating {settings.image_count} images (need {need_image} campaigns)...")
 
-                if video_result.creatives:
-                    self.job_metrics.creatives_generated += len(video_result.creatives)
+            image_result = await self.ai_service.generate_images(
+                product_title=winner.product_title,
+                product_image_url=winner.shopify_image_url,
+                count=settings.image_count,
+                custom_prompt=settings.image_prompt
+            )
 
-                    # Create campaigns with videos using video-specific limit
-                    video_campaigns_created = await self._create_campaigns_with_creatives(
-                        shop=shop,
-                        winner=winner,
-                        creatives=video_result.creatives,
-                        creative_type='video',
-                        settings=settings,
-                        pinterest=pinterest,
-                        original_settings=original_settings,
-                        max_campaigns=video_campaigns_needed,
-                        position_in_collection=position_in_collection
-                    )
-                    print(f"    [VIDEO] Created {video_campaigns_created} video campaigns")
-        else:
-            if not settings.video_enabled:
-                print(f"    [VIDEO] Video generation disabled")
+            if image_result.api_limit_reached:
+                self.job_metrics.api_limits_hit += 1
+                self.db.log_action(LogEntry(
+                    shop_id=shop.shop_id,
+                    winner_product_id=winner.id,
+                    action_type='api_limit_reached',
+                    details={'api': 'gpt-image-1', 'error': image_result.error_message}
+                ))
+                print(f"    [IMAGE] API limit reached for image generation")
 
-        # Image campaigns - only if image_enabled is True
-        if settings.image_enabled and settings.image_count > 0:
-            image_campaigns_needed = settings.max_campaigns_per_winner_image
+            if image_result.creatives:
+                self.job_metrics.creatives_generated += len(image_result.creatives)
 
-            if image_campaigns_needed > 0:
-                print(f"    [IMAGE] Generating {settings.image_count} images (max {image_campaigns_needed} campaigns)...")
-
-                image_result = await self.ai_service.generate_images(
-                    product_title=winner.product_title,
-                    product_image_url=winner.shopify_image_url,
-                    count=settings.image_count,
-                    custom_prompt=settings.image_prompt
+                # Create campaigns with images using need_image as limit
+                image_campaigns_created = await self._create_campaigns_with_creatives(
+                    shop=shop,
+                    winner=winner,
+                    creatives=image_result.creatives,
+                    creative_type='image',
+                    settings=settings,
+                    pinterest=pinterest,
+                    original_settings=original_settings,
+                    max_campaigns=need_image,
+                    position_in_collection=position_in_collection
                 )
-
-                if image_result.api_limit_reached:
-                    self.job_metrics.api_limits_hit += 1
-                    self.db.log_action(LogEntry(
-                        shop_id=shop.shop_id,
-                        winner_product_id=winner.id,
-                        action_type='api_limit_reached',
-                        details={'api': 'gpt-image-1', 'error': image_result.error_message}
-                    ))
-                    print(f"    [IMAGE] API limit reached for image generation")
-
-                if image_result.creatives:
-                    self.job_metrics.creatives_generated += len(image_result.creatives)
-
-                    # Create campaigns with images using image-specific limit
-                    image_campaigns_created = await self._create_campaigns_with_creatives(
-                        shop=shop,
-                        winner=winner,
-                        creatives=image_result.creatives,
-                        creative_type='image',
-                        settings=settings,
-                        pinterest=pinterest,
-                        original_settings=original_settings,
-                        max_campaigns=image_campaigns_needed,
-                        position_in_collection=position_in_collection
-                    )
-                    print(f"    [IMAGE] Created {image_campaigns_created} image campaigns")
-        else:
-            if not settings.image_enabled:
-                print(f"    [IMAGE] Image generation disabled")
+                print(f"    [IMAGE] Created {image_campaigns_created} image campaigns")
+        elif not settings.image_enabled:
+            print(f"    [IMAGE] Image generation disabled")
+        elif need_image <= 0:
+            print(f"    [IMAGE] Already at max image campaigns")
 
         total_campaigns_created = video_campaigns_created + image_campaigns_created
         print(f"    Total campaigns created for this winner: {total_campaigns_created} (Video: {video_campaigns_created}, Image: {image_campaigns_created})")
