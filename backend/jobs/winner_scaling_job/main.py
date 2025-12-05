@@ -177,12 +177,19 @@ class WinnerScalingJob:
             self.job_metrics.shops_processed += 1
 
         except Exception as e:
-            print(f"  Error processing shop {shop.internal_name}: {e}")
+            import traceback
+            error_type = type(e).__name__
+            error_details = f"{error_type}: {e}"
+            full_traceback = traceback.format_exc()
+            print(f"  Error processing shop {shop.internal_name}: {error_details}")
+            print(f"  Full traceback:\n{full_traceback}")
             self.job_metrics.shops_failed += 1
             self.job_metrics.errors.append({
                 'shop_id': shop.shop_id,
                 'shop_name': shop.internal_name,
-                'error': str(e),
+                'error': error_details,
+                'error_type': error_type,
+                'traceback': full_traceback,
                 'timestamp': datetime.now(timezone.utc).isoformat()
             })
 
@@ -190,7 +197,7 @@ class WinnerScalingJob:
             self.db.log_action(LogEntry(
                 shop_id=shop.shop_id,
                 action_type='error',
-                details={'error_message': str(e)}
+                details={'error_message': error_details, 'error_type': error_type}
             ))
 
     async def _process_product(

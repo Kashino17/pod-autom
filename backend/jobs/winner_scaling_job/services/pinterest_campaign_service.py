@@ -412,7 +412,11 @@ class PinterestCampaignService:
                 return None, f"Campaign creation error: {exceptions}"
             if 'code' in item and 'data' not in item:
                 return None, f"Campaign creation error: {item}"
-            return item.get('data', item), None
+            # Safely extract data - ensure it's a dict
+            data = item.get('data', item)
+            if not isinstance(data, dict):
+                return None, f"Unexpected campaign data format: {data}"
+            return data, None
 
         return None, f"Unexpected campaign API response: {result}"
 
@@ -467,7 +471,11 @@ class PinterestCampaignService:
                 return None, f"Ad group creation error: {exceptions}"
             if 'code' in item and 'data' not in item:
                 return None, f"Ad group creation error: {item}"
-            return item.get('data', item), None
+            # Safely extract data - ensure it's a dict
+            data = item.get('data', item)
+            if not isinstance(data, dict):
+                return None, f"Unexpected ad group data format: {data}"
+            return data, None
 
         return None, f"Unexpected ad group API response: {result}"
 
@@ -720,6 +728,11 @@ class PinterestCampaignService:
             )
 
             if error:
+                if attempt < max_retries - 1 and creative.creative_type == 'video':
+                    import time
+                    print(f"      Ad creation error, retrying in {retry_delay}s... (attempt {attempt + 2}/{max_retries}): {error}")
+                    time.sleep(retry_delay)
+                    continue
                 return {'id': pin_id}, f"Ad creation failed: {error}"
 
             # Extract ad ID from array response
@@ -727,18 +740,28 @@ class PinterestCampaignService:
                 item = ad_result['items'][0]
                 exceptions = item.get('exceptions', [])
 
-                # Check for transcoding error (code 2945)
+                # Check for transcoding error (code 2945) or other retry-able errors
                 if exceptions:
-                    error_code = exceptions[0].get('code') if exceptions else None
+                    error_code = None
+                    if len(exceptions) > 0 and isinstance(exceptions[0], dict):
+                        error_code = exceptions[0].get('code')
+
+                    # Retry on transcoding errors for video pins
                     if error_code == 2945 and attempt < max_retries - 1:
-                        # Video still transcoding, wait and retry
                         import time
                         print(f"      Video still transcoding, retrying in {retry_delay}s... (attempt {attempt + 2}/{max_retries})")
                         time.sleep(retry_delay)
                         continue
                     return {'id': pin_id}, f"Ad creation error: {exceptions}"
 
-                ad_id = item.get('data', item).get('id') if isinstance(item.get('data', item), dict) else item.get('id')
+                # Safely extract ad_id from response
+                data_field = item.get('data', item)
+                if isinstance(data_field, dict):
+                    ad_id = data_field.get('id')
+                else:
+                    ad_id = item.get('id')
+
+                print(f"      Ad created successfully: {ad_id}")
                 return {'id': pin_id, 'ad_id': ad_id}, None
 
             return {'id': pin_id}, f"Unexpected ad API response: {ad_result}"
