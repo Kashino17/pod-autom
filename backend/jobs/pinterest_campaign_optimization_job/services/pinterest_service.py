@@ -106,8 +106,6 @@ class PinterestAPIClient:
             'granularity': 'TOTAL'
         }
 
-        print(f"      [DEBUG] Pinterest API request: start_date={start_date}, end_date={end_date}, days={days}")
-
         result = self._make_request(
             'GET',
             f'ad_accounts/{ad_account_id}/campaigns/analytics',
