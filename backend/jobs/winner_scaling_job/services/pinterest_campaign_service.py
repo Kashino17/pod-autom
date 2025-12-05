@@ -634,6 +634,76 @@ class PinterestCampaignService:
 
         return None, f"Video processing timed out after {max_wait}s"
 
+    def _resize_cover_image_for_video(self, image_url: str) -> Optional[str]:
+        """
+        Resize cover image to 9:16 aspect ratio to match video format.
+        Downloads the image, resizes it, uploads to Supabase, returns new URL.
+        """
+        try:
+            import os
+            import uuid
+            from PIL import Image
+            from io import BytesIO
+            from supabase import create_client
+
+            # Download the image
+            print(f"      Resizing cover image to 9:16 format...")
+            response = requests.get(image_url, timeout=30)
+            response.raise_for_status()
+
+            # Open and resize to 9:16 (e.g., 1080x1920)
+            img = Image.open(BytesIO(response.content))
+
+            # Target: 9:16 aspect ratio (1080x1920 is standard vertical video)
+            target_width = 1080
+            target_height = 1920
+
+            # Resize with crop to fill (no black bars)
+            img_ratio = img.width / img.height
+            target_ratio = target_width / target_height
+
+            if img_ratio > target_ratio:
+                # Image is wider - crop sides
+                new_height = img.height
+                new_width = int(new_height * target_ratio)
+                left = (img.width - new_width) // 2
+                img = img.crop((left, 0, left + new_width, new_height))
+            else:
+                # Image is taller - crop top/bottom
+                new_width = img.width
+                new_height = int(new_width / target_ratio)
+                top = (img.height - new_height) // 2
+                img = img.crop((0, top, new_width, top + new_height))
+
+            # Resize to exact target dimensions
+            img_resized = img.resize((target_width, target_height), Image.Resampling.LANCZOS)
+
+            # Save to bytes
+            output_buffer = BytesIO()
+            img_resized.save(output_buffer, format='JPEG', quality=90)
+            image_bytes = output_buffer.getvalue()
+
+            # Upload to Supabase
+            supabase = create_client(
+                os.environ.get('SUPABASE_URL'),
+                os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+            )
+
+            filename = f"winner-covers/{uuid.uuid4()}.jpg"
+            supabase.storage.from_('winner-creatives').upload(
+                filename,
+                image_bytes,
+                {"content-type": "image/jpeg"}
+            )
+
+            public_url = supabase.storage.from_('winner-creatives').get_public_url(filename)
+            print(f"      Cover image resized to 1080x1920 (9:16)")
+            return public_url
+
+        except Exception as e:
+            print(f"      Warning: Could not resize cover image: {e}")
+            return image_url  # Return original if resize fails
+
     def _create_pin(
         self,
         ad_account_id: str,
@@ -660,6 +730,11 @@ class PinterestCampaignService:
             if error:
                 return None, f"Video upload failed: {error}"
 
+            # Resize cover image to match 9:16 video format
+            resized_cover_url = cover_image_url
+            if cover_image_url:
+                resized_cover_url = self._resize_cover_image_for_video(cover_image_url)
+
             pin_data = {
                 'title': title,
                 'description': f"{title} - Jetzt entdecken!",
@@ -668,7 +743,7 @@ class PinterestCampaignService:
                 'media_source': {
                     'source_type': 'video_id',
                     'media_id': media_id,
-                    'cover_image_url': cover_image_url
+                    'cover_image_url': resized_cover_url
                 }
             }
         else:
