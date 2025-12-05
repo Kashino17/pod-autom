@@ -65,12 +65,12 @@ export const WinnerScaling: React.FC<WinnerScalingProps> = ({ shopId }) => {
   const [editingPrompt, setEditingPrompt] = useState('');
 
   // Default prompts (used when no custom prompt is set)
-  const DEFAULT_VIDEO_PROMPT = `Create an 8-second vertical fashion product showcase video optimized for Pinterest, in full 2:3 aspect ratio (1000x1500px), with no black bars or letterboxing.
+  // Note: Video format (9:16 vertical, 1080p = 1080x1920) is controlled via API config, not prompt
+  const DEFAULT_VIDEO_PROMPT = `Create an 8-second vertical fashion product showcase video optimized for Pinterest.
 
-Use the provided product image strictly as a visual reference for design accuracy — the product's shape, color, material, and details must exactly match the reference image. Do not use the image dimensions or background as framing; instead, generate a fully native vertical video composition.
+Use the provided product image strictly as a visual reference for design accuracy — the product's shape, color, material, and details must exactly match the reference image.
 
 Video Requirements:
-    •    1000x1500px resolution, true 2:3 vertical layout
     •    Clean, minimal background to enhance product visibility
     •    Sophisticated, elegant lighting to highlight product details
     •    Cinematic camera movement: smooth pans, gentle zoom-ins or reveals

@@ -245,13 +245,16 @@ Requirements:
         return prompt
 
     def _create_video_prompt(self, product_title: str, product_image_url: Optional[str]) -> str:
-        """Create an optimized prompt for Pinterest product videos."""
-        prompt = f"""Create an 8-second vertical fashion product showcase video optimized for Pinterest, in full 2:3 aspect ratio (1000x1500px), with no black bars or letterboxing.
+        """Create an optimized prompt for Pinterest product videos.
 
-Use the provided product image strictly as a visual reference for design accuracy — the product's shape, color, material, and details must exactly match the reference image. Do not use the image dimensions or background as framing; instead, generate a fully native vertical video composition.
+        Note: Video format (9:16 vertical, 1080p) is controlled via API config, not prompt.
+        The prompt should focus on content/style, not technical specifications.
+        """
+        prompt = f"""Create an 8-second vertical fashion product showcase video optimized for Pinterest.
+
+Use the provided product image strictly as a visual reference for design accuracy — the product's shape, color, material, and details must exactly match the reference image.
 
 Video Requirements:
-    •    1000x1500px resolution, true 2:3 vertical layout
     •    Clean, minimal background to enhance product visibility
     •    Sophisticated, elegant lighting to highlight product details
     •    Cinematic camera movement: smooth pans, gentle zoom-ins or reveals
@@ -419,11 +422,15 @@ Use this product image as the main reference: {product_image_url if product_imag
 
             # Start video generation (asynchronous operation)
             # Use veo-3.1-generate-preview model
+            # Format is controlled via config, not prompt:
+            # - aspect_ratio="9:16" = Vertical format
+            # - resolution="1080p" = 1080px width, resulting in 1080x1920 (Full HD Vertical)
             generate_params = {
                 "model": "veo-3.1-generate-preview",
                 "prompt": prompt,
                 "config": types.GenerateVideosConfig(
                     aspect_ratio="9:16",  # Vertical for Pinterest
+                    resolution="1080p",   # Full HD - results in 1080x1920 vertical
                     number_of_videos=1,
                 )
             }
