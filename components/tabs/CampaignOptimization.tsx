@@ -9,7 +9,8 @@ import {
   OptimizationLogic,
   OptimizationActionType,
   OptimizationActionUnit,
-  PinterestCampaign
+  PinterestCampaign,
+  ConditionGroup
 } from '../../types';
 import {
   Settings,
@@ -29,7 +30,8 @@ import {
   Power,
   RefreshCw,
   Zap,
-  ListChecks
+  ListChecks,
+  Layers
 } from 'lucide-react';
 import { supabase } from '../../src/lib/supabase';
 
@@ -257,6 +259,25 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
     }
   };
 
+  // Helper to convert old conditions format to new condition_groups format
+  const normalizeRule = (rule: OptimizationRule): OptimizationRule => {
+    if (rule.condition_groups && rule.condition_groups.length > 0) {
+      return rule;
+    }
+    // Convert old format to new format
+    if (rule.conditions && rule.conditions.length > 0) {
+      return {
+        ...rule,
+        condition_groups: [{ conditions: rule.conditions, logic: undefined }]
+      };
+    }
+    // Empty rule
+    return {
+      ...rule,
+      condition_groups: [{ conditions: [{ metric: 'spend', operator: '>=', value: 0, time_range_days: 7 }], logic: undefined }]
+    };
+  };
+
   const createNewRule = () => {
     const newRule: OptimizationRule = {
       id: '',
@@ -264,11 +285,14 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
       name: 'Neue Regel',
       is_enabled: true,
       priority: rules.length,
-      conditions: [{
-        metric: 'spend',
-        operator: '>=',
-        value: 100,
-        time_range_days: 7
+      condition_groups: [{
+        conditions: [{
+          metric: 'spend',
+          operator: '>=',
+          value: 100,
+          time_range_days: 7
+        }],
+        logic: undefined
       }],
       action_type: 'scale_down',
       action_value: 20,
@@ -573,7 +597,7 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
                         <div>
                           <h4 className="font-medium text-zinc-200">{rule.name}</h4>
                           <p className="text-xs text-zinc-500">
-                            Priorität: {rule.priority} | {rule.conditions.length} Bedingung(en)
+                            Priorität: {rule.priority} | {(rule.condition_groups || []).length} Gruppe(n)
                             {rule.min_campaign_age_days !== null && ` | Min. ${rule.min_campaign_age_days} Tage`}
                             {rule.max_campaign_age_days !== null && ` | Max. ${rule.max_campaign_age_days} Tage`}
                           </p>
@@ -612,16 +636,29 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
                       </div>
                     </div>
 
-                    {/* Conditions Preview */}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {rule.conditions.map((cond, i) => (
-                        <span
-                          key={i}
-                          className="px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-xs text-zinc-400"
-                        >
-                          {cond.metric} {getOperatorLabel(cond.operator)} {cond.value} ({cond.time_range_days} Tage)
-                          {cond.logic && <span className="ml-1 text-primary font-medium">{cond.logic}</span>}
-                        </span>
+                    {/* Condition Groups Preview */}
+                    <div className="mt-3 space-y-2">
+                      {(normalizeRule(rule).condition_groups || []).map((group, groupIndex) => (
+                        <div key={groupIndex} className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-1 px-2 py-1 bg-zinc-800/50 border border-zinc-700 rounded-lg">
+                            <Layers className="w-3 h-3 text-zinc-500" />
+                            <span className="text-xs text-zinc-500">Gruppe {groupIndex + 1}:</span>
+                          </div>
+                          {group.conditions.map((cond, condIndex) => (
+                            <span
+                              key={condIndex}
+                              className="px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-xs text-zinc-400"
+                            >
+                              {cond.metric} {getOperatorLabel(cond.operator)} {cond.value} ({cond.time_range_days}T)
+                              {cond.logic && <span className="ml-1 text-primary font-medium">{cond.logic}</span>}
+                            </span>
+                          ))}
+                          {group.logic && groupIndex < (normalizeRule(rule).condition_groups || []).length - 1 && (
+                            <span className="px-2 py-1 bg-primary/20 border border-primary/30 rounded text-xs text-primary font-medium">
+                              {group.logic}
+                            </span>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -737,41 +774,93 @@ interface RuleEditorProps {
 }
 
 const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel, isSaving }) => {
-  const [editedRule, setEditedRule] = useState<OptimizationRule>(rule);
-
-  const updateCondition = (index: number, updates: Partial<OptimizationCondition>) => {
-    const newConditions = [...editedRule.conditions];
-    newConditions[index] = { ...newConditions[index], ...updates };
-    setEditedRule({ ...editedRule, conditions: newConditions });
-  };
-
-  const addCondition = () => {
-    const lastCondition = editedRule.conditions[editedRule.conditions.length - 1];
-    if (lastCondition) {
-      lastCondition.logic = 'AND';
+  // Normalize rule to ensure condition_groups exists
+  const normalizedRule = (): OptimizationRule => {
+    if (rule.condition_groups && rule.condition_groups.length > 0) {
+      return rule;
     }
-    setEditedRule({
-      ...editedRule,
-      conditions: [
-        ...editedRule.conditions,
-        { metric: 'spend', operator: '>=', value: 0, time_range_days: 7 }
-      ]
-    });
+    if (rule.conditions && rule.conditions.length > 0) {
+      return { ...rule, condition_groups: [{ conditions: rule.conditions, logic: undefined }] };
+    }
+    return { ...rule, condition_groups: [{ conditions: [{ metric: 'spend', operator: '>=', value: 0, time_range_days: 7 }], logic: undefined }] };
   };
 
-  const removeCondition = (index: number) => {
-    if (editedRule.conditions.length <= 1) return;
-    const newConditions = editedRule.conditions.filter((_, i) => i !== index);
+  const [editedRule, setEditedRule] = useState<OptimizationRule>(normalizedRule());
+
+  // Update a condition within a group
+  const updateCondition = (groupIndex: number, condIndex: number, updates: Partial<OptimizationCondition>) => {
+    const newGroups = [...editedRule.condition_groups];
+    const newConditions = [...newGroups[groupIndex].conditions];
+    newConditions[condIndex] = { ...newConditions[condIndex], ...updates };
+    newGroups[groupIndex] = { ...newGroups[groupIndex], conditions: newConditions };
+    setEditedRule({ ...editedRule, condition_groups: newGroups });
+  };
+
+  // Add a condition to a group
+  const addConditionToGroup = (groupIndex: number) => {
+    const newGroups = [...editedRule.condition_groups];
+    const group = newGroups[groupIndex];
+    // Set logic on previous condition
+    if (group.conditions.length > 0) {
+      const lastCond = group.conditions[group.conditions.length - 1];
+      if (!lastCond.logic) lastCond.logic = 'AND';
+    }
+    newGroups[groupIndex] = {
+      ...group,
+      conditions: [...group.conditions, { metric: 'spend', operator: '>=', value: 0, time_range_days: 7 }]
+    };
+    setEditedRule({ ...editedRule, condition_groups: newGroups });
+  };
+
+  // Remove a condition from a group
+  const removeConditionFromGroup = (groupIndex: number, condIndex: number) => {
+    const newGroups = [...editedRule.condition_groups];
+    const group = newGroups[groupIndex];
+    if (group.conditions.length <= 1) return;
+    const newConditions = group.conditions.filter((_, i) => i !== condIndex);
     // Remove logic from last condition
     if (newConditions.length > 0) {
       delete newConditions[newConditions.length - 1].logic;
     }
-    setEditedRule({ ...editedRule, conditions: newConditions });
+    newGroups[groupIndex] = { ...group, conditions: newConditions };
+    setEditedRule({ ...editedRule, condition_groups: newGroups });
+  };
+
+  // Add a new group
+  const addGroup = () => {
+    const newGroups = [...editedRule.condition_groups];
+    // Set logic on previous group
+    if (newGroups.length > 0) {
+      newGroups[newGroups.length - 1] = { ...newGroups[newGroups.length - 1], logic: 'AND' };
+    }
+    newGroups.push({
+      conditions: [{ metric: 'spend', operator: '>=', value: 0, time_range_days: 7 }],
+      logic: undefined
+    });
+    setEditedRule({ ...editedRule, condition_groups: newGroups });
+  };
+
+  // Remove a group
+  const removeGroup = (groupIndex: number) => {
+    if (editedRule.condition_groups.length <= 1) return;
+    const newGroups = editedRule.condition_groups.filter((_, i) => i !== groupIndex);
+    // Remove logic from last group
+    if (newGroups.length > 0) {
+      newGroups[newGroups.length - 1] = { ...newGroups[newGroups.length - 1], logic: undefined };
+    }
+    setEditedRule({ ...editedRule, condition_groups: newGroups });
+  };
+
+  // Update group logic
+  const updateGroupLogic = (groupIndex: number, logic: OptimizationLogic) => {
+    const newGroups = [...editedRule.condition_groups];
+    newGroups[groupIndex] = { ...newGroups[groupIndex], logic };
+    setEditedRule({ ...editedRule, condition_groups: newGroups });
   };
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto m-4">
         <div className="p-6 border-b border-zinc-800">
           <h3 className="text-lg font-semibold text-white">Regel bearbeiten</h3>
         </div>
@@ -880,81 +969,128 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel, isSavin
             </div>
           </div>
 
-          {/* Conditions */}
+          {/* Condition Groups */}
           <div>
             <label className="block text-xs font-medium text-zinc-400 mb-3">
-              WENN (Bedingungen)
+              WENN (Bedingungsgruppen)
             </label>
-            <div className="space-y-3">
-              {editedRule.conditions.map((cond, index) => (
-                <div key={index} className="flex items-center gap-2 flex-wrap bg-zinc-950 p-3 rounded-lg border border-zinc-800">
-                  <select
-                    value={cond.metric}
-                    onChange={(e) => updateCondition(index, { metric: e.target.value as OptimizationMetric })}
-                    className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary/50"
-                  >
-                    {METRICS.map(m => (
-                      <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
-                  </select>
+            <div className="space-y-4">
+              {editedRule.condition_groups.map((group, groupIndex) => (
+                <div key={groupIndex}>
+                  {/* Group Container */}
+                  <div className="bg-zinc-950/50 border border-zinc-800 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-primary" />
+                        <span className="text-sm font-medium text-zinc-300">Gruppe {groupIndex + 1}</span>
+                      </div>
+                      {editedRule.condition_groups.length > 1 && (
+                        <button
+                          onClick={() => removeGroup(groupIndex)}
+                          className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
 
-                  <select
-                    value={cond.operator}
-                    onChange={(e) => updateCondition(index, { operator: e.target.value as OptimizationOperator })}
-                    className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary/50"
-                  >
-                    {OPERATORS.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
+                    {/* Conditions within group */}
+                    <div className="space-y-2">
+                      {group.conditions.map((cond, condIndex) => (
+                        <div key={condIndex} className="flex items-center gap-2 flex-wrap bg-zinc-900 p-3 rounded-lg border border-zinc-800">
+                          <select
+                            value={cond.metric}
+                            onChange={(e) => updateCondition(groupIndex, condIndex, { metric: e.target.value as OptimizationMetric })}
+                            className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary/50"
+                          >
+                            {METRICS.map(m => (
+                              <option key={m.value} value={m.value}>{m.label}</option>
+                            ))}
+                          </select>
 
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={cond.value}
-                    onChange={(e) => updateCondition(index, { value: parseFloat(e.target.value) || 0 })}
-                    className="w-24 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white text-center focus:outline-none focus:border-primary/50"
-                  />
+                          <select
+                            value={cond.operator}
+                            onChange={(e) => updateCondition(groupIndex, condIndex, { operator: e.target.value as OptimizationOperator })}
+                            className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary/50"
+                          >
+                            {OPERATORS.map(o => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
 
-                  <select
-                    value={cond.time_range_days}
-                    onChange={(e) => updateCondition(index, { time_range_days: parseInt(e.target.value) })}
-                    className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary/50"
-                  >
-                    {TIME_RANGES.map(d => (
-                      <option key={d} value={d}>letzte {d} Tage</option>
-                    ))}
-                  </select>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={cond.value}
+                            onChange={(e) => updateCondition(groupIndex, condIndex, { value: parseFloat(e.target.value) || 0 })}
+                            className="w-24 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white text-center focus:outline-none focus:border-primary/50"
+                          />
 
-                  {index < editedRule.conditions.length - 1 && (
-                    <select
-                      value={cond.logic || 'AND'}
-                      onChange={(e) => updateCondition(index, { logic: e.target.value as OptimizationLogic })}
-                      className="bg-primary/20 border border-primary/30 rounded-lg px-3 py-2 text-sm text-primary font-medium focus:outline-none"
-                    >
-                      <option value="AND">UND</option>
-                      <option value="OR">ODER</option>
-                    </select>
-                  )}
+                          <select
+                            value={cond.time_range_days}
+                            onChange={(e) => updateCondition(groupIndex, condIndex, { time_range_days: parseInt(e.target.value) })}
+                            className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary/50"
+                          >
+                            {TIME_RANGES.map(d => (
+                              <option key={d} value={d}>letzte {d} Tage</option>
+                            ))}
+                          </select>
 
-                  {editedRule.conditions.length > 1 && (
+                          {condIndex < group.conditions.length - 1 && (
+                            <select
+                              value={cond.logic || 'AND'}
+                              onChange={(e) => updateCondition(groupIndex, condIndex, { logic: e.target.value as OptimizationLogic })}
+                              className="bg-primary/20 border border-primary/30 rounded-lg px-3 py-2 text-sm text-primary font-medium focus:outline-none"
+                            >
+                              <option value="AND">UND</option>
+                              <option value="OR">ODER</option>
+                            </select>
+                          )}
+
+                          {group.conditions.length > 1 && (
+                            <button
+                              onClick={() => removeConditionFromGroup(groupIndex, condIndex)}
+                              className="p-2 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
                     <button
-                      onClick={() => removeCondition(index)}
-                      className="p-2 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                      onClick={() => addConditionToGroup(groupIndex)}
+                      className="mt-3 flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
                     >
-                      <X className="w-4 h-4" />
+                      <Plus className="w-4 h-4" />
+                      Bedingung hinzufügen
                     </button>
+                  </div>
+
+                  {/* Group Logic Connector */}
+                  {groupIndex < editedRule.condition_groups.length - 1 && (
+                    <div className="flex items-center justify-center py-2">
+                      <select
+                        value={group.logic || 'AND'}
+                        onChange={(e) => updateGroupLogic(groupIndex, e.target.value as OptimizationLogic)}
+                        className="bg-primary/20 border border-primary/30 rounded-lg px-4 py-2 text-sm text-primary font-bold focus:outline-none"
+                      >
+                        <option value="AND">UND</option>
+                        <option value="OR">ODER</option>
+                      </select>
+                    </div>
                   )}
                 </div>
               ))}
             </div>
 
             <button
-              onClick={addCondition}
-              className="mt-3 flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
+              onClick={addGroup}
+              className="mt-4 flex items-center gap-2 text-sm text-emerald-400 hover:text-emerald-300 transition-colors border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 rounded-lg"
             >
-              <Plus className="w-4 h-4" />
-              Bedingung hinzufügen
+              <Layers className="w-4 h-4" />
+              Neue Gruppe hinzufügen
             </button>
           </div>
 

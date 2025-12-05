@@ -209,13 +209,19 @@ export interface OptimizationCondition {
   logic?: OptimizationLogic;
 }
 
+export interface ConditionGroup {
+  conditions: OptimizationCondition[];
+  logic?: OptimizationLogic;  // How to connect to next group
+}
+
 export interface OptimizationRule {
   id: string;
   shop_id: string;
   name: string;
   is_enabled: boolean;
   priority: number;
-  conditions: OptimizationCondition[];
+  condition_groups: ConditionGroup[];  // New: Groups of conditions
+  conditions?: OptimizationCondition[];  // Legacy: for backwards compatibility
   action_type: OptimizationActionType;
   action_value: number | null;
   action_unit: OptimizationActionUnit | null;

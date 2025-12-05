@@ -1,9 +1,9 @@
 """
 Rule Engine for Campaign Optimization
-Evaluates conditions with AND/OR logic
+Evaluates condition groups with AND/OR logic
 """
 from typing import List, Dict
-from models import OptimizationRule, RuleCondition, CampaignMetrics
+from models import OptimizationRule, RuleCondition, ConditionGroup, CampaignMetrics
 
 
 def evaluate_single_condition(condition: RuleCondition, metrics: Dict) -> bool:
@@ -37,27 +37,9 @@ def evaluate_single_condition(condition: RuleCondition, metrics: Dict) -> bool:
 
 def evaluate_conditions(conditions: List[RuleCondition], metrics: Dict) -> bool:
     """
-    Evaluate conditions with AND/OR logic.
+    Evaluate a list of conditions within a single group.
 
     The logic field on a condition specifies how to connect to the NEXT condition.
-
-    Example:
-        conditions = [
-            {"metric": "spend", "operator": ">=", "value": 100, "logic": "AND"},
-            {"metric": "checkouts", "operator": ">=", "value": 5, "logic": None}
-        ]
-
-        Is evaluated as:
-        (spend >= 100) AND (checkouts >= 5)
-
-    Example with OR:
-        conditions = [
-            {"metric": "spend", "operator": ">=", "value": 100, "logic": "OR"},
-            {"metric": "checkouts", "operator": ">=", "value": 5, "logic": None}
-        ]
-
-        Is evaluated as:
-        (spend >= 100) OR (checkouts >= 5)
 
     Args:
         conditions: List of RuleCondition objects
@@ -80,6 +62,50 @@ def evaluate_conditions(conditions: List[RuleCondition], metrics: Dict) -> bool:
 
         # The logic field on current condition tells us how to combine with next
         logic = current_cond.logic
+
+        if logic == 'AND' or logic == 'UND':
+            result = result and next_result
+        elif logic == 'OR' or logic == 'ODER':
+            result = result or next_result
+        else:
+            # Default to AND if no logic specified
+            result = result and next_result
+
+    return result
+
+
+def evaluate_condition_groups(groups: List[ConditionGroup], metrics: Dict) -> bool:
+    """
+    Evaluate condition groups with AND/OR logic between groups.
+
+    Example:
+        Group 1: (Ausgaben >= 100 UND Ausgaben <= 200)
+        Group 2: (ROAS >= 2 ODER Checkouts <= 13)
+
+        With Group 1.logic = 'AND':
+        Result = Group1_result AND Group2_result
+
+    Args:
+        groups: List of ConditionGroup objects
+        metrics: Dict with metric values
+
+    Returns:
+        True if all groups evaluate to True according to their logic
+    """
+    if not groups:
+        return False
+
+    # Start with the result of the first group
+    result = evaluate_conditions(groups[0].conditions, metrics)
+
+    # Process remaining groups with their logic operators
+    for i in range(len(groups) - 1):
+        current_group = groups[i]
+        next_group = groups[i + 1]
+        next_result = evaluate_conditions(next_group.conditions, metrics)
+
+        # The logic field on current group tells us how to combine with next
+        logic = current_group.logic
 
         if logic == 'AND' or logic == 'UND':
             result = result and next_result
@@ -152,7 +178,8 @@ def find_matching_rule(rules: List[OptimizationRule],
         if rule.max_campaign_age_days is not None and campaign_age_days > rule.max_campaign_age_days:
             continue
 
-        if evaluate_conditions(rule.conditions, metrics):
+        # Evaluate condition groups
+        if evaluate_condition_groups(rule.condition_groups, metrics):
             return rule
 
     return None

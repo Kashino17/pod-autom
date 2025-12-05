@@ -43,7 +43,14 @@ class RuleCondition:
     operator: str  # '>=', '<=', '>', '<', '=='
     value: float
     time_range_days: int = 7  # Look at last N days
-    logic: Optional[str] = None  # 'AND' or 'OR' for next condition
+    logic: Optional[str] = None  # 'AND' or 'OR' for next condition within group
+
+
+@dataclass
+class ConditionGroup:
+    """A group of conditions that are evaluated together."""
+    conditions: List[RuleCondition]
+    logic: Optional[str] = None  # 'AND' or 'OR' for connecting to next group
 
 
 @dataclass
@@ -54,7 +61,7 @@ class OptimizationRule:
     name: str
     is_enabled: bool
     priority: int
-    conditions: List[RuleCondition]
+    condition_groups: List[ConditionGroup]  # New: Groups of conditions
     action_type: str  # 'scale_up', 'scale_down', 'pause'
     action_value: Optional[float]
     action_unit: Optional[str]  # 'amount' or 'percent'
@@ -67,15 +74,36 @@ class OptimizationRule:
     @classmethod
     def from_db_row(cls, row: Dict) -> 'OptimizationRule':
         """Create rule from database row."""
-        conditions = []
-        for cond in row.get('conditions', []):
-            conditions.append(RuleCondition(
-                metric=cond.get('metric'),
-                operator=cond.get('operator'),
-                value=cond.get('value', 0),
-                time_range_days=cond.get('time_range_days', 7),
-                logic=cond.get('logic')
-            ))
+        condition_groups = []
+
+        # Check if new format (condition_groups) exists
+        if 'condition_groups' in row and row['condition_groups']:
+            for group in row['condition_groups']:
+                conditions = []
+                for cond in group.get('conditions', []):
+                    conditions.append(RuleCondition(
+                        metric=cond.get('metric'),
+                        operator=cond.get('operator'),
+                        value=cond.get('value', 0),
+                        time_range_days=cond.get('time_range_days', 7),
+                        logic=cond.get('logic')
+                    ))
+                condition_groups.append(ConditionGroup(
+                    conditions=conditions,
+                    logic=group.get('logic')
+                ))
+        # Backwards compatibility: convert old 'conditions' format to single group
+        elif 'conditions' in row and row['conditions']:
+            conditions = []
+            for cond in row['conditions']:
+                conditions.append(RuleCondition(
+                    metric=cond.get('metric'),
+                    operator=cond.get('operator'),
+                    value=cond.get('value', 0),
+                    time_range_days=cond.get('time_range_days', 7),
+                    logic=cond.get('logic')
+                ))
+            condition_groups.append(ConditionGroup(conditions=conditions, logic=None))
 
         return cls(
             id=row['id'],
@@ -83,7 +111,7 @@ class OptimizationRule:
             name=row['name'],
             is_enabled=row.get('is_enabled', True),
             priority=row.get('priority', 0),
-            conditions=conditions,
+            condition_groups=condition_groups,
             action_type=row['action_type'],
             action_value=row.get('action_value'),
             action_unit=row.get('action_unit'),
