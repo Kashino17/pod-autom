@@ -204,13 +204,13 @@ class PinterestCampaignOptimizationJob:
 
         # Get metrics
         if settings.test_mode_enabled and settings.test_metrics:
-            # Use manual test metrics
-            metrics = settings.test_metrics
-            print(f"    Using TEST metrics: spend=€{metrics.get('spend', 0)}, "
-                  f"checkouts={metrics.get('checkouts', 0)}, roas={metrics.get('roas', 0)}")
+            # Use manual test metrics - apply to all time ranges
+            test_metrics = settings.test_metrics
+            metrics_by_timerange = {7: test_metrics}  # Default to 7 days for test mode
+            print(f"    Using TEST metrics: spend=€{test_metrics.get('spend', 0)}, "
+                  f"checkouts={test_metrics.get('checkouts', 0)}, roas={test_metrics.get('roas', 0)}")
         else:
-            # Get real metrics from Pinterest
-            # Get metrics for all possible time ranges
+            # Get real metrics from Pinterest for each time range
             time_ranges = set()
             for rule in rules:
                 for group in rule.condition_groups:
@@ -220,19 +220,20 @@ class PinterestCampaignOptimizationJob:
             if not time_ranges:
                 time_ranges = {7}
 
-            # For simplicity, get the max time range
-            max_days = max(time_ranges)
-            campaign_metrics = pinterest.get_campaign_analytics(
-                ad_account_id=shop.pinterest_account_id,
-                campaign_id=campaign.pinterest_campaign_id,
-                days=max_days
-            )
-            metrics = campaign_metrics.to_dict()
-            print(f"    Real metrics (last {max_days} days): spend=€{metrics.get('spend', 0)}, "
-                  f"checkouts={metrics.get('checkouts', 0)}, roas={metrics.get('roas', 0)}")
+            # Fetch metrics for each unique time range
+            metrics_by_timerange = {}
+            for days in sorted(time_ranges):
+                campaign_metrics = pinterest.get_campaign_analytics(
+                    ad_account_id=shop.pinterest_account_id,
+                    campaign_id=campaign.pinterest_campaign_id,
+                    days=days
+                )
+                metrics_by_timerange[days] = campaign_metrics.to_dict()
+                print(f"    Metrics (last {days} days): spend=€{campaign_metrics.spend:.2f}, "
+                      f"checkouts={campaign_metrics.checkouts}, roas={campaign_metrics.roas:.2f}")
 
         # Find matching rule (includes campaign age check)
-        matching_rule = find_matching_rule(rules, metrics, campaign_age_days)
+        matching_rule = find_matching_rule(rules, metrics_by_timerange, campaign_age_days)
 
         if not matching_rule:
             print(f"    No rule matched - no action taken")
@@ -240,12 +241,16 @@ class PinterestCampaignOptimizationJob:
 
         print(f"    Matched rule: '{matching_rule.name}' (priority {matching_rule.priority})")
 
+        # For logging, use combined metrics snapshot (max time range or 7 days)
+        max_timerange = max(metrics_by_timerange.keys()) if metrics_by_timerange else 7
+        metrics_snapshot = metrics_by_timerange.get(max_timerange, {})
+
         # Execute action
         result = await self._execute_action(
             shop=shop,
             campaign=campaign,
             rule=matching_rule,
-            metrics=metrics,
+            metrics=metrics_snapshot,
             pinterest=pinterest,
             is_test=settings.test_mode_enabled
         )

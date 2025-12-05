@@ -6,17 +6,22 @@ from typing import List, Dict
 from models import OptimizationRule, RuleCondition, ConditionGroup, CampaignMetrics
 
 
-def evaluate_single_condition(condition: RuleCondition, metrics: Dict) -> bool:
+def evaluate_single_condition(condition: RuleCondition, metrics_by_timerange: Dict[int, Dict]) -> bool:
     """
-    Evaluate a single condition against metrics.
+    Evaluate a single condition against metrics for its specific time range.
 
     Args:
         condition: The condition to evaluate
-        metrics: Dict with 'spend', 'checkouts', 'roas' keys
+        metrics_by_timerange: Dict mapping time_range_days to metrics dict
+                             e.g. {7: {'spend': 100, 'checkouts': 5, 'roas': 2.0}}
 
     Returns:
         True if condition is met
     """
+    # Get metrics for this condition's time range
+    time_range = condition.time_range_days
+    metrics = metrics_by_timerange.get(time_range, {})
+
     metric_value = metrics.get(condition.metric, 0)
     threshold = condition.value
     operator = condition.operator
@@ -35,7 +40,7 @@ def evaluate_single_condition(condition: RuleCondition, metrics: Dict) -> bool:
     return False
 
 
-def evaluate_conditions(conditions: List[RuleCondition], metrics: Dict) -> bool:
+def evaluate_conditions(conditions: List[RuleCondition], metrics_by_timerange: Dict[int, Dict]) -> bool:
     """
     Evaluate a list of conditions within a single group.
 
@@ -43,7 +48,7 @@ def evaluate_conditions(conditions: List[RuleCondition], metrics: Dict) -> bool:
 
     Args:
         conditions: List of RuleCondition objects
-        metrics: Dict with metric values
+        metrics_by_timerange: Dict mapping time_range_days to metrics dict
 
     Returns:
         True if the combined expression evaluates to True
@@ -52,13 +57,13 @@ def evaluate_conditions(conditions: List[RuleCondition], metrics: Dict) -> bool:
         return False
 
     # Start with the result of the first condition
-    result = evaluate_single_condition(conditions[0], metrics)
+    result = evaluate_single_condition(conditions[0], metrics_by_timerange)
 
     # Process remaining conditions with their logic operators
     for i in range(len(conditions) - 1):
         current_cond = conditions[i]
         next_cond = conditions[i + 1]
-        next_result = evaluate_single_condition(next_cond, metrics)
+        next_result = evaluate_single_condition(next_cond, metrics_by_timerange)
 
         # The logic field on current condition tells us how to combine with next
         logic = current_cond.logic
@@ -74,7 +79,7 @@ def evaluate_conditions(conditions: List[RuleCondition], metrics: Dict) -> bool:
     return result
 
 
-def evaluate_condition_groups(groups: List[ConditionGroup], metrics: Dict) -> bool:
+def evaluate_condition_groups(groups: List[ConditionGroup], metrics_by_timerange: Dict[int, Dict]) -> bool:
     """
     Evaluate condition groups with AND/OR logic between groups.
 
@@ -87,7 +92,7 @@ def evaluate_condition_groups(groups: List[ConditionGroup], metrics: Dict) -> bo
 
     Args:
         groups: List of ConditionGroup objects
-        metrics: Dict with metric values
+        metrics_by_timerange: Dict mapping time_range_days to metrics dict
 
     Returns:
         True if all groups evaluate to True according to their logic
@@ -96,13 +101,13 @@ def evaluate_condition_groups(groups: List[ConditionGroup], metrics: Dict) -> bo
         return False
 
     # Start with the result of the first group
-    result = evaluate_conditions(groups[0].conditions, metrics)
+    result = evaluate_conditions(groups[0].conditions, metrics_by_timerange)
 
     # Process remaining groups with their logic operators
     for i in range(len(groups) - 1):
         current_group = groups[i]
         next_group = groups[i + 1]
-        next_result = evaluate_conditions(next_group.conditions, metrics)
+        next_result = evaluate_conditions(next_group.conditions, metrics_by_timerange)
 
         # The logic field on current group tells us how to combine with next
         logic = current_group.logic
@@ -150,14 +155,14 @@ def filter_metrics_by_timerange(full_metrics: Dict[int, CampaignMetrics],
 
 
 def find_matching_rule(rules: List[OptimizationRule],
-                       metrics: Dict,
+                       metrics_by_timerange: Dict[int, Dict],
                        campaign_age_days: int = 0) -> OptimizationRule | None:
     """
     Find the first matching rule (by priority).
 
     Args:
         rules: List of rules sorted by priority (highest first)
-        metrics: Campaign metrics
+        metrics_by_timerange: Dict mapping time_range_days to metrics dict
         campaign_age_days: Age of the campaign in days (from created_time)
 
     Returns:
@@ -179,7 +184,7 @@ def find_matching_rule(rules: List[OptimizationRule],
             continue
 
         # Evaluate condition groups
-        if evaluate_condition_groups(rule.condition_groups, metrics):
+        if evaluate_condition_groups(rule.condition_groups, metrics_by_timerange):
             return rule
 
     return None
