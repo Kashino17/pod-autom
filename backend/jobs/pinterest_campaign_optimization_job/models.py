@@ -70,6 +70,8 @@ class OptimizationRule:
     # Campaign age restrictions (null/None = disabled)
     min_campaign_age_days: Optional[int] = None  # Minimum days campaign must exist before rule applies
     max_campaign_age_days: Optional[int] = None  # Maximum days - rule only applies to campaigns younger than this
+    # Campaign type filter (required field)
+    campaign_type: str = 'replace_campaign'  # 'replace_campaign' or 'winner_campaign'
 
     @classmethod
     def from_db_row(cls, row: Dict) -> 'OptimizationRule':
@@ -118,7 +120,8 @@ class OptimizationRule:
             min_budget=row.get('min_budget', 5.00),
             max_budget=row.get('max_budget', 1000.00),
             min_campaign_age_days=row.get('min_campaign_age_days'),  # None = disabled
-            max_campaign_age_days=row.get('max_campaign_age_days')   # None = disabled
+            max_campaign_age_days=row.get('max_campaign_age_days'),   # None = disabled
+            campaign_type=row.get('campaign_type', 'replace_campaign')  # Required filter
         )
 
 
@@ -154,6 +157,7 @@ class Campaign:
     ad_account_id: str
     shop_id: str
     created_time: Optional[int] = None  # Unix timestamp when campaign was created on Pinterest
+    campaign_type: str = 'replace_campaign'  # 'replace_campaign' or 'winner_campaign'
 
     @classmethod
     def from_db_row(cls, row: Dict) -> 'Campaign':
@@ -173,7 +177,8 @@ class Campaign:
             daily_budget=daily_budget,
             ad_account_id=row.get('ad_account_id', ''),
             shop_id=row.get('shop_id', ''),
-            created_time=row.get('created_time')
+            created_time=row.get('created_time'),
+            campaign_type=row.get('campaign_type', 'replace_campaign')
         )
 
     def get_age_days(self) -> int:

@@ -319,9 +319,20 @@ class WinnerScalingJob:
         active_image = active_by_type.get('image', 0)
         total_active = active_video + active_image
 
-        # Calculate max campaigns per type
-        max_video = settings.max_campaigns_per_winner_video if settings.video_enabled else 0
-        max_image = settings.max_campaigns_per_winner_image if settings.image_enabled else 0
+        # Calculate link type multiplier
+        # If both link_to_product and link_to_collection are enabled, we create 2x campaigns
+        link_type_count = 0
+        if settings.link_to_product:
+            link_type_count += 1
+        if settings.link_to_collection:
+            link_type_count += 1
+        if link_type_count == 0:
+            link_type_count = 1  # Default fallback
+
+        # Calculate max campaigns per type (multiplied by link types)
+        # max_campaigns_per_winner_video/image is PER LINK TYPE
+        max_video = (settings.max_campaigns_per_winner_video * link_type_count) if settings.video_enabled else 0
+        max_image = (settings.max_campaigns_per_winner_image * link_type_count) if settings.image_enabled else 0
         total_max_campaigns = max_video + max_image
 
         if total_max_campaigns == 0:
@@ -336,7 +347,7 @@ class WinnerScalingJob:
             print(f"    Already at max campaigns (Video: {active_video}/{max_video}, Image: {active_image}/{max_image})")
             return
 
-        print(f"    Campaign status - Video: {active_video}/{max_video}, Image: {active_image}/{max_image}")
+        print(f"    Campaign status - Video: {active_video}/{max_video}, Image: {active_image}/{max_image} (x{link_type_count} link types)")
         if need_video > 0:
             print(f"    Need {need_video} more video campaign(s)")
         if need_image > 0:

@@ -129,14 +129,29 @@ class SupabaseService:
             print(f"Error getting optimization rules: {e}")
             return []
 
-    def get_active_campaigns(self, shop_id: str) -> List[Campaign]:
-        """Get all active Pinterest campaigns for a shop."""
+    def get_active_campaigns(self, shop_id: str, campaign_type: str = None) -> List[Campaign]:
+        """Get all active Pinterest campaigns for a shop, optionally filtered by campaign_type.
+
+        Args:
+            shop_id: The shop ID
+            campaign_type: Optional filter - 'replace_campaign' or 'winner_campaign'
+                          If None, returns all active campaigns
+
+        Returns:
+            List of Campaign objects
+        """
         campaigns = []
 
         try:
-            response = self.client.table('pinterest_campaigns').select(
-                'id, pinterest_campaign_id, name, status, daily_budget, ad_account_id, shop_id, created_time'
-            ).eq('shop_id', shop_id).eq('status', 'ACTIVE').execute()
+            query = self.client.table('pinterest_campaigns').select(
+                'id, pinterest_campaign_id, name, status, daily_budget, ad_account_id, shop_id, created_time, campaign_type'
+            ).eq('shop_id', shop_id).eq('status', 'ACTIVE')
+
+            # Filter by campaign_type if specified
+            if campaign_type:
+                query = query.eq('campaign_type', campaign_type)
+
+            response = query.execute()
 
             if response.data:
                 for row in response.data:
@@ -152,7 +167,7 @@ class SupabaseService:
         """Get a specific campaign by internal ID."""
         try:
             response = self.client.table('pinterest_campaigns').select(
-                'id, pinterest_campaign_id, name, status, daily_budget, ad_account_id, shop_id, created_time'
+                'id, pinterest_campaign_id, name, status, daily_budget, ad_account_id, shop_id, created_time, campaign_type'
             ).eq('id', campaign_id).single().execute()
 
             if response.data:
@@ -523,6 +538,7 @@ class SupabaseService:
                 created_time = campaign.get('created_time')
 
                 # Upsert campaign
+                # campaign_type is set based on source: 'replace_campaign' from Pinterest Sync
                 self.client.table('pinterest_campaigns').upsert({
                     'shop_id': shop_id,
                     'pinterest_campaign_id': campaign_id,
@@ -530,7 +546,8 @@ class SupabaseService:
                     'name': campaign.get('name', 'Unnamed Campaign'),
                     'status': status,
                     'daily_budget': daily_budget,
-                    'created_time': created_time
+                    'created_time': created_time,
+                    'campaign_type': 'replace_campaign'
                 }, on_conflict='shop_id,pinterest_campaign_id').execute()
 
                 synced_count += 1

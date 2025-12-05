@@ -323,7 +323,11 @@ class SupabaseService:
         }).eq('id', campaign_id).execute()
 
     def insert_winner_campaign(self, campaign: WinnerCampaign) -> str:
-        """Insert a new winner campaign and return its ID."""
+        """Insert a new winner campaign and return its ID.
+
+        Also inserts into pinterest_campaigns table with campaign_type='winner_campaign'
+        so it can be managed by the Campaign Optimization Job.
+        """
         result = self.client.table('winner_campaigns').insert({
             'shop_id': campaign.shop_id,
             'winner_product_id': campaign.winner_product_id,
@@ -340,7 +344,33 @@ class SupabaseService:
             ] if campaign.generated_assets else None
         }).execute()
 
-        return result.data[0]['id']
+        winner_campaign_id = result.data[0]['id']
+
+        # Also insert into pinterest_campaigns for Campaign Optimization Job
+        # Get the ad_account_uuid from pinterest_ad_accounts
+        try:
+            ad_account_result = self.client.table('pinterest_ad_accounts').select(
+                'id'
+            ).eq('shop_id', campaign.shop_id).eq('is_selected', True).single().execute()
+
+            if ad_account_result.data:
+                ad_account_uuid = ad_account_result.data['id']
+
+                # Insert/update in pinterest_campaigns with campaign_type='winner_campaign'
+                self.client.table('pinterest_campaigns').upsert({
+                    'shop_id': campaign.shop_id,
+                    'pinterest_campaign_id': campaign.pinterest_campaign_id,
+                    'ad_account_id': ad_account_uuid,
+                    'name': campaign.campaign_name,
+                    'status': campaign.status,
+                    'daily_budget': 0,  # Will be updated by sync
+                    'campaign_type': 'winner_campaign'
+                }, on_conflict='shop_id,pinterest_campaign_id').execute()
+
+        except Exception as e:
+            print(f"Warning: Could not insert winner campaign into pinterest_campaigns: {e}")
+
+        return winner_campaign_id
 
     def log_action(self, entry: LogEntry):
         """Log an action to the winner_scaling_log table."""

@@ -135,7 +135,7 @@ class PinterestCampaignOptimizationJob:
             else:
                 print(f"  No ad account selected - skipping campaign sync")
 
-            # Get campaigns to process
+            # Get campaigns to process - now grouped by campaign_type
             if settings.test_mode_enabled:
                 # Test mode: only process test campaign
                 if not settings.test_campaign_id:
@@ -149,25 +149,52 @@ class PinterestCampaignOptimizationJob:
 
                 campaigns = [test_campaign]
                 print(f"  TEST MODE: Processing only test campaign '{test_campaign.name}'")
+
+                # Process test campaign with all rules (test mode ignores campaign_type filter)
+                for campaign in campaigns:
+                    await self._process_campaign(
+                        shop=shop,
+                        campaign=campaign,
+                        rules=rules,
+                        settings=settings,
+                        pinterest=pinterest
+                    )
             else:
-                # Normal mode: process all active campaigns
-                campaigns = self.db.get_active_campaigns(shop.shop_id)
+                # Normal mode: group rules by campaign_type and process separately
+                # This ensures rules only apply to campaigns of matching type
 
-            if not campaigns:
-                print(f"  No campaigns to process")
-                return
+                # Group rules by campaign_type
+                rules_by_type = {}
+                for rule in rules:
+                    campaign_type = rule.campaign_type
+                    if campaign_type not in rules_by_type:
+                        rules_by_type[campaign_type] = []
+                    rules_by_type[campaign_type].append(rule)
 
-            print(f"  Processing {len(campaigns)} campaigns")
+                # Process each campaign type separately
+                total_campaigns = 0
+                for campaign_type, type_rules in rules_by_type.items():
+                    campaigns = self.db.get_active_campaigns(shop.shop_id, campaign_type=campaign_type)
 
-            # Process each campaign
-            for campaign in campaigns:
-                await self._process_campaign(
-                    shop=shop,
-                    campaign=campaign,
-                    rules=rules,
-                    settings=settings,
-                    pinterest=pinterest
-                )
+                    if not campaigns:
+                        print(f"  No '{campaign_type}' campaigns to process")
+                        continue
+
+                    print(f"  Processing {len(campaigns)} '{campaign_type}' campaigns with {len(type_rules)} rules")
+                    total_campaigns += len(campaigns)
+
+                    for campaign in campaigns:
+                        await self._process_campaign(
+                            shop=shop,
+                            campaign=campaign,
+                            rules=type_rules,  # Only apply rules for this campaign_type
+                            settings=settings,
+                            pinterest=pinterest
+                        )
+
+                if total_campaigns == 0:
+                    print(f"  No campaigns to process")
+                    return
 
             # Check for manually paused campaigns and cleanup sync data
             await self._check_and_cleanup_paused_campaigns(shop, pinterest)

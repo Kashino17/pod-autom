@@ -9,6 +9,7 @@ import {
   OptimizationLogic,
   OptimizationActionType,
   OptimizationActionUnit,
+  CampaignType,
   PinterestCampaign,
   ConditionGroup
 } from '../../types';
@@ -59,6 +60,11 @@ const ACTION_TYPES: { value: OptimizationActionType; label: string; icon: React.
   { value: 'scale_up', label: 'Budget erhöhen', icon: <TrendingUp className="w-4 h-4" /> },
   { value: 'scale_down', label: 'Budget reduzieren', icon: <TrendingDown className="w-4 h-4" /> },
   { value: 'pause', label: 'Pausieren', icon: <Pause className="w-4 h-4" /> }
+];
+
+const CAMPAIGN_TYPES: { value: CampaignType; label: string; description: string }[] = [
+  { value: 'replace_campaign', label: 'Replace-Kampagnen', description: 'Kampagnen aus Pinterest Sync (Produkt-Ersetzung)' },
+  { value: 'winner_campaign', label: 'Winner-Kampagnen', description: 'Kampagnen aus Winner Scaling (AI Creatives)' }
 ];
 
 // Helper function to get operator label
@@ -300,7 +306,8 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
       min_budget: 5,
       max_budget: 1000,
       min_campaign_age_days: null,
-      max_campaign_age_days: null
+      max_campaign_age_days: null,
+      campaign_type: 'replace_campaign'  // Default to replace campaigns
     };
     setEditingRule(newRule);
     setIsCreatingNew(true);
@@ -595,7 +602,16 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
                           <Power className="w-4 h-4" />
                         </button>
                         <div>
-                          <h4 className="font-medium text-zinc-200">{rule.name}</h4>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium text-zinc-200">{rule.name}</h4>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                              rule.campaign_type === 'winner_campaign'
+                                ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                                : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                            }`}>
+                              {rule.campaign_type === 'winner_campaign' ? 'Winner' : 'Replace'}
+                            </span>
+                          </div>
                           <p className="text-xs text-zinc-500">
                             Priorität: {rule.priority} | {(rule.condition_groups || []).length} Gruppe(n)
                             {rule.min_campaign_age_days !== null && ` | Min. ${rule.min_campaign_age_days} Tage`}
@@ -875,6 +891,41 @@ const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel, isSavin
               onChange={(e) => setEditedRule({ ...editedRule, name: e.target.value })}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary/50"
             />
+          </div>
+
+          {/* Campaign Type - Required */}
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-2">
+              Kampagnen-Typ <span className="text-red-400">*</span>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              {CAMPAIGN_TYPES.map(ct => (
+                <button
+                  key={ct.value}
+                  type="button"
+                  onClick={() => setEditedRule({ ...editedRule, campaign_type: ct.value })}
+                  className={`p-3 rounded-lg border transition-all text-left ${
+                    editedRule.campaign_type === ct.value
+                      ? ct.value === 'winner_campaign'
+                        ? 'bg-purple-500/10 border-purple-500/30 ring-2 ring-purple-500/20'
+                        : 'bg-blue-500/10 border-blue-500/30 ring-2 ring-blue-500/20'
+                      : 'bg-zinc-950 border-zinc-800 hover:border-zinc-700'
+                  }`}
+                >
+                  <span className={`text-sm font-medium ${
+                    editedRule.campaign_type === ct.value
+                      ? ct.value === 'winner_campaign' ? 'text-purple-300' : 'text-blue-300'
+                      : 'text-zinc-300'
+                  }`}>
+                    {ct.label}
+                  </span>
+                  <p className="text-xs text-zinc-500 mt-1">{ct.description}</p>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-zinc-500 mt-2">
+              Diese Regel gilt nur für Kampagnen des ausgewählten Typs
+            </p>
           </div>
 
           {/* Priority */}

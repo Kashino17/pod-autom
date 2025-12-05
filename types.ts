@@ -200,6 +200,7 @@ export type OptimizationOperator = '>=' | '<=' | '>' | '<' | '==';
 export type OptimizationLogic = 'AND' | 'OR';
 export type OptimizationActionType = 'scale_up' | 'scale_down' | 'pause';
 export type OptimizationActionUnit = 'amount' | 'percent';
+export type CampaignType = 'replace_campaign' | 'winner_campaign';
 
 export interface OptimizationCondition {
   metric: OptimizationMetric;
@@ -230,6 +231,8 @@ export interface OptimizationRule {
   // Campaign age restrictions (null = disabled)
   min_campaign_age_days: number | null;
   max_campaign_age_days: number | null;
+  // Campaign type filter (required)
+  campaign_type: CampaignType;
   created_at?: string;
   updated_at?: string;
 }
