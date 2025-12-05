@@ -454,19 +454,6 @@ class WinnerScalingJob:
                 print(f"      Campaign '{campaign_name[:40]}...' is {pinterest_status} on Pinterest - updating DB")
                 self.db.update_campaign_status(campaign_id, pinterest_status)
 
-                # Log the status change
-                self.db.log_action(LogEntry(
-                    shop_id=shop.shop_id,
-                    winner_product_id=winner_id,
-                    action_type='campaign_status_synced',
-                    details={
-                        'campaign_name': campaign_name,
-                        'pinterest_campaign_id': pinterest_campaign_id,
-                        'old_status': db_status,
-                        'new_status': pinterest_status
-                    }
-                ))
-
     async def _create_campaigns_for_winner(
         self,
         shop: ShopConfig,
