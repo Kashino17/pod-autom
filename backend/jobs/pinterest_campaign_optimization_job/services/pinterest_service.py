@@ -315,3 +315,37 @@ class PinterestAPIClient:
         except Exception as e:
             print(f"Token refresh error: {e}")
             return None
+
+    def get_campaign_status(
+        self,
+        ad_account_id: str,
+        campaign_id: str
+    ) -> Optional[str]:
+        """
+        Get the current status of a campaign from Pinterest API.
+
+        Args:
+            ad_account_id: Pinterest ad account ID
+            campaign_id: Pinterest campaign ID
+
+        Returns:
+            Campaign status ('ACTIVE', 'PAUSED', 'ARCHIVED', etc.) or None if failed
+        """
+        info = self.get_campaign_info(ad_account_id, campaign_id)
+        if info:
+            return info.get('status')
+        return None
+
+    def is_campaign_active(
+        self,
+        ad_account_id: str,
+        campaign_id: str
+    ) -> bool:
+        """
+        Check if a campaign is currently active on Pinterest.
+
+        Returns:
+            True if campaign status is 'ACTIVE', False otherwise
+        """
+        status = self.get_campaign_status(ad_account_id, campaign_id)
+        return status == 'ACTIVE'

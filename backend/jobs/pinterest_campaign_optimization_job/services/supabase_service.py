@@ -311,3 +311,116 @@ class SupabaseService:
 
         except Exception as e:
             print(f"Error updating Pinterest tokens: {e}")
+
+    # ===== Pinterest Sync Cleanup Methods =====
+
+    def get_all_synced_campaigns(self, shop_id: str) -> List[Dict]:
+        """
+        Get all campaigns that were created via Pinterest Sync for a shop.
+        These are campaigns in pinterest_campaigns that have entries in pinterest_sync_log.
+        """
+        try:
+            # Get campaigns from pinterest_campaigns table
+            response = self.client.table('pinterest_campaigns').select(
+                'id, pinterest_campaign_id, name, status, shop_id'
+            ).eq('shop_id', shop_id).execute()
+
+            return response.data or []
+
+        except Exception as e:
+            print(f"Error getting synced campaigns: {e}")
+            return []
+
+    def get_sync_log_entries_for_campaign(self, campaign_id: str) -> List[Dict]:
+        """Get all pinterest_sync_log entries for a campaign."""
+        try:
+            response = self.client.table('pinterest_sync_log').select(
+                'id, shopify_product_id, collection_id, status'
+            ).eq('campaign_id', campaign_id).execute()
+
+            return response.data or []
+
+        except Exception as e:
+            print(f"Error getting sync log entries: {e}")
+            return []
+
+    def delete_sync_log_for_campaign(self, campaign_id: str) -> int:
+        """
+        Delete all pinterest_sync_log entries for a campaign.
+        Returns the number of deleted entries.
+        """
+        try:
+            # First get the entries to count them
+            entries = self.get_sync_log_entries_for_campaign(campaign_id)
+            count = len(entries)
+
+            if count > 0:
+                self.client.table('pinterest_sync_log').delete().eq(
+                    'campaign_id', campaign_id
+                ).execute()
+
+            return count
+
+        except Exception as e:
+            print(f"Error deleting sync log entries: {e}")
+            return 0
+
+    def delete_product_sales_for_campaign(self, shop_id: str, campaign_id: str) -> int:
+        """
+        Delete product_sales entries for products that were synced via this campaign.
+        First gets the product IDs from pinterest_sync_log, then deletes matching product_sales.
+        Returns the number of deleted entries.
+        """
+        try:
+            # Get product IDs from sync log
+            sync_entries = self.get_sync_log_entries_for_campaign(campaign_id)
+
+            if not sync_entries:
+                return 0
+
+            product_ids = [entry['shopify_product_id'] for entry in sync_entries if entry.get('shopify_product_id')]
+
+            if not product_ids:
+                return 0
+
+            # Delete product_sales entries for these products
+            self.client.table('product_sales').delete().eq(
+                'shop_id', shop_id
+            ).in_('product_id', product_ids).execute()
+
+            return len(product_ids)
+
+        except Exception as e:
+            print(f"Error deleting product sales: {e}")
+            return 0
+
+    def cleanup_paused_campaign_sync(self, shop_id: str, campaign_id: str, campaign_name: str) -> Dict:
+        """
+        Full cleanup when a campaign is paused:
+        1. Delete product_sales entries for synced products
+        2. Delete pinterest_sync_log entries
+
+        Returns dict with counts of deleted items.
+        """
+        result = {
+            'product_sales_deleted': 0,
+            'sync_log_deleted': 0
+        }
+
+        try:
+            # First delete product_sales (needs sync_log data)
+            result['product_sales_deleted'] = self.delete_product_sales_for_campaign(shop_id, campaign_id)
+
+            # Then delete sync_log entries
+            result['sync_log_deleted'] = self.delete_sync_log_for_campaign(campaign_id)
+
+            if result['sync_log_deleted'] > 0 or result['product_sales_deleted'] > 0:
+                print(f"    Cleaned up campaign '{campaign_name}': "
+                      f"{result['sync_log_deleted']} sync entries, "
+                      f"{result['product_sales_deleted']} product sales")
+
+            return result
+
+        except Exception as e:
+            print(f"Error cleaning up paused campaign: {e}")
+            return result

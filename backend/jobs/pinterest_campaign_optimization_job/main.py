@@ -155,6 +155,9 @@ class PinterestCampaignOptimizationJob:
                     pinterest=pinterest
                 )
 
+            # Check for manually paused campaigns and cleanup sync data
+            await self._check_and_cleanup_paused_campaigns(shop, pinterest)
+
             self.job_metrics.shops_processed += 1
 
         except Exception as e:
@@ -284,6 +287,16 @@ class PinterestCampaignOptimizationJob:
                 result.action_taken = 'paused'
                 self.db.update_campaign_status_in_db(campaign.id, 'PAUSED')
                 print(f"    ACTION: Paused campaign")
+
+                # Cleanup sync data for paused campaign
+                cleanup_result = self.db.cleanup_paused_campaign_sync(
+                    shop_id=shop.shop_id,
+                    campaign_id=campaign.id,
+                    campaign_name=campaign.name
+                )
+                if cleanup_result['sync_log_deleted'] > 0:
+                    print(f"    CLEANUP: Removed {cleanup_result['sync_log_deleted']} sync entries, "
+                          f"{cleanup_result['product_sales_deleted']} product sales")
             else:
                 result.action_taken = 'failed'
                 result.error_message = 'Failed to pause campaign on Pinterest'
@@ -352,6 +365,64 @@ class PinterestCampaignOptimizationJob:
                 print(f"    ACTION FAILED: Could not update budget")
 
         return result
+
+    async def _check_and_cleanup_paused_campaigns(
+        self,
+        shop: ShopPinterestConfig,
+        pinterest: PinterestAPIClient
+    ):
+        """
+        Check all synced campaigns for manually paused status and cleanup sync data.
+        This catches campaigns that were paused directly in Pinterest Ads Manager.
+        """
+        print(f"\n  Checking for manually paused campaigns...")
+
+        # Get all campaigns from pinterest_campaigns table (not just active ones)
+        all_campaigns = self.db.get_all_synced_campaigns(shop.shop_id)
+
+        if not all_campaigns:
+            return
+
+        campaigns_cleaned = 0
+
+        for campaign_data in all_campaigns:
+            campaign_id = campaign_data.get('id')
+            pinterest_campaign_id = campaign_data.get('pinterest_campaign_id')
+            campaign_name = campaign_data.get('name', 'Unknown')
+            db_status = campaign_data.get('status', 'ACTIVE')
+
+            if not pinterest_campaign_id:
+                continue
+
+            # Only check campaigns that are marked as ACTIVE in our DB
+            if db_status != 'ACTIVE':
+                continue
+
+            # Check actual Pinterest status
+            pinterest_status = pinterest.get_campaign_status(
+                ad_account_id=shop.pinterest_account_id,
+                campaign_id=pinterest_campaign_id
+            )
+
+            if pinterest_status and pinterest_status != 'ACTIVE':
+                # Campaign was manually paused on Pinterest - update DB and cleanup
+                print(f"    Campaign '{campaign_name[:40]}...' is {pinterest_status} on Pinterest (manually paused)")
+
+                # Update status in DB
+                self.db.update_campaign_status_in_db(campaign_id, pinterest_status)
+
+                # Cleanup sync data and product_sales
+                cleanup_result = self.db.cleanup_paused_campaign_sync(
+                    shop_id=shop.shop_id,
+                    campaign_id=campaign_id,
+                    campaign_name=campaign_name
+                )
+
+                if cleanup_result['sync_log_deleted'] > 0 or cleanup_result['product_sales_deleted'] > 0:
+                    campaigns_cleaned += 1
+
+        if campaigns_cleaned > 0:
+            print(f"  Cleaned up {campaigns_cleaned} manually paused campaign(s)")
 
     def _finish_job(self, status: str):
         """Finish the job and log final status."""
