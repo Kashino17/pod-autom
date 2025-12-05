@@ -232,17 +232,21 @@ Requirements:
 
     def _create_video_prompt(self, product_title: str, product_image_url: Optional[str]) -> str:
         """Create an optimized prompt for Pinterest product videos."""
-        prompt = f"""Create an 8-second vertical product showcase video optimized for Pinterest, featuring the exact fashion product shown in the reference image. The product's design, colors, textures, and overall appearance must perfectly match the image — no alterations are allowed.
+        prompt = f"""Create an 8-second vertical fashion product showcase video optimized for Pinterest, in full 9:16 aspect ratio (1000x1500px), with no black bars or letterboxing.
 
-Specifications:
-    •    Aspect ratio: 9:16, resolution 1000x1500px
-    •    Use the product image as the absolute visual reference: {product_image_url if product_image_url else 'N/A'}
-    •    Elegant, minimal background to enhance focus on the product
-    •    Smooth and professional camera movements (e.g., slow pans, subtle zooms, or reveals)
-    •    Sophisticated studio lighting to accentuate material, silhouette, and craftsmanship
-    •    No text, no music cues — keep it visually clean
-    •    Optional: tasteful, subtle transitions or light motion graphics
-    •    Final frame should clearly showcase the product from a flattering angle
+Use the provided product image strictly as a visual reference for design accuracy — the product's shape, color, material, and details must exactly match the reference image. Do not use the image dimensions or background as framing; instead, generate a fully native vertical video composition.
+
+Video Requirements:
+    •    1000x1500px resolution, true 9:16 vertical layout
+    •    Clean, minimal background to enhance product visibility
+    •    Sophisticated, elegant lighting to highlight product details
+    •    Cinematic camera movement: smooth pans, gentle zoom-ins or reveals
+    •    No text overlays, music, or captions
+    •    Optionally include subtle transitions or motion graphics
+    •    Final frame must clearly display the product, well-lit and centered
+
+Critical constraint: The product must appear identical to the image — no changes in color, texture, cut, or design.
+Use this product image as the main reference: {product_image_url if product_image_url else 'N/A'}
 """
 
         return prompt
