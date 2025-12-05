@@ -350,21 +350,57 @@ Use this product image as the main reference: {product_image_url if product_imag
             print(f"    Starting Veo 3.1 video generation...")
 
             # Prepare image parameter if reference image is provided
+            # Resize to 1000x1500 (9:16) to match video format
             image_param = None
             if reference_image_url:
                 try:
+                    from PIL import Image
+                    from io import BytesIO
+
                     # Download the reference image
                     img_response = requests.get(reference_image_url, timeout=30)
                     img_response.raise_for_status()
 
-                    # Create an Image object from the downloaded bytes
+                    # Open and resize to 1000x1500 (9:16 aspect ratio)
+                    img = Image.open(BytesIO(img_response.content))
+
+                    # Target dimensions for 9:16 video
+                    target_width = 1000
+                    target_height = 1500
+
+                    # Resize with crop to fill (no black bars)
+                    img_ratio = img.width / img.height
+                    target_ratio = target_width / target_height
+
+                    if img_ratio > target_ratio:
+                        # Image is wider - crop sides
+                        new_height = img.height
+                        new_width = int(new_height * target_ratio)
+                        left = (img.width - new_width) // 2
+                        img = img.crop((left, 0, left + new_width, new_height))
+                    else:
+                        # Image is taller - crop top/bottom
+                        new_width = img.width
+                        new_height = int(new_width / target_ratio)
+                        top = (img.height - new_height) // 2
+                        img = img.crop((0, top, new_width, top + new_height))
+
+                    # Resize to exact target dimensions
+                    img_resized = img.resize((target_width, target_height), Image.Resampling.LANCZOS)
+
+                    # Convert to bytes
+                    output_buffer = BytesIO()
+                    img_resized.save(output_buffer, format='JPEG', quality=95)
+                    resized_bytes = output_buffer.getvalue()
+
+                    # Create an Image object from the resized bytes
                     image_param = types.Image(
-                        image_bytes=img_response.content,
-                        mime_type=img_response.headers.get('content-type', 'image/jpeg')
+                        image_bytes=resized_bytes,
+                        mime_type='image/jpeg'
                     )
-                    print(f"    Using product image as starting frame for video")
+                    print(f"    Reference image resized to 1000x1500 for Veo 3.1")
                 except Exception as img_err:
-                    print(f"    Warning: Could not load reference image for video: {img_err}")
+                    print(f"    Warning: Could not load/resize reference image for video: {img_err}")
                     image_param = None
 
             # Start video generation (asynchronous operation)
