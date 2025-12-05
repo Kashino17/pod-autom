@@ -29,8 +29,7 @@ import {
   Power,
   RefreshCw,
   Zap,
-  ListChecks,
-  Download
+  ListChecks
 } from 'lucide-react';
 import { supabase } from '../../src/lib/supabase';
 
@@ -74,8 +73,6 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
   const [campaigns, setCampaigns] = useState<PinterestCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncSuccess, setSyncSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Rule Editor State
@@ -283,41 +280,6 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
     setIsCreatingNew(true);
   };
 
-  const syncCampaigns = async () => {
-    setIsSyncing(true);
-    setError(null);
-    setSyncSuccess(null);
-
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-      const response = await fetch(`${apiUrl}/api/pinterest/sync-campaigns`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ shop_id: shopId }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Sync fehlgeschlagen');
-      }
-
-      setSyncSuccess(`${data.synced_count} Kampagnen erfolgreich synchronisiert`);
-
-      // Reload data to show updated campaigns
-      await loadData();
-
-      // Clear success message after 5 seconds
-      setTimeout(() => setSyncSuccess(null), 5000);
-    } catch (err: any) {
-      setError(err.message || 'Fehler beim Synchronisieren der Kampagnen');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -340,35 +302,14 @@ export const CampaignOptimization: React.FC<CampaignOptimizationProps> = ({ shop
             <p className="text-sm text-zinc-400 mt-0.5">Automatische Budget-Anpassung basierend auf Performance-Regeln</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={syncCampaigns}
-            disabled={isSyncing}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-xs font-medium text-primary transition-colors border border-primary/20 hover:border-primary/40 disabled:opacity-50"
-          >
-            {isSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-            Kampagnen synchronisieren
-          </button>
-          <button
-            onClick={loadData}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-300 transition-colors border border-zinc-700 hover:text-white"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Aktualisieren
-          </button>
-        </div>
+        <button
+          onClick={loadData}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-300 transition-colors border border-zinc-700 hover:text-white"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          Aktualisieren
+        </button>
       </div>
-
-      {/* Success Display */}
-      {syncSuccess && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-3 text-emerald-400">
-          <CheckCircle2 className="w-5 h-5 shrink-0" />
-          <span className="text-sm">{syncSuccess}</span>
-          <button onClick={() => setSyncSuccess(null)} className="ml-auto p-1 hover:bg-emerald-500/20 rounded">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Error Display */}
       {error && (

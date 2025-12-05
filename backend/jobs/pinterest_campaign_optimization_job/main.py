@@ -121,6 +121,20 @@ class PinterestCampaignOptimizationJob:
                 refresh_token=shop.pinterest_refresh_token
             )
 
+            # Sync campaigns from Pinterest API to database
+            print(f"  Syncing campaigns from Pinterest...")
+            ad_account = self.db.get_ad_account_for_shop(shop.shop_id)
+            if ad_account:
+                pinterest_campaigns = pinterest.get_all_campaigns(shop.pinterest_account_id)
+                synced_count = self.db.sync_campaigns_from_pinterest(
+                    shop_id=shop.shop_id,
+                    ad_account_uuid=ad_account['id'],
+                    campaigns=pinterest_campaigns
+                )
+                print(f"  Synced {synced_count} active campaigns from Pinterest")
+            else:
+                print(f"  No ad account selected - skipping campaign sync")
+
             # Get campaigns to process
             if settings.test_mode_enabled:
                 # Test mode: only process test campaign
@@ -294,8 +308,8 @@ class PinterestCampaignOptimizationJob:
                     campaign_id=campaign.id,
                     campaign_name=campaign.name
                 )
-                if cleanup_result['sync_log_deleted'] > 0:
-                    print(f"    CLEANUP: Removed {cleanup_result['sync_log_deleted']} sync entries, "
+                if cleanup_result['batch_assignments_deleted'] > 0 or cleanup_result['product_sales_deleted'] > 0:
+                    print(f"    CLEANUP: Removed {cleanup_result['batch_assignments_deleted']} batch assignments, "
                           f"{cleanup_result['product_sales_deleted']} product sales")
             else:
                 result.action_taken = 'failed'
@@ -418,7 +432,7 @@ class PinterestCampaignOptimizationJob:
                     campaign_name=campaign_name
                 )
 
-                if cleanup_result['sync_log_deleted'] > 0 or cleanup_result['product_sales_deleted'] > 0:
+                if cleanup_result['batch_assignments_deleted'] > 0 or cleanup_result['product_sales_deleted'] > 0:
                     campaigns_cleaned += 1
 
         if campaigns_cleaned > 0:

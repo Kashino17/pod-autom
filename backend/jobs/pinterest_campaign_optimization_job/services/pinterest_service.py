@@ -349,3 +349,42 @@ class PinterestAPIClient:
         """
         status = self.get_campaign_status(ad_account_id, campaign_id)
         return status == 'ACTIVE'
+
+    def get_all_campaigns(
+        self,
+        ad_account_id: str
+    ) -> List[Dict]:
+        """
+        Get all campaigns from Pinterest API with pagination.
+
+        Args:
+            ad_account_id: Pinterest ad account ID
+
+        Returns:
+            List of all campaigns
+        """
+        all_campaigns = []
+        bookmark = None
+
+        while True:
+            params = {'page_size': 100}
+            if bookmark:
+                params['bookmark'] = bookmark
+
+            result = self._make_request(
+                'GET',
+                f'ad_accounts/{ad_account_id}/campaigns',
+                params=params
+            )
+
+            if not result:
+                break
+
+            campaigns = result.get('items', [])
+            all_campaigns.extend(campaigns)
+
+            bookmark = result.get('bookmark')
+            if not bookmark:
+                break
+
+        return all_campaigns

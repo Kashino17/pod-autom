@@ -344,25 +344,29 @@ class SupabaseService:
             print(f"Error getting sync log entries: {e}")
             return []
 
-    def delete_sync_log_for_campaign(self, campaign_id: str) -> int:
+    def delete_batch_assignments_for_campaign(self, campaign_id: str) -> int:
         """
-        Delete all pinterest_sync_log entries for a campaign.
+        Delete all campaign_batch_assignments entries for a campaign.
+        This removes the Kampagnen-Kollektions Verknüpfung.
         Returns the number of deleted entries.
         """
         try:
-            # First get the entries to count them
-            entries = self.get_sync_log_entries_for_campaign(campaign_id)
-            count = len(entries)
+            # First get the count
+            count_response = self.client.table('campaign_batch_assignments').select(
+                'id'
+            ).eq('campaign_id', campaign_id).execute()
+
+            count = len(count_response.data) if count_response.data else 0
 
             if count > 0:
-                self.client.table('pinterest_sync_log').delete().eq(
+                self.client.table('campaign_batch_assignments').delete().eq(
                     'campaign_id', campaign_id
                 ).execute()
 
             return count
 
         except Exception as e:
-            print(f"Error deleting sync log entries: {e}")
+            print(f"Error deleting batch assignments: {e}")
             return 0
 
     def delete_product_sales_for_campaign(self, shop_id: str, campaign_id: str) -> int:
@@ -397,26 +401,28 @@ class SupabaseService:
     def cleanup_paused_campaign_sync(self, shop_id: str, campaign_id: str, campaign_name: str) -> Dict:
         """
         Full cleanup when a campaign is paused:
-        1. Delete product_sales entries for synced products
-        2. Delete pinterest_sync_log entries
+        1. Delete campaign_batch_assignments entries (Kampagnen-Kollektions Verknüpfung)
+        2. Delete product_sales entries for synced products
+
+        NOTE: pinterest_sync_log entries are NOT deleted - they serve as history.
 
         Returns dict with counts of deleted items.
         """
         result = {
-            'product_sales_deleted': 0,
-            'sync_log_deleted': 0
+            'batch_assignments_deleted': 0,
+            'product_sales_deleted': 0
         }
 
         try:
-            # First delete product_sales (needs sync_log data)
+            # First delete product_sales (needs sync_log data to find product IDs)
             result['product_sales_deleted'] = self.delete_product_sales_for_campaign(shop_id, campaign_id)
 
-            # Then delete sync_log entries
-            result['sync_log_deleted'] = self.delete_sync_log_for_campaign(campaign_id)
+            # Delete campaign_batch_assignments (Kampagnen-Kollektions Verknüpfung)
+            result['batch_assignments_deleted'] = self.delete_batch_assignments_for_campaign(campaign_id)
 
-            if result['sync_log_deleted'] > 0 or result['product_sales_deleted'] > 0:
+            if result['batch_assignments_deleted'] > 0 or result['product_sales_deleted'] > 0:
                 print(f"    Cleaned up campaign '{campaign_name}': "
-                      f"{result['sync_log_deleted']} sync entries, "
+                      f"{result['batch_assignments_deleted']} batch assignments, "
                       f"{result['product_sales_deleted']} product sales")
 
             return result
@@ -424,3 +430,74 @@ class SupabaseService:
         except Exception as e:
             print(f"Error cleaning up paused campaign: {e}")
             return result
+
+    # ===== Campaign Sync Methods =====
+
+    def get_ad_account_for_shop(self, shop_id: str) -> Optional[Dict]:
+        """Get the selected ad account for a shop."""
+        try:
+            result = self.client.table('pinterest_ad_accounts').select(
+                'id, pinterest_account_id'
+            ).eq('shop_id', shop_id).eq('is_selected', True).execute()
+
+            if result.data:
+                return result.data[0]
+            return None
+
+        except Exception as e:
+            print(f"Error getting ad account: {e}")
+            return None
+
+    def sync_campaigns_from_pinterest(
+        self,
+        shop_id: str,
+        ad_account_uuid: str,
+        campaigns: List[Dict]
+    ) -> int:
+        """
+        Sync campaigns from Pinterest API to database.
+        Only syncs ACTIVE campaigns.
+
+        Args:
+            shop_id: Internal shop ID
+            ad_account_uuid: Internal ad account UUID
+            campaigns: List of campaigns from Pinterest API
+
+        Returns:
+            Number of campaigns synced
+        """
+        synced_count = 0
+
+        try:
+            for campaign in campaigns:
+                # Only sync ACTIVE campaigns
+                status = campaign.get('status', 'UNKNOWN')
+                if status != 'ACTIVE':
+                    continue
+
+                campaign_id = campaign.get('id')
+
+                # Get daily spend cap (budget) - convert from micro-currency
+                daily_spend_cap = campaign.get('daily_spend_cap', 0)
+                if daily_spend_cap:
+                    daily_budget = daily_spend_cap / 1_000_000
+                else:
+                    daily_budget = 0
+
+                # Upsert campaign
+                self.client.table('pinterest_campaigns').upsert({
+                    'shop_id': shop_id,
+                    'pinterest_campaign_id': campaign_id,
+                    'ad_account_id': ad_account_uuid,
+                    'name': campaign.get('name', 'Unnamed Campaign'),
+                    'status': status,
+                    'daily_budget': daily_budget
+                }, on_conflict='shop_id,pinterest_campaign_id').execute()
+
+                synced_count += 1
+
+            return synced_count
+
+        except Exception as e:
+            print(f"Error syncing campaigns: {e}")
+            return synced_count
