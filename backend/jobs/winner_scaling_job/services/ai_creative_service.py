@@ -232,12 +232,12 @@ Requirements:
 
     def _create_video_prompt(self, product_title: str, product_image_url: Optional[str]) -> str:
         """Create an optimized prompt for Pinterest product videos."""
-        prompt = f"""Create an 8-second vertical fashion product showcase video optimized for Pinterest, in full 9:16 aspect ratio (1000x1500px), with no black bars or letterboxing.
+        prompt = f"""Create an 8-second vertical fashion product showcase video optimized for Pinterest, in full 2:3 aspect ratio (1000x1500px), with no black bars or letterboxing.
 
 Use the provided product image strictly as a visual reference for design accuracy — the product's shape, color, material, and details must exactly match the reference image. Do not use the image dimensions or background as framing; instead, generate a fully native vertical video composition.
 
 Video Requirements:
-    •    1000x1500px resolution, true 9:16 vertical layout
+    •    1000x1500px resolution, true 2:3 vertical layout
     •    Clean, minimal background to enhance product visibility
     •    Sophisticated, elegant lighting to highlight product details
     •    Cinematic camera movement: smooth pans, gentle zoom-ins or reveals
