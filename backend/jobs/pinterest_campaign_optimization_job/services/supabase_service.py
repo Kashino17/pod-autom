@@ -335,7 +335,7 @@ class SupabaseService:
         """Get all pinterest_sync_log entries for a campaign."""
         try:
             response = self.client.table('pinterest_sync_log').select(
-                'id, shopify_product_id, collection_id, status'
+                'id, shopify_product_id, status'
             ).eq('campaign_id', campaign_id).execute()
 
             return response.data or []
