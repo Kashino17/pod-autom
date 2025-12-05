@@ -82,19 +82,21 @@ class PinterestAPIClient:
         # This ensures our date range matches what Pinterest Ads Manager shows
         #
         # "Last N days" = the N complete days BEFORE today (today excluded)
-        # Pinterest API end_date is EXCLUSIVE
         #
         # Example for "last 7 days" when today is Dec 5 (GMT+4):
-        # end_date = Dec 5 (exclusive, so up to Dec 4)
-        # start_date = Nov 28
-        # API returns: Nov 28, Nov 29, Nov 30, Dec 1, Dec 2, Dec 3, Dec 4 (7 full days)
+        # We want: Nov 28, Nov 29, Nov 30, Dec 1, Dec 2, Dec 3, Dec 4 (7 full days)
+        # end_date = Dec 4 (yesterday, the last complete day)
+        # start_date = Dec 4 - 6 = Nov 28 (7 days back from end_date)
         pinterest_tz = timezone(timedelta(hours=4))
         now_pinterest = datetime.now(pinterest_tz)
 
-        # End date is today (exclusive) - data up to yesterday
-        end_date = now_pinterest.strftime('%Y-%m-%d')
-        # Start date is N days before today
-        start_date = (now_pinterest - timedelta(days=days)).strftime('%Y-%m-%d')
+        # Yesterday is the last complete day
+        yesterday = now_pinterest - timedelta(days=1)
+
+        # End date is yesterday (inclusive in Pinterest's response)
+        end_date = yesterday.strftime('%Y-%m-%d')
+        # Start date is (days - 1) before yesterday to get exactly N days
+        start_date = (yesterday - timedelta(days=days - 1)).strftime('%Y-%m-%d')
 
         params = {
             'campaign_ids': campaign_id,
