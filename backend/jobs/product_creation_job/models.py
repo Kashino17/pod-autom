@@ -34,23 +34,21 @@ class ResearchProduct:
         if row.get('images'):
             import json
             raw_images = row['images']
-            try:
-                # Try JSON parsing first
-                if isinstance(raw_images, str):
+
+            # If already a list, use it directly
+            if isinstance(raw_images, list):
+                images = raw_images
+            elif isinstance(raw_images, str):
+                # Try JSON array parsing first
+                try:
                     parsed = json.loads(raw_images)
                     if isinstance(parsed, list):
                         images = parsed
                     else:
                         images = [parsed]
-                else:
-                    images = raw_images
-            except json.JSONDecodeError:
-                # Not JSON - might be comma-separated string
-                if isinstance(raw_images, str):
-                    # Split by comma and clean up
+                except json.JSONDecodeError:
+                    # Fallback: comma-separated string
                     images = [url.strip() for url in raw_images.split(',') if url.strip()]
-                else:
-                    images = [raw_images] if raw_images else None
 
         # Variants are stored as a comma-separated string
         variants_string = None
