@@ -428,7 +428,7 @@ class ShopifyProductOptimizer:
         self.update_product_in_shopify(product, shop_domain, access_token, publish_to_all_channels, should_update_inventory, inventory_quantities)
 
     def generate_improved_description(self, product: Dict, settings: Dict) -> str:
-        """Generate improved product description with GPT - exact port."""
+        """Generate improved product description with GPT-5.1 Vision - analyzes product image."""
         try:
             if not self.openai_client:
                 logger.error("OpenAI Client not initialized")
@@ -438,6 +438,7 @@ class ShopifyProductOptimizer:
             image_url = ""
             if product.get('images') and len(product['images']) > 0:
                 image_url = product['images'][0]['src']
+                logger.info(f"  Using product image for GPT-5.1 Vision: {image_url[:80]}...")
 
             current_description = product.get('body_html', '')
 
@@ -451,8 +452,7 @@ class ShopifyProductOptimizer:
             }
             season_german = season_mapping.get(season, 'Frühling')
 
-            prompt = f"""
-**Schreib mir einen extrem kaufanregenden Verkaufstext für dieses Produkt.** Der Text soll:
+            prompt = f"""Analysiere das Produktbild und schreib mir einen extrem kaufanregenden Verkaufstext für dieses Produkt. Der Text soll:
 
 **1) SEO-optimiert** sein und alle relevanten Keywords einbinden.
 
@@ -462,7 +462,7 @@ class ShopifyProductOptimizer:
 
 4) Mit **750 Zeichen (inklusive Leerzeichen)** auskommen und in der **Chunks-Methode** strukturiert sein. Verwende für die Abschnitte passende Titel, z. B. "Perfekt für kalte Tage", anstelle von "Chunk 1".
 
-5) Eine **Produkteigenschaftsauflistung** beinhalten (Schnitt, Material, Stil, etc.), wobei diese Angaben von der vorherigen Produktbeschreibung entnommen werden sollen. Falls in der vorherigen Beschreibung keine Angaben zu finden sind, erstelle sinnvolle Eigenschaften basierend auf den Bildern.
+5) Eine **Produkteigenschaftsauflistung** beinhalten (Schnitt, Material, Stil, Farbe etc.). Analysiere das Bild genau, um die Eigenschaften zu erkennen. Falls vorhanden, ergänze mit Angaben aus der vorherigen Produktbeschreibung.
 
 6) Derzeit ist {season_german}, also passe den Text an die {season_german}-Jahreszeit an.
 
@@ -474,25 +474,39 @@ class ShopifyProductOptimizer:
 </ul>
 
 Aktueller Produkttitel: {product.get('title', '')}
-Aktuelle Beschreibung: {current_description}
-Hauptbild URL: {image_url}
+Aktuelle Beschreibung (als Referenz): {current_description}
+
+Gib NUR den HTML-Verkaufstext zurück, ohne weitere Erklärungen.
             """
 
+            # Build message content with vision support
+            message_content = []
+            message_content.append({"type": "text", "text": prompt})
+
+            # Add image if available (GPT-5.1 Vision)
+            if image_url:
+                message_content.append({
+                    "type": "image_url",
+                    "image_url": {"url": image_url}
+                })
+
             response = self.openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": prompt}],
+                model="gpt-5.1",
+                messages=[{"role": "user", "content": message_content}],
                 max_tokens=1000,
                 temperature=0.7
             )
 
-            return response.choices[0].message.content.strip()
+            result = response.choices[0].message.content.strip()
+            logger.info(f"  GPT-5.1 Vision generated description ({len(result)} chars)")
+            return result
 
         except Exception as e:
             logger.error(f"Error generating description: {str(e)}")
             return product.get('body_html', '')
 
     def generate_optimized_title(self, product: Dict, settings: Dict) -> str:
-        """Generate optimized product title with GPT - exact port."""
+        """Generate optimized product title with GPT-5.1 based on the product description."""
         try:
             if not self.openai_client:
                 logger.error("OpenAI Client not initialized")
@@ -507,8 +521,8 @@ Hauptbild URL: {image_url}
             }
             season_german = season_mapping.get(season, 'Frühling')
 
-            prompt = f"""
-Erstelle einen kurzen, prägnanten und verkaufsfördernden Titel für dieses Produkt.
+            # Use the already generated description (body_html) as basis
+            prompt = f"""Erstelle einen kurzen, prägnanten und verkaufsfördernden Titel für dieses Produkt.
 Der Titel sollte attraktiv und suchmaschinenoptimiert sein.
 Berücksichtige, dass aktuell {season_german} ist und passe den Titel entsprechend an.
 Maximale Länge: 60 Zeichen.
@@ -520,7 +534,7 @@ Gib NUR den neuen Titel zurück, ohne weitere Erklärungen.
             """
 
             response = self.openai_client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-5.1",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=100,
                 temperature=0.7
@@ -532,6 +546,7 @@ Gib NUR den neuen Titel zurück, ohne weitere Erklärungen.
             title = title.strip('\u201e').strip('\u201c')
             title = title.strip('\u201a').strip('\u2018')
             title = title.strip('\u201d').strip('\u2019')
+            logger.info(f"  GPT-5.1 generated title: {title}")
             return title
 
         except Exception as e:
@@ -539,14 +554,14 @@ Gib NUR den neuen Titel zurück, ohne weitere Erklärungen.
             return product.get('title', '')
 
     def generate_product_tags(self, product: Dict) -> List[str]:
-        """Generate product tags with GPT - exact port."""
+        """Generate product tags with GPT-5.1 based on the product description."""
         try:
             if not self.openai_client:
                 logger.error("OpenAI Client not initialized")
                 return []
 
-            prompt = f"""
-Generiere relevante deutsche Tags für dieses Produkt sowie das Geschlecht (male/female, nie unisex) auf Englisch.
+            # Use the already generated description (body_html) as basis
+            prompt = f"""Generiere relevante deutsche Tags für dieses Produkt sowie das Geschlecht (male/female, nie unisex) auf Englisch.
 Die Tags sollten umfassen: Produkttyp, Kategorie, Farbe, Material, Stil, Saison und Geschlecht.
 Gib sie als kommagetrennte Liste zurück, etwa:
 Kleid, Sommerkleid, Blau, Baumwolle, Casual, Sommer, female
@@ -558,14 +573,16 @@ Gib NUR die Tags als kommagetrennte Liste zurück, ohne weitere Erklärungen.
             """
 
             response = self.openai_client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-5.1",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=200,
                 temperature=0.7
             )
 
             tags_string = response.choices[0].message.content.strip()
-            return [tag.strip() for tag in tags_string.split(',')]
+            tags = [tag.strip() for tag in tags_string.split(',')]
+            logger.info(f"  GPT-5.1 generated {len(tags)} tags")
+            return tags
 
         except Exception as e:
             logger.error(f"Error generating tags: {str(e)}")
@@ -627,14 +644,14 @@ Antworte NUR mit einem JSON-Objekt (ohne Markdown-Codeblöcke):
             """
 
             response = self.openai_client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-5.1",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=500,
                 temperature=0.1
             )
 
             response_text = response.choices[0].message.content.strip()
-            logger.info(f"  AI translation response: {response_text[:500]}")
+            logger.info(f"  GPT-5.1 translation response: {response_text[:500]}")
 
             # Remove markdown code blocks if present
             if response_text.startswith('```'):
@@ -837,7 +854,7 @@ Antworte NUR mit einem JSON-Objekt (ohne Markdown-Codeblöcke):
             logger.info(f"  Variant {variant.get('id')}: inventory_quantity set to {quantity}")
 
     def get_fashion_category_tags(self, product: Dict) -> List[str]:
-        """Determine fashion category tags with GPT."""
+        """Determine fashion category tags with GPT-5.1 based on the product description."""
         try:
             if not self.openai_client:
                 logger.error("OpenAI Client not initialized")
@@ -845,20 +862,20 @@ Antworte NUR mit einem JSON-Objekt (ohne Markdown-Codeblöcke):
 
             categories_list = ', '.join(self.CATEGORY_MAPPING.keys())
 
-            prompt = f"""
-            Analysiere diese Produktbeschreibung und wähle 1-3 passende Kategorien aus:
+            # Use the already generated description (body_html) as basis
+            prompt = f"""Analysiere diese Produktbeschreibung und wähle 1-3 passende Kategorien aus:
 
-            Produktbeschreibung: {product.get('body_html', '')}
+Produktbeschreibung: {product.get('body_html', '')}
 
-            Verfügbare Kategorien: {categories_list}
+Verfügbare Kategorien: {categories_list}
 
-            Wähle NUR aus den verfügbaren Kategorien aus.
-            Gib die ausgewählten Kategorien als kommagetrennte Liste zurück.
-            Mindestens 1, maximal 3 Kategorien.
+Wähle NUR aus den verfügbaren Kategorien aus.
+Gib die ausgewählten Kategorien als kommagetrennte Liste zurück.
+Mindestens 1, maximal 3 Kategorien.
             """
 
             response = self.openai_client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-5.1",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=100,
                 temperature=0.3
@@ -872,6 +889,7 @@ Antworte NUR mit einem JSON-Objekt (ohne Markdown-Codeblöcke):
                 if category in self.CATEGORY_MAPPING:
                     tags.append(self.CATEGORY_MAPPING[category])
 
+            logger.info(f"  GPT-5.1 generated {len(tags)} category tags: {tags}")
             return tags[:3]
 
         except Exception as e:
