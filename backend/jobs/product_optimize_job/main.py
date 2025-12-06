@@ -327,11 +327,18 @@ class ShopifyProductOptimizer:
             product['tags'] = ', '.join(list(set(current_tags)))
 
         # 4. Translate variants to German (option names and color values)
-        if settings.get('translate_variants_to_german', False):
+        # Check both new and legacy column names for backwards compatibility
+        translate_variants = settings.get('translate_variants_to_german', False) or settings.get('change_size_to_groesse', False)
+        if translate_variants:
+            logger.info("  Translating variants to German...")
             self.translate_variants_to_german(product)
 
         # 5. Remove single-value variant options (e.g., Color with only 'Brown')
-        if settings.get('remove_single_value_options', False):
+        # Check both new and legacy column names for backwards compatibility
+        remove_single = settings.get('remove_single_value_options', False) or settings.get('set_german_sizes', False)
+        logger.info(f"  remove_single_value_options setting: {settings.get('remove_single_value_options')} / set_german_sizes: {settings.get('set_german_sizes')} → enabled: {remove_single}")
+        if remove_single:
+            logger.info("  Checking for single-value variant options to remove...")
             self.remove_single_value_options(product)
 
         # 6. Set compare price
@@ -643,7 +650,10 @@ Antworte NUR mit einem JSON-Objekt in diesem Format (ohne Markdown-Codeblöcke):
         options = product.get('options', [])
         variants = product.get('variants', [])
 
+        logger.info(f"  Current options: {[(opt.get('name'), opt.get('values')) for opt in options]}")
+
         if not options or len(options) <= 1:
+            logger.info("  Skipping: Only one or no options present")
             return  # Don't remove if there's only one option or no options
 
         # Find options with only one unique value
@@ -653,7 +663,10 @@ Antworte NUR mit einem JSON-Objekt in diesem Format (ohne Markdown-Codeblöcke):
             values = option.get('values', [])
 
             # Check if option name indicates it could be a color/style variant
-            color_style_names = ['color', 'colour', 'farbe', 'style', 'stil', 'model', 'modell']
+            # Include both English and German names (after translation)
+            color_style_names = ['color', 'colour', 'farbe', 'style', 'stil', 'model', 'modell', 'muster', 'pattern']
+            logger.info(f"  Checking option '{option_name}' (lowercase: '{option_name.lower()}') with {len(values)} value(s): {values}")
+
             if option_name.lower() in color_style_names and len(values) == 1:
                 options_to_remove.append({
                     'index': i,
@@ -661,7 +674,7 @@ Antworte NUR mit einem JSON-Objekt in diesem Format (ohne Markdown-Codeblöcke):
                     'name': option_name,
                     'value': values[0]
                 })
-                logger.info(f"  Marking for removal: Option '{option_name}' with single value '{values[0]}'")
+                logger.info(f"  ✓ Marking for removal: Option '{option_name}' with single value '{values[0]}'")
 
         if not options_to_remove:
             return
