@@ -139,6 +139,14 @@ export const ProductCreation: React.FC<ProductCreationProps> = ({ config, onChan
       adjust_normal_price: config.adjustProductPrice,
       price_adjustment_type: adjustmentTypeMap[config.priceAdjustmentType] || 'Percentage',
       price_adjustment_value: config.priceAdjustmentValue,
+      price_min_enabled: config.priceMinEnabled,
+      price_min_value: config.priceMinValue,
+      price_max_enabled: config.priceMaxEnabled,
+      price_max_value: config.priceMaxValue,
+      compare_price_min_enabled: config.comparePriceMinEnabled,
+      compare_price_min_value: config.comparePriceMinValue,
+      compare_price_max_enabled: config.comparePriceMaxEnabled,
+      compare_price_max_value: config.comparePriceMaxValue,
       set_global_quantity: config.setGlobalInventory,
       global_quantity: config.globalInventoryValue,
       enable_inventory_tracking: config.enableInventoryTracking,
@@ -523,6 +531,114 @@ export const ProductCreation: React.FC<ProductCreationProps> = ({ config, onChan
                              Reduzierung
                           </span>
                       )}
+                   </div>
+                </div>
+
+                {/* Row 5: Price Min/Max Limits */}
+                <div className="flex flex-col gap-3 pt-3 border-t border-zinc-800/50 mt-2">
+                   <div className="text-xs text-zinc-500 font-medium">Preisgrenzen (nach Anpassung)</div>
+                   <div className="flex items-center gap-6">
+                      {/* Price Min */}
+                      <div className="flex items-center gap-3">
+                         <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={config.priceMinEnabled}
+                              onChange={(e) => update('priceMinEnabled', e.target.checked)}
+                              className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-indigo-500 focus:ring-indigo-500/20"
+                            />
+                            <span className="text-sm text-zinc-300">Min. Preis</span>
+                         </label>
+                         <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              step="0.01"
+                              disabled={!config.priceMinEnabled}
+                              value={config.priceMinValue}
+                              onChange={(e) => update('priceMinValue', parseFloat(e.target.value))}
+                              className="w-20 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-sm text-white disabled:opacity-30 disabled:cursor-not-allowed focus:border-indigo-500 outline-none font-mono"
+                            />
+                            <span className="text-xs text-zinc-500">€</span>
+                         </div>
+                      </div>
+
+                      {/* Price Max */}
+                      <div className="flex items-center gap-3">
+                         <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={config.priceMaxEnabled}
+                              onChange={(e) => update('priceMaxEnabled', e.target.checked)}
+                              className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-indigo-500 focus:ring-indigo-500/20"
+                            />
+                            <span className="text-sm text-zinc-300">Max. Preis</span>
+                         </label>
+                         <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              step="0.01"
+                              disabled={!config.priceMaxEnabled}
+                              value={config.priceMaxValue}
+                              onChange={(e) => update('priceMaxValue', parseFloat(e.target.value))}
+                              className="w-20 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-sm text-white disabled:opacity-30 disabled:cursor-not-allowed focus:border-indigo-500 outline-none font-mono"
+                            />
+                            <span className="text-xs text-zinc-500">€</span>
+                         </div>
+                      </div>
+                   </div>
+                </div>
+
+                {/* Row 6: Compare Price Min/Max Limits */}
+                <div className="flex flex-col gap-3 pt-3 border-t border-zinc-800/50 mt-2">
+                   <div className="text-xs text-zinc-500 font-medium">Vergleichspreis-Grenzen (nach Berechnung)</div>
+                   <div className="flex items-center gap-6">
+                      {/* Compare Price Min */}
+                      <div className="flex items-center gap-3">
+                         <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={config.comparePriceMinEnabled}
+                              onChange={(e) => update('comparePriceMinEnabled', e.target.checked)}
+                              className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-indigo-500 focus:ring-indigo-500/20"
+                            />
+                            <span className="text-sm text-zinc-300">Min. Vergleichspreis</span>
+                         </label>
+                         <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              step="0.01"
+                              disabled={!config.comparePriceMinEnabled}
+                              value={config.comparePriceMinValue}
+                              onChange={(e) => update('comparePriceMinValue', parseFloat(e.target.value))}
+                              className="w-20 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-sm text-white disabled:opacity-30 disabled:cursor-not-allowed focus:border-indigo-500 outline-none font-mono"
+                            />
+                            <span className="text-xs text-zinc-500">€</span>
+                         </div>
+                      </div>
+
+                      {/* Compare Price Max */}
+                      <div className="flex items-center gap-3">
+                         <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={config.comparePriceMaxEnabled}
+                              onChange={(e) => update('comparePriceMaxEnabled', e.target.checked)}
+                              className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-indigo-500 focus:ring-indigo-500/20"
+                            />
+                            <span className="text-sm text-zinc-300">Max. Vergleichspreis</span>
+                         </label>
+                         <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              step="0.01"
+                              disabled={!config.comparePriceMaxEnabled}
+                              value={config.comparePriceMaxValue}
+                              onChange={(e) => update('comparePriceMaxValue', parseFloat(e.target.value))}
+                              className="w-20 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-sm text-white disabled:opacity-30 disabled:cursor-not-allowed focus:border-indigo-500 outline-none font-mono"
+                            />
+                            <span className="text-xs text-zinc-500">€</span>
+                         </div>
+                      </div>
                    </div>
                 </div>
 

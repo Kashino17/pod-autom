@@ -96,6 +96,18 @@ export interface ProductCreationConfig {
   priceAdjustmentValue: number;
   isPriceReduction: boolean;
 
+  // Preis Min/Max Grenzen
+  priceMinEnabled: boolean;
+  priceMinValue: number;
+  priceMaxEnabled: boolean;
+  priceMaxValue: number;
+
+  // Compare-Preis Min/Max Grenzen
+  comparePriceMinEnabled: boolean;
+  comparePriceMinValue: number;
+  comparePriceMaxEnabled: boolean;
+  comparePriceMaxValue: number;
+
   // Bestandsoptimierungen
   setGlobalInventory: boolean;
   globalInventoryValue: number;

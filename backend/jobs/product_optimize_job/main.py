@@ -345,19 +345,35 @@ class ShopifyProductOptimizer:
         if settings.get('set_compare_price', False) and settings.get('compare_price_percentage'):
             self.set_compare_price(product, float(settings['compare_price_percentage']))
 
-        # 6a. Apply price adjustment (fixed or percentage)
+        # 6a. Apply price adjustment (fixed or percentage) with min/max limits
         if settings.get('adjust_normal_price', False) and settings.get('price_adjustment_type') and settings.get('price_adjustment_value') is not None:
             self.apply_price_adjustment(
                 product,
                 settings['price_adjustment_type'],
-                float(settings['price_adjustment_value'])
+                float(settings['price_adjustment_value']),
+                price_min_enabled=settings.get('price_min_enabled', False),
+                price_min_value=float(settings.get('price_min_value', 0) or 0),
+                price_max_enabled=settings.get('price_max_enabled', False),
+                price_max_value=float(settings.get('price_max_value', 0) or 0)
             )
 
-        # 7. Set price decimals
+        # 6b. Apply compare price min/max limits (after compare price is set)
+        compare_min_enabled = settings.get('compare_price_min_enabled', False)
+        compare_max_enabled = settings.get('compare_price_max_enabled', False)
+        if compare_min_enabled or compare_max_enabled:
+            self.apply_compare_price_limits(
+                product,
+                compare_min_enabled=compare_min_enabled,
+                compare_min_value=float(settings.get('compare_price_min_value', 0) or 0),
+                compare_max_enabled=compare_max_enabled,
+                compare_max_value=float(settings.get('compare_price_max_value', 0) or 0)
+            )
+
+        # 7. Set price decimals (always applies after all price adjustments)
         if settings.get('set_price_decimals', False) and settings.get('price_decimals') is not None:
             self.set_price_decimals(product, int(settings['price_decimals']))
 
-        # 8. Set compare price decimals
+        # 8. Set compare price decimals (always applies after all compare price adjustments)
         if settings.get('set_compare_price_decimals', False) and settings.get('compare_price_decimals') is not None:
             self.set_compare_price_decimals(product, int(settings['compare_price_decimals']))
 
@@ -731,8 +747,10 @@ Antworte NUR mit einem JSON-Objekt (ohne Markdown-Codeblöcke):
                 compare_price = price * (1 + percentage / 100)
                 variant['compare_at_price'] = f"{compare_price:.2f}"
 
-    def apply_price_adjustment(self, product: Dict, adjustment_type: str, adjustment_value: float):
-        """Adjust price based on type (Fixed/Percentage) and value."""
+    def apply_price_adjustment(self, product: Dict, adjustment_type: str, adjustment_value: float,
+                                price_min_enabled: bool = False, price_min_value: float = 0,
+                                price_max_enabled: bool = False, price_max_value: float = 0):
+        """Adjust price based on type (Fixed/Percentage) and value, with optional min/max limits."""
         for variant in product.get('variants', []):
             if variant.get('price'):
                 current_price = float(variant['price'])
@@ -751,7 +769,37 @@ Antworte NUR mit einem JSON-Objekt (ohne Markdown-Codeblöcke):
                     logger.warning("Price adjustment would result in negative price. Setting to 0.01")
                     new_price = 0.01
 
+                # Apply min/max price limits
+                if price_min_enabled and new_price < price_min_value:
+                    logger.info(f"  Price {new_price:.2f}€ below minimum {price_min_value:.2f}€ -> using min price")
+                    new_price = price_min_value
+
+                if price_max_enabled and new_price > price_max_value:
+                    logger.info(f"  Price {new_price:.2f}€ above maximum {price_max_value:.2f}€ -> using max price")
+                    new_price = price_max_value
+
                 variant['price'] = f"{new_price:.2f}"
+
+    def apply_compare_price_limits(self, product: Dict,
+                                    compare_min_enabled: bool = False, compare_min_value: float = 0,
+                                    compare_max_enabled: bool = False, compare_max_value: float = 0):
+        """Apply min/max limits to compare_at_price after it has been calculated."""
+        for variant in product.get('variants', []):
+            if variant.get('compare_at_price'):
+                compare_price = float(variant['compare_at_price'])
+                original_compare_price = compare_price
+
+                # Apply min/max compare price limits
+                if compare_min_enabled and compare_price < compare_min_value:
+                    logger.info(f"  Compare price {compare_price:.2f}€ below minimum {compare_min_value:.2f}€ -> using min")
+                    compare_price = compare_min_value
+
+                if compare_max_enabled and compare_price > compare_max_value:
+                    logger.info(f"  Compare price {compare_price:.2f}€ above maximum {compare_max_value:.2f}€ -> using max")
+                    compare_price = compare_max_value
+
+                if compare_price != original_compare_price:
+                    variant['compare_at_price'] = f"{compare_price:.2f}"
 
     def set_price_decimals(self, product: Dict, decimals: int):
         """Round prices to specified decimals."""

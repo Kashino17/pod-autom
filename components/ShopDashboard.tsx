@@ -81,6 +81,19 @@ export const ShopDashboard: React.FC<ShopDashboardProps> = ({ shop, activeTab })
     priceAdjustmentType: 'PERCENT',
     priceAdjustmentValue: -23.0,
     isPriceReduction: true,
+
+    // Preis Min/Max Grenzen
+    priceMinEnabled: true,
+    priceMinValue: 32.90,
+    priceMaxEnabled: true,
+    priceMaxValue: 69.90,
+
+    // Compare-Preis Min/Max Grenzen
+    comparePriceMinEnabled: true,
+    comparePriceMinValue: 49.90,
+    comparePriceMaxEnabled: true,
+    comparePriceMaxValue: 99.90,
+
     setGlobalInventory: true,
     globalInventoryValue: 10000,
     enableInventoryTracking: true,

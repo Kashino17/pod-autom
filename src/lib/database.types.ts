@@ -245,6 +245,14 @@ export interface Database {
           adjust_normal_price: boolean
           price_adjustment_type: 'Percentage' | 'FixedAmount'
           price_adjustment_value: number
+          price_min_enabled: boolean
+          price_min_value: number
+          price_max_enabled: boolean
+          price_max_value: number
+          compare_price_min_enabled: boolean
+          compare_price_min_value: number
+          compare_price_max_enabled: boolean
+          compare_price_max_value: number
           set_global_quantity: boolean
           global_quantity: number
           enable_inventory_tracking: boolean
@@ -275,6 +283,14 @@ export interface Database {
           adjust_normal_price?: boolean
           price_adjustment_type?: 'Percentage' | 'FixedAmount'
           price_adjustment_value?: number
+          price_min_enabled?: boolean
+          price_min_value?: number
+          price_max_enabled?: boolean
+          price_max_value?: number
+          compare_price_min_enabled?: boolean
+          compare_price_min_value?: number
+          compare_price_max_enabled?: boolean
+          compare_price_max_value?: number
           set_global_quantity?: boolean
           global_quantity?: number
           enable_inventory_tracking?: boolean
@@ -305,6 +321,14 @@ export interface Database {
           adjust_normal_price?: boolean
           price_adjustment_type?: 'Percentage' | 'FixedAmount'
           price_adjustment_value?: number
+          price_min_enabled?: boolean
+          price_min_value?: number
+          price_max_enabled?: boolean
+          price_max_value?: number
+          compare_price_min_enabled?: boolean
+          compare_price_min_value?: number
+          compare_price_max_enabled?: boolean
+          compare_price_max_value?: number
           set_global_quantity?: boolean
           global_quantity?: number
           enable_inventory_tracking?: boolean
