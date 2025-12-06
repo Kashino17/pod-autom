@@ -580,15 +580,34 @@ Gib NUR die Tags als kommagetrennte Liste zurück, ohne weitere Erklärungen.
 Varianten-Optionen:
 {options_data}
 
-Regeln:
-1. Übersetze nur die Optionsnamen (z.B. "Size" → "Größe", "Color" → "Farbe", "Style" → "Stil", "Model" → "Modell")
-2. Übersetze die Werte nur bei Farben (z.B. "Black" → "Schwarz", "Blue" → "Blau", "Red" → "Rot", "Green" → "Grün", "White" → "Weiß", "Brown" → "Braun", "Pink" → "Rosa", "Purple" → "Lila", "Orange" → "Orange", "Yellow" → "Gelb", "Grey"/"Gray" → "Grau", "Beige" → "Beige", "Navy" → "Marineblau")
-3. Größenangaben (S, M, L, XL, XXL, etc.) NICHT übersetzen - diese bleiben unverändert
-4. Unbekannte Werte NICHT übersetzen - diese bleiben unverändert
-5. "As shown" oder ähnliche Beschreibungen → "Wie abgebildet"
+WICHTIGE Regeln:
+1. Übersetze die Optionsnamen: "Size" → "Größe", "Color" → "Farbe", "Style" → "Stil", "Model" → "Modell"
+2. Übersetze ALLE Farbwerte ins Deutsche:
+   - Black → Schwarz
+   - White → Weiß
+   - Red → Rot
+   - Blue → Blau
+   - Green → Grün
+   - Yellow → Gelb
+   - Brown → Braun
+   - Grey/Gray → Grau
+   - Dark Grey → Dunkelgrau
+   - Light Grey → Hellgrau
+   - Pink → Rosa
+   - Purple → Lila
+   - Orange → Orange
+   - Beige → Beige
+   - Navy → Marineblau
+   - Khaki/Light Khaki → Khaki/Hellkhaki
+   - Cream → Creme
+   - Gold → Gold
+   - Silver → Silber
+3. Größenangaben (S, M, L, XL, XXL, 2XL, 3XL, etc.) NICHT übersetzen
+4. "As shown" → "Wie abgebildet"
+5. Für JEDE Option MÜSSEN alle value_translations angegeben werden!
 
-Antworte NUR mit einem JSON-Objekt in diesem Format (ohne Markdown-Codeblöcke):
-{{"translations": [{{"original_name": "Size", "translated_name": "Größe", "value_translations": {{"Black": "Schwarz", "S": "S"}}}}]}}
+Antworte NUR mit einem JSON-Objekt (ohne Markdown-Codeblöcke):
+{{"translations": [{{"original_name": "Color", "translated_name": "Farbe", "value_translations": {{"Black": "Schwarz", "Red": "Rot"}}}}, {{"original_name": "Size", "translated_name": "Größe", "value_translations": {{"S": "S", "M": "M"}}}}]}}
             """
 
             response = self.openai_client.chat.completions.create(
@@ -599,15 +618,18 @@ Antworte NUR mit einem JSON-Objekt in diesem Format (ohne Markdown-Codeblöcke):
             )
 
             response_text = response.choices[0].message.content.strip()
+            logger.info(f"  AI translation response: {response_text[:500]}")
 
             # Remove markdown code blocks if present
             if response_text.startswith('```'):
                 response_text = response_text.split('\n', 1)[1]
                 if response_text.endswith('```'):
                     response_text = response_text.rsplit('\n', 1)[0]
+                logger.info(f"  Cleaned response: {response_text[:500]}")
 
             import json
             translations = json.loads(response_text)
+            logger.info(f"  Parsed translations: {translations}")
 
             # Apply translations
             for trans in translations.get('translations', []):
