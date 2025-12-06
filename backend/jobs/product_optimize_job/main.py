@@ -493,7 +493,7 @@ Gib NUR den HTML-Verkaufstext zurück, ohne weitere Erklärungen.
             response = self.openai_client.chat.completions.create(
                 model="gpt-5.1",
                 messages=[{"role": "user", "content": message_content}],
-                max_tokens=1000,
+                max_completion_tokens=1000,
                 temperature=0.7
             )
 
@@ -536,7 +536,7 @@ Gib NUR den neuen Titel zurück, ohne weitere Erklärungen.
             response = self.openai_client.chat.completions.create(
                 model="gpt-5.1",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=100,
+                max_completion_tokens=100,
                 temperature=0.7
             )
 
@@ -575,7 +575,7 @@ Gib NUR die Tags als kommagetrennte Liste zurück, ohne weitere Erklärungen.
             response = self.openai_client.chat.completions.create(
                 model="gpt-5.1",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=200,
+                max_completion_tokens=200,
                 temperature=0.7
             )
 
@@ -646,7 +646,7 @@ Antworte NUR mit einem JSON-Objekt (ohne Markdown-Codeblöcke):
             response = self.openai_client.chat.completions.create(
                 model="gpt-5.1",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=500,
+                max_completion_tokens=500,
                 temperature=0.1
             )
 
@@ -877,7 +877,7 @@ Mindestens 1, maximal 3 Kategorien.
             response = self.openai_client.chat.completions.create(
                 model="gpt-5.1",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=100,
+                max_completion_tokens=100,
                 temperature=0.3
             )
 
