@@ -363,9 +363,11 @@ class ShopifyRESTClient:
                     if i == 0:
                         image_obj["position"] = 1
                     images.append(image_obj)
+                    print(f"  Image {i+1}: {img_url.strip()}")
 
             if images:
                 product_data["product"]["images"] = images
+                print(f"  Total images: {len(images)}")
 
         print(f"Creating product: {research_product.title}")
 
