@@ -435,45 +435,25 @@ class SupabaseService:
 
     def cleanup_paused_campaign_sync(self, shop_id: str, campaign_id: str, campaign_name: str) -> Dict:
         """
-        Full cleanup when a campaign is paused:
-        1. Get collection IDs from campaign_batch_assignments
-        2. Delete product_sales entries for those collections
-        3. Delete campaign_batch_assignments entries
+        Cleanup when a campaign is paused:
+        - Delete campaign_batch_assignments entries
 
         NOTE: pinterest_sync_log entries are NOT deleted - they serve as history.
+        NOTE: product_sales entries are NOT deleted - they are needed for Winner Scaling.
 
         Returns dict with counts of deleted items.
         """
         result = {
-            'batch_assignments_deleted': 0,
-            'product_sales_deleted': 0
+            'batch_assignments_deleted': 0
         }
 
         try:
-            # First get the batch assignments to find collection IDs
-            assignments = self.get_batch_assignments_for_campaign(campaign_id)
-
-            if assignments:
-                # Extract unique collection IDs
-                collection_ids = list(set(
-                    a['shopify_collection_id']
-                    for a in assignments
-                    if a.get('shopify_collection_id')
-                ))
-
-                # Delete product_sales for these collections
-                if collection_ids:
-                    result['product_sales_deleted'] = self.delete_product_sales_for_collections(
-                        shop_id, collection_ids
-                    )
-
-            # Delete campaign_batch_assignments
+            # Delete campaign_batch_assignments only
             result['batch_assignments_deleted'] = self.delete_batch_assignments_for_campaign(campaign_id)
 
-            if result['batch_assignments_deleted'] > 0 or result['product_sales_deleted'] > 0:
+            if result['batch_assignments_deleted'] > 0:
                 print(f"    Cleaned up campaign '{campaign_name}': "
-                      f"{result['batch_assignments_deleted']} batch assignments, "
-                      f"{result['product_sales_deleted']} product sales")
+                      f"{result['batch_assignments_deleted']} batch assignments")
 
             return result
 

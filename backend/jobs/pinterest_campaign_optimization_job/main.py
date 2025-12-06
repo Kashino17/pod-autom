@@ -346,9 +346,8 @@ class PinterestCampaignOptimizationJob:
                     campaign_id=campaign.id,
                     campaign_name=campaign.name
                 )
-                if cleanup_result['batch_assignments_deleted'] > 0 or cleanup_result['product_sales_deleted'] > 0:
-                    print(f"    CLEANUP: Removed {cleanup_result['batch_assignments_deleted']} batch assignments, "
-                          f"{cleanup_result['product_sales_deleted']} product sales")
+                if cleanup_result['batch_assignments_deleted'] > 0:
+                    print(f"    CLEANUP: Removed {cleanup_result['batch_assignments_deleted']} batch assignments")
             else:
                 result.action_taken = 'failed'
                 result.error_message = 'Failed to pause campaign on Pinterest'
@@ -463,14 +462,14 @@ class PinterestCampaignOptimizationJob:
                 # Update status in DB
                 self.db.update_campaign_status_in_db(campaign_id, pinterest_status)
 
-                # Cleanup sync data and product_sales
+                # Cleanup sync data (batch assignments only, keep product_sales)
                 cleanup_result = self.db.cleanup_paused_campaign_sync(
                     shop_id=shop.shop_id,
                     campaign_id=campaign_id,
                     campaign_name=campaign_name
                 )
 
-                if cleanup_result['batch_assignments_deleted'] > 0 or cleanup_result['product_sales_deleted'] > 0:
+                if cleanup_result['batch_assignments_deleted'] > 0:
                     campaigns_cleaned += 1
 
         if campaigns_cleaned > 0:
