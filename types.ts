@@ -78,8 +78,8 @@ export interface ProductCreationConfig {
   generateTags: boolean;
 
   // Variantenoptimierungen
-  translateSize: boolean;
-  setGermanSizes: boolean;
+  translateVariantsToGerman: boolean;
+  removeSingleValueOptions: boolean;
 
   // Preisoptimierungen
   setCompareAtPrice: boolean;

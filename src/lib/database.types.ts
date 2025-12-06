@@ -234,8 +234,8 @@ export interface Database {
           generate_improved_description: boolean
           generate_and_set_tags: boolean
           sales_text_season: 'Spring' | 'Summer' | 'Autumn' | 'Winter'
-          change_size_to_groesse: boolean
-          set_german_sizes: boolean
+          translate_variants_to_german: boolean
+          remove_single_value_options: boolean
           set_compare_price: boolean
           compare_price_percentage: number
           set_price_decimals: boolean
@@ -264,8 +264,8 @@ export interface Database {
           generate_improved_description?: boolean
           generate_and_set_tags?: boolean
           sales_text_season?: 'Spring' | 'Summer' | 'Autumn' | 'Winter'
-          change_size_to_groesse?: boolean
-          set_german_sizes?: boolean
+          translate_variants_to_german?: boolean
+          remove_single_value_options?: boolean
           set_compare_price?: boolean
           compare_price_percentage?: number
           set_price_decimals?: boolean
@@ -294,8 +294,8 @@ export interface Database {
           generate_improved_description?: boolean
           generate_and_set_tags?: boolean
           sales_text_season?: 'Spring' | 'Summer' | 'Autumn' | 'Winter'
-          change_size_to_groesse?: boolean
-          set_german_sizes?: boolean
+          translate_variants_to_german?: boolean
+          remove_single_value_options?: boolean
           set_compare_price?: boolean
           compare_price_percentage?: number
           set_price_decimals?: boolean

@@ -326,13 +326,13 @@ class ShopifyProductOptimizer:
             current_tags.extend(new_tags)
             product['tags'] = ', '.join(list(set(current_tags)))
 
-        # 4. Change variant name "Size" to "Größe"
-        if settings.get('change_size_to_groesse', False):
-            self.change_size_to_groesse(product)
+        # 4. Translate variants to German (option names and color values)
+        if settings.get('translate_variants_to_german', False):
+            self.translate_variants_to_german(product)
 
-        # 5. Set German sizes
-        if settings.get('set_german_sizes', False):
-            self.set_german_sizes(product)
+        # 5. Remove single-value variant options (e.g., Color with only 'Brown')
+        if settings.get('remove_single_value_options', False):
+            self.remove_single_value_options(product)
 
         # 6. Set compare price
         if settings.get('set_compare_price', False) and settings.get('compare_price_percentage'):
@@ -548,44 +548,145 @@ Gib NUR die Tags als kommagetrennte Liste zurück, ohne weitere Erklärungen.
             logger.error(f"Error generating tags: {str(e)}")
             return []
 
-    def change_size_to_groesse(self, product: Dict):
-        """Change variant name from 'Size' to 'Größe'."""
-        for option in product.get('options', []):
-            if option.get('name', '').lower() == 'size':
-                option['name'] = 'Größe'
+    def translate_variants_to_german(self, product: Dict):
+        """Translate variant option names and values to German using AI."""
+        try:
+            if not self.openai_client:
+                logger.error("OpenAI Client not initialized")
+                return
 
-    def set_german_sizes(self, product: Dict):
-        """Set German size designations."""
-        size_mapping = {
-            'S': 'S (36/38)',
-            'M': 'M (40/42)',
-            'L': 'L (44/46)',
-            'XL': 'XL (48/50)',
-            'XXL': 'XXL (52/54)'
-        }
+            options = product.get('options', [])
+            if not options:
+                return
 
-        # Find size option
-        size_option_position = None
-        for i, option in enumerate(product.get('options', [])):
-            if option.get('name', '').lower() in ['size', 'größe']:
-                size_option_position = i + 1
-                new_values = []
-                for value in option.get('values', []):
-                    if value.upper() in size_mapping:
-                        new_values.append(size_mapping[value.upper()])
-                    else:
-                        new_values.append(value)
-                option['values'] = new_values
-                break
+            # Collect all option names and values
+            options_data = []
+            for option in options:
+                options_data.append({
+                    'name': option.get('name', ''),
+                    'values': option.get('values', [])
+                })
 
-        # Update variants
-        if size_option_position:
-            for variant in product.get('variants', []):
-                option_key = f'option{size_option_position}'
-                if option_key in variant:
-                    current_value = variant[option_key]
-                    if current_value.upper() in size_mapping:
-                        variant[option_key] = size_mapping[current_value.upper()]
+            prompt = f"""
+Übersetze die folgenden Shopify Varianten-Optionen ins Deutsche.
+
+Varianten-Optionen:
+{options_data}
+
+Regeln:
+1. Übersetze nur die Optionsnamen (z.B. "Size" → "Größe", "Color" → "Farbe", "Style" → "Stil", "Model" → "Modell")
+2. Übersetze die Werte nur bei Farben (z.B. "Black" → "Schwarz", "Blue" → "Blau", "Red" → "Rot", "Green" → "Grün", "White" → "Weiß", "Brown" → "Braun", "Pink" → "Rosa", "Purple" → "Lila", "Orange" → "Orange", "Yellow" → "Gelb", "Grey"/"Gray" → "Grau", "Beige" → "Beige", "Navy" → "Marineblau")
+3. Größenangaben (S, M, L, XL, XXL, etc.) NICHT übersetzen - diese bleiben unverändert
+4. Unbekannte Werte NICHT übersetzen - diese bleiben unverändert
+5. "As shown" oder ähnliche Beschreibungen → "Wie abgebildet"
+
+Antworte NUR mit einem JSON-Objekt in diesem Format (ohne Markdown-Codeblöcke):
+{{"translations": [{{"original_name": "Size", "translated_name": "Größe", "value_translations": {{"Black": "Schwarz", "S": "S"}}}}]}}
+            """
+
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=500,
+                temperature=0.1
+            )
+
+            response_text = response.choices[0].message.content.strip()
+
+            # Remove markdown code blocks if present
+            if response_text.startswith('```'):
+                response_text = response_text.split('\n', 1)[1]
+                if response_text.endswith('```'):
+                    response_text = response_text.rsplit('\n', 1)[0]
+
+            import json
+            translations = json.loads(response_text)
+
+            # Apply translations
+            for trans in translations.get('translations', []):
+                original_name = trans.get('original_name', '')
+                translated_name = trans.get('translated_name', '')
+                value_translations = trans.get('value_translations', {})
+
+                # Find and update the option
+                for i, option in enumerate(options):
+                    if option.get('name', '').lower() == original_name.lower():
+                        # Update option name
+                        if translated_name:
+                            option['name'] = translated_name
+                            logger.info(f"  Translated option: '{original_name}' → '{translated_name}'")
+
+                        # Update option values
+                        new_values = []
+                        for value in option.get('values', []):
+                            translated_value = value_translations.get(value, value)
+                            new_values.append(translated_value)
+                            if translated_value != value:
+                                logger.info(f"    Translated value: '{value}' → '{translated_value}'")
+                        option['values'] = new_values
+
+                        # Update variants
+                        option_position = i + 1
+                        option_key = f'option{option_position}'
+                        for variant in product.get('variants', []):
+                            if option_key in variant:
+                                current_value = variant[option_key]
+                                translated_value = value_translations.get(current_value, current_value)
+                                variant[option_key] = translated_value
+                        break
+
+        except Exception as e:
+            logger.error(f"Error translating variants: {str(e)}")
+
+    def remove_single_value_options(self, product: Dict):
+        """Remove variant options that only have a single value (e.g., Color with only 'Brown')."""
+        options = product.get('options', [])
+        variants = product.get('variants', [])
+
+        if not options or len(options) <= 1:
+            return  # Don't remove if there's only one option or no options
+
+        # Find options with only one unique value
+        options_to_remove = []
+        for i, option in enumerate(options):
+            option_name = option.get('name', '')
+            values = option.get('values', [])
+
+            # Check if option name indicates it could be a color/style variant
+            color_style_names = ['color', 'colour', 'farbe', 'style', 'stil', 'model', 'modell']
+            if option_name.lower() in color_style_names and len(values) == 1:
+                options_to_remove.append({
+                    'index': i,
+                    'position': i + 1,
+                    'name': option_name,
+                    'value': values[0]
+                })
+                logger.info(f"  Marking for removal: Option '{option_name}' with single value '{values[0]}'")
+
+        if not options_to_remove:
+            return
+
+        # Remove options from highest index first to avoid index shifting
+        for opt_info in sorted(options_to_remove, key=lambda x: x['index'], reverse=True):
+            option_position = opt_info['position']
+            option_name = opt_info['name']
+
+            # Remove from options list
+            del options[opt_info['index']]
+            logger.info(f"  Removed option '{option_name}'")
+
+            # Shift variant option values
+            # If we remove option2, option3 becomes option2, etc.
+            for variant in variants:
+                # Shift all options after the removed one
+                for j in range(option_position, 4):  # Shopify supports max 3 options
+                    current_key = f'option{j}'
+                    next_key = f'option{j + 1}'
+                    if next_key in variant:
+                        variant[current_key] = variant[next_key]
+                        del variant[next_key]
+                    elif current_key in variant and j >= option_position:
+                        del variant[current_key]
 
     def set_compare_price(self, product: Dict, percentage: float):
         """Set compare price based on percentage."""

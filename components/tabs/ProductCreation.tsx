@@ -128,8 +128,8 @@ export const ProductCreation: React.FC<ProductCreationProps> = ({ config, onChan
       generate_improved_description: config.generateOptimizedDescription,
       generate_and_set_tags: config.generateTags,
       sales_text_season: seasonMap[config.salesTextTemplate] || 'Winter',
-      change_size_to_groesse: config.translateSize,
-      set_german_sizes: config.setGermanSizes,
+      translate_variants_to_german: config.translateVariantsToGerman,
+      remove_single_value_options: config.removeSingleValueOptions,
       set_compare_price: config.setCompareAtPrice,
       compare_price_percentage: config.compareAtPricePercent,
       set_price_decimals: config.setPriceDecimals,
@@ -364,23 +364,29 @@ export const ProductCreation: React.FC<ProductCreationProps> = ({ config, onChan
              </div>
              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-900/50 transition-colors cursor-pointer border border-transparent hover:border-zinc-800">
-                   <input 
-                     type="checkbox" 
-                     checked={config.translateSize}
-                     onChange={(e) => update('translateSize', e.target.checked)}
+                   <input
+                     type="checkbox"
+                     checked={config.translateVariantsToGerman}
+                     onChange={(e) => update('translateVariantsToGerman', e.target.checked)}
                      className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-indigo-500 focus:ring-indigo-500/20"
                    />
-                   <span className="text-sm text-zinc-300">Size zu "Größe" ändern</span>
+                   <div className="flex flex-col">
+                     <span className="text-sm text-zinc-300">Varianten auf Deutsch übersetzen</span>
+                     <span className="text-xs text-zinc-500">Size → Größe, Color → Farbe, Black → Schwarz, etc.</span>
+                   </div>
                 </label>
 
                 <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-900/50 transition-colors cursor-pointer border border-transparent hover:border-zinc-800">
-                   <input 
-                     type="checkbox" 
-                     checked={config.setGermanSizes}
-                     onChange={(e) => update('setGermanSizes', e.target.checked)}
+                   <input
+                     type="checkbox"
+                     checked={config.removeSingleValueOptions}
+                     onChange={(e) => update('removeSingleValueOptions', e.target.checked)}
                      className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-indigo-500 focus:ring-indigo-500/20"
                    />
-                   <span className="text-sm text-zinc-300">Deutsche Größen setzen</span>
+                   <div className="flex flex-col">
+                     <span className="text-sm text-zinc-300">Einwertige Varianten entfernen</span>
+                     <span className="text-xs text-zinc-500">Z.B. wenn "Farbe" nur "Braun" hat</span>
+                   </div>
                 </label>
              </div>
           </div>
