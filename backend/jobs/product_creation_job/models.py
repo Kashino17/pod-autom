@@ -25,7 +25,7 @@ class ResearchProduct:
     price: Optional[str]
     compare_price: Optional[str]
     images: Optional[List[str]]
-    variants: Optional[List[Dict]]
+    variants_string: Optional[str]  # Raw variant string like "Title - Black / S, Title - Black / M, ..."
 
     @classmethod
     def from_db_row(cls, row: Dict) -> 'ResearchProduct':
@@ -38,13 +38,14 @@ class ResearchProduct:
             except:
                 images = [row['images']] if row['images'] else None
 
-        variants = None
+        # Variants are stored as a comma-separated string
+        variants_string = None
         if row.get('variants'):
-            import json
-            try:
-                variants = json.loads(row['variants']) if isinstance(row['variants'], str) else row['variants']
-            except:
-                variants = None
+            if isinstance(row['variants'], str):
+                variants_string = row['variants']
+            elif isinstance(row['variants'], list):
+                # If it's a list, join back to string
+                variants_string = ', '.join(row['variants'])
 
         return cls(
             id=row['id'],
@@ -53,7 +54,7 @@ class ResearchProduct:
             price=row.get('price'),
             compare_price=row.get('comparePrice') or row.get('compare_price'),
             images=images,
-            variants=variants
+            variants_string=variants_string
         )
 
 

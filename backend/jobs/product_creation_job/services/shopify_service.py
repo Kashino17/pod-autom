@@ -4,8 +4,9 @@ Creates products via Shopify REST Admin API
 """
 import time
 import json
+import re
 import requests
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import sys
 import os
@@ -23,6 +24,14 @@ class ShopifyRESTClient:
     DEFAULT_STATUS = "draft"
     DEFAULT_INVENTORY = 100
     DEFAULT_VARIANTS = ["S", "M", "L", "XL", "XXL"]
+
+    # Known size values for detection
+    KNOWN_SIZES = {
+        'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL',
+        '2XL', '3XL', '4XL', '5XL', '6XL',
+        '32', '34', '36', '38', '40', '42', '44', '46', '48', '50',
+        'One Size', 'Free Size', 'OS'
+    }
 
     def __init__(self, shop_domain: str, access_token: str):
         self.shop_domain = shop_domain
@@ -105,62 +114,245 @@ class ShopifyRESTClient:
         result = self._make_request("GET", "shop.json")
         return result is not None
 
+    def _is_size_value(self, value: str) -> bool:
+        """Check if a value is a size (not a color/style)."""
+        value_upper = value.strip().upper()
+        # Check exact matches
+        if value_upper in {s.upper() for s in self.KNOWN_SIZES}:
+            return True
+        # Check patterns like "2XL", "3XL", etc.
+        if re.match(r'^\d+XL$', value_upper):
+            return True
+        # Check numeric sizes
+        if re.match(r'^\d{2}$', value_upper):
+            return True
+        return False
+
+    def _parse_variant_string(self, variant_str: str, base_title: str) -> Tuple[List[str], List[str]]:
+        """
+        Parse a variant string to extract option values.
+
+        Input: "Women'S Casual Top - Black / S"
+        Output: (['Black'], ['S']) - (option1_values, option2_values)
+
+        Returns tuple of (option1_values, option2_values)
+        """
+        # Remove the base title part
+        # Format: "Title - Option1 / Option2" or "Title - Option1 / Option2 / Option3"
+
+        # Try to find the " - " separator that separates title from variants
+        if ' - ' in variant_str:
+            parts = variant_str.split(' - ', 1)
+            if len(parts) == 2:
+                variant_part = parts[1]
+            else:
+                return ([], [])
+        else:
+            return ([], [])
+
+        # Split by " / " to get individual option values
+        option_values = [v.strip() for v in variant_part.split(' / ')]
+
+        return option_values
+
+    def _parse_variants_from_string(self, variants_string: str, product_title: str) -> Dict:
+        """
+        Parse variants from a comma-separated string.
+
+        Input: "Title - Black / S, Title - Black / M, Title - Red / S, Title - Red / M"
+
+        Output: {
+            'options': [
+                {'name': 'Color', 'values': ['Black', 'Red']},
+                {'name': 'Size', 'values': ['S', 'M']}
+            ],
+            'variants': [
+                {'option1': 'Black', 'option2': 'S'},
+                {'option1': 'Black', 'option2': 'M'},
+                {'option1': 'Red', 'option2': 'S'},
+                {'option1': 'Red', 'option2': 'M'}
+            ]
+        }
+        """
+        if not variants_string:
+            return None
+
+        # Split by comma to get individual variant strings
+        variant_strings = [v.strip() for v in variants_string.split(',')]
+
+        if not variant_strings:
+            return None
+
+        # Parse each variant to get option values
+        all_variants = []
+        for vs in variant_strings:
+            option_values = self._parse_variant_string(vs, product_title)
+            if option_values:
+                all_variants.append(option_values)
+
+        if not all_variants:
+            return None
+
+        # Determine the number of options (1, 2, or 3)
+        num_options = len(all_variants[0]) if all_variants else 0
+
+        if num_options == 0:
+            return None
+
+        # Collect unique values for each option position
+        option_values_by_position = [[] for _ in range(num_options)]
+
+        for variant in all_variants:
+            for i, value in enumerate(variant):
+                if i < num_options and value not in option_values_by_position[i]:
+                    option_values_by_position[i].append(value)
+
+        # Determine option names based on values
+        option_names = []
+        for i, values in enumerate(option_values_by_position):
+            # Check if all values are sizes
+            all_sizes = all(self._is_size_value(v) for v in values)
+            if all_sizes:
+                option_names.append('Größe')  # German for Size
+            elif i == 0:
+                option_names.append('Farbe')  # German for Color (first non-size option)
+            else:
+                option_names.append('Stil')  # German for Style
+
+        # Build options list for Shopify
+        options = []
+        for i, name in enumerate(option_names):
+            options.append({
+                'name': name,
+                'values': option_values_by_position[i]
+            })
+
+        # Build variants list for Shopify
+        variants = []
+        for variant_values in all_variants:
+            variant_dict = {}
+            for i, value in enumerate(variant_values):
+                variant_dict[f'option{i+1}'] = value
+            variants.append(variant_dict)
+
+        return {
+            'options': options,
+            'variants': variants,
+            'num_options': num_options
+        }
+
     def create_product(self, research_product: ResearchProduct) -> Optional[Dict]:
         """
         Create a product in Shopify from research product data.
+
+        Parses variant string from research to create proper options and variants.
+        Falls back to default variants (S, M, L, XL, XXL) if parsing fails.
+
         Uses hardcoded values for:
         - vendor: 'ReBoss Store'
         - product_type: 'Dress'
         - tags: 'imported,NEW_SET'
         - status: 'draft'
         - inventory: 100 per variant
-        - variants: S, M, L, XL, XXL
         """
-        # Build variants with default sizes
-        variants = []
-        for size in self.DEFAULT_VARIANTS:
-            variant = {
-                "option1": size,
-                "inventory_quantity": self.DEFAULT_INVENTORY,
-                "inventory_management": "shopify"
-            }
+        # Parse price values once for all variants
+        price_value = None
+        compare_value = None
 
-            # Set price if available from research
-            if research_product.price:
-                try:
-                    price_value = research_product.price.replace('$', '').replace(',', '.').strip()
+        if research_product.price:
+            try:
+                price_value = research_product.price.replace('$', '').replace(',', '.').replace('€', '').strip()
+            except:
+                pass
+
+        if research_product.compare_price:
+            try:
+                compare_value = research_product.compare_price.replace('$', '').replace(',', '.').replace('€', '').strip()
+            except:
+                pass
+
+        # Try to parse variants from research product
+        parsed_data = None
+        if research_product.variants_string:
+            parsed_data = self._parse_variants_from_string(
+                research_product.variants_string,
+                research_product.title
+            )
+
+        if parsed_data and parsed_data.get('variants'):
+            # Use parsed variants
+            print(f"  Parsed {len(parsed_data['variants'])} variants with {parsed_data['num_options']} option(s)")
+
+            options = parsed_data['options']
+            variants = []
+
+            for variant_data in parsed_data['variants']:
+                variant = {
+                    "inventory_quantity": self.DEFAULT_INVENTORY,
+                    "inventory_management": "shopify"
+                }
+
+                # Set option values (option1, option2, option3)
+                for key, value in variant_data.items():
+                    variant[key] = value
+
+                if price_value:
                     variant["price"] = price_value
-                except:
-                    pass
-
-            # Set compare_at_price if available
-            if research_product.compare_price:
-                try:
-                    compare_value = research_product.compare_price.replace('$', '').replace(',', '.').strip()
+                if compare_value:
                     variant["compare_at_price"] = compare_value
-                except:
-                    pass
 
-            variants.append(variant)
+                variants.append(variant)
 
-        # Build product data
-        product_data = {
-            "product": {
-                "title": research_product.title,
-                "body_html": research_product.description or "",
-                "vendor": self.DEFAULT_VENDOR,
-                "product_type": self.DEFAULT_PRODUCT_TYPE,
-                "tags": self.DEFAULT_TAGS,
-                "status": self.DEFAULT_STATUS,
-                "options": [
-                    {
-                        "name": "Size",
-                        "values": self.DEFAULT_VARIANTS
-                    }
-                ],
-                "variants": variants
+            # Build product data with parsed options
+            product_data = {
+                "product": {
+                    "title": research_product.title,
+                    "body_html": research_product.description or "",
+                    "vendor": self.DEFAULT_VENDOR,
+                    "product_type": self.DEFAULT_PRODUCT_TYPE,
+                    "tags": self.DEFAULT_TAGS,
+                    "status": self.DEFAULT_STATUS,
+                    "options": options,
+                    "variants": variants
+                }
             }
-        }
+        else:
+            # Fall back to default variants (S, M, L, XL, XXL)
+            print(f"  Using default variants (no variant string found or parsing failed)")
+
+            variants = []
+            for size in self.DEFAULT_VARIANTS:
+                variant = {
+                    "option1": size,
+                    "inventory_quantity": self.DEFAULT_INVENTORY,
+                    "inventory_management": "shopify"
+                }
+
+                if price_value:
+                    variant["price"] = price_value
+                if compare_value:
+                    variant["compare_at_price"] = compare_value
+
+                variants.append(variant)
+
+            # Build product data with default options
+            product_data = {
+                "product": {
+                    "title": research_product.title,
+                    "body_html": research_product.description or "",
+                    "vendor": self.DEFAULT_VENDOR,
+                    "product_type": self.DEFAULT_PRODUCT_TYPE,
+                    "tags": self.DEFAULT_TAGS,
+                    "status": self.DEFAULT_STATUS,
+                    "options": [
+                        {
+                            "name": "Größe",
+                            "values": self.DEFAULT_VARIANTS
+                        }
+                    ],
+                    "variants": variants
+                }
+            }
 
         # Add images if available
         if research_product.images and len(research_product.images) > 0:
@@ -182,6 +374,7 @@ class ShopifyRESTClient:
         if result and "product" in result:
             created_product = result["product"]
             print(f"  Created Shopify product ID: {created_product['id']}")
+            print(f"  Variants created: {len(created_product.get('variants', []))}")
             return created_product
         else:
             print(f"  Failed to create product: {research_product.title}")
