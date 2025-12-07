@@ -128,30 +128,64 @@ class ShopifyRESTClient:
             return True
         return False
 
-    def _parse_variant_string(self, variant_str: str, base_title: str) -> Tuple[List[str], List[str]]:
+    def _clean_variant_value(self, value: str) -> Optional[str]:
+        """
+        Clean a variant value by removing price/status suffixes.
+
+        Input: "S - Sold Out" or "M - $35.99 USD" or "L"
+        Output: "S" or "M" or "L"
+
+        Returns None if the value looks like a price (starts with $)
+        """
+        value = value.strip()
+
+        # Skip if the value itself is a price (e.g., "$78.99 USD")
+        if value.startswith('$') or re.match(r'^\$?\d+\.?\d*\s*(USD|EUR|€)?$', value):
+            return None
+
+        # Remove " - Sold Out", " - $XX.XX USD", " - In Stock", etc.
+        # Pattern: " - " followed by price or status
+        if ' - ' in value:
+            parts = value.split(' - ')
+            # Keep only the first part (the actual variant value)
+            cleaned = parts[0].strip()
+            # Verify it's not a price
+            if cleaned.startswith('$') or re.match(r'^\$?\d+\.?\d*', cleaned):
+                return None
+            return cleaned
+
+        return value
+
+    def _parse_variant_string(self, variant_str: str, base_title: str) -> List[str]:
         """
         Parse a variant string to extract option values.
 
-        Input: "Women'S Casual Top - Black / S"
-        Output: (['Black'], ['S']) - (option1_values, option2_values)
+        Input formats supported:
+        - "Black / S" (simple)
+        - "Black / S - Sold Out" (with status)
+        - "Black / M - $35.99 USD" (with price)
 
-        Returns tuple of (option1_values, option2_values)
+        Output: ['Black', 'S'] - list of option values
+
+        Returns list of option values (Color, Size, etc.)
         """
-        # Remove the base title part
-        # Format: "Title - Option1 / Option2" or "Title - Option1 / Option2 / Option3"
+        variant_str = variant_str.strip()
 
-        # Try to find the " - " separator that separates title from variants
-        if ' - ' in variant_str:
-            parts = variant_str.split(' - ', 1)
-            if len(parts) == 2:
-                variant_part = parts[1]
-            else:
-                return ([], [])
-        else:
-            return ([], [])
+        # Handle format: "Color / Size - Price/Status"
+        # We need to split by " / " but also handle the trailing " - Price/Status"
 
-        # Split by " / " to get individual option values
-        option_values = [v.strip() for v in variant_part.split(' / ')]
+        # Split by " / " to get individual parts
+        raw_parts = variant_str.split(' / ')
+
+        if not raw_parts:
+            return []
+
+        # Clean each part (remove price/status suffixes)
+        option_values = []
+        for part in raw_parts:
+            cleaned = self._clean_variant_value(part)
+            if cleaned:
+                option_values.append(cleaned)
 
         return option_values
 
@@ -159,12 +193,14 @@ class ShopifyRESTClient:
         """
         Parse variants from a comma-separated string.
 
-        Input: "Title - Black / S, Title - Black / M, Title - Red / S, Title - Red / M"
+        Input formats:
+        - "Black / S, Black / M, Red / S, Red / M"
+        - "Black / S - Sold Out, Black / M - $35.99 USD, Red / S - $35.99 USD"
 
         Output: {
             'options': [
-                {'name': 'Color', 'values': ['Black', 'Red']},
-                {'name': 'Size', 'values': ['S', 'M']}
+                {'name': 'Farbe', 'values': ['Black', 'Red']},
+                {'name': 'Größe', 'values': ['S', 'M']}
             ],
             'variants': [
                 {'option1': 'Black', 'option2': 'S'},
@@ -227,9 +263,17 @@ class ShopifyRESTClient:
                 'values': option_values_by_position[i]
             })
 
-        # Build variants list for Shopify
+        # Build variants list for Shopify (removing duplicates)
         variants = []
+        seen_combinations = set()
+
         for variant_values in all_variants:
+            # Create a tuple key for deduplication
+            combo_key = tuple(variant_values)
+            if combo_key in seen_combinations:
+                continue  # Skip duplicate variant combinations
+            seen_combinations.add(combo_key)
+
             variant_dict = {}
             for i, value in enumerate(variant_values):
                 variant_dict[f'option{i+1}'] = value
