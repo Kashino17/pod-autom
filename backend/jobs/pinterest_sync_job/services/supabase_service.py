@@ -145,50 +145,74 @@ class SupabaseService:
             return []
 
     def get_campaigns_with_assignments(self, shop_id: str) -> List[PinterestCampaign]:
-        """Get Pinterest campaigns with batch assignments for a shop."""
+        """Get Pinterest campaigns that have batch assignments for a shop.
+
+        IMPORTANT: Only returns campaigns that have entries in campaign_batch_assignments.
+        Campaigns without assignments are NOT returned.
+        """
         campaigns = []
 
         try:
-            # Get campaigns for shop
-            campaign_response = self.client.table('pinterest_campaigns').select(
-                'id, pinterest_campaign_id, name, status, ad_account_id, daily_budget'
-            ).eq('shop_id', shop_id).execute()
+            # CHANGED: Start from campaign_batch_assignments and JOIN to pinterest_campaigns
+            # This way we ONLY get campaigns that have assignments
+            assignments_response = self.client.table('campaign_batch_assignments').select(
+                '''
+                id,
+                campaign_id,
+                shopify_collection_id,
+                collection_title,
+                batch_indices,
+                pinterest_campaigns!inner(
+                    id,
+                    pinterest_campaign_id,
+                    name,
+                    status,
+                    ad_account_id,
+                    daily_budget,
+                    shop_id
+                )
+                '''
+            ).execute()
 
-            if not campaign_response.data:
-                print(f"  [DEBUG] No campaigns found in pinterest_campaigns for shop {shop_id}")
+            if not assignments_response.data:
+                print(f"  No batch assignments found in campaign_batch_assignments")
                 return []
 
-            print(f"  [DEBUG] Found {len(campaign_response.data)} campaigns in DB")
+            # Filter by shop_id and group by campaign
+            campaign_map = {}  # campaign_id -> {campaign_data, assignments}
 
-            for campaign_data in campaign_response.data:
-                campaign_id = campaign_data['id']
-                campaign_name = campaign_data.get('name', 'Unknown')
+            for assignment in assignments_response.data:
+                campaign_data = assignment.get('pinterest_campaigns')
+                if not campaign_data:
+                    continue
 
-                # Get batch assignments for this campaign
-                # Note: shopify_collection_id and collection_title are stored directly in the assignment
-                assignments_response = self.client.table('campaign_batch_assignments').select(
-                    'id, shopify_collection_id, collection_title, batch_indices'
-                ).eq('campaign_id', campaign_id).execute()
+                # Filter by shop_id
+                if campaign_data.get('shop_id') != shop_id:
+                    continue
 
-                batch_assignments = []
-                if assignments_response.data:
-                    for assignment in assignments_response.data:
-                        shopify_collection_id = assignment.get('shopify_collection_id')
-                        collection_title = assignment.get('collection_title', '')
-                        batch_indices = assignment.get('batch_indices', [])
+                campaign_id = campaign_data.get('id')
 
-                        if shopify_collection_id:
-                            batch_assignments.append({
-                                'collection_shopify_id': shopify_collection_id,
-                                'collection_title': collection_title,
-                                'batch_indices': batch_indices
-                            })
-                        else:
-                            print(f"  [DEBUG] Assignment {assignment.get('id')} has no shopify_collection_id")
-                else:
-                    # Only log for ACTIVE campaigns as those are the ones we expect to process
-                    if campaign_data.get('status') == 'ACTIVE':
-                        print(f"  [DEBUG] Campaign '{campaign_name[:50]}' (ACTIVE) has NO assignments in DB")
+                # Initialize campaign entry if not exists
+                if campaign_id not in campaign_map:
+                    campaign_map[campaign_id] = {
+                        'campaign_data': campaign_data,
+                        'assignments': []
+                    }
+
+                # Add assignment
+                shopify_collection_id = assignment.get('shopify_collection_id')
+                if shopify_collection_id:
+                    campaign_map[campaign_id]['assignments'].append({
+                        'collection_shopify_id': shopify_collection_id,
+                        'collection_title': assignment.get('collection_title', ''),
+                        'batch_indices': assignment.get('batch_indices', [])
+                    })
+
+            print(f"  Found {len(campaign_map)} campaigns with assignments")
+
+            # Build campaign objects
+            for campaign_id, data in campaign_map.items():
+                campaign_data = data['campaign_data']
 
                 campaign = PinterestCampaign(
                     id=campaign_id,
@@ -197,7 +221,7 @@ class SupabaseService:
                     status=campaign_data.get('status', 'ACTIVE'),
                     ad_account_id=campaign_data.get('ad_account_id'),
                     daily_budget=campaign_data.get('daily_budget'),
-                    batch_assignments=batch_assignments
+                    batch_assignments=data['assignments']
                 )
 
                 campaigns.append(campaign)
@@ -205,7 +229,7 @@ class SupabaseService:
             return campaigns
 
         except Exception as e:
-            print(f"Error getting campaigns: {e}")
+            print(f"Error getting campaigns with assignments: {e}")
             import traceback
             traceback.print_exc()
             return []
