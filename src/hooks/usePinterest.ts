@@ -369,22 +369,25 @@ export function useCreateCampaignBatchAssignment() {
       shopify_collection_id: string  // Shopify Collection ID (from API)
       collection_title: string  // Collection title for display
       batch_indices: number[]
-      ad_channel?: string  // 'pinterest', 'meta', or 'google'
+      ad_channel?: string  // 'pinterest', 'meta', or 'google' (not stored, for future use)
     }) => {
+      // Note: Only insert columns that exist in the table
+      // assigned_shop and ad_channel were removed as they don't exist in DB schema
       const { data, error } = await supabase
         .from('campaign_batch_assignments')
         .insert({
           campaign_id: assignment.campaign_id,
           shopify_collection_id: assignment.shopify_collection_id,
           collection_title: assignment.collection_title,
-          batch_indices: assignment.batch_indices,
-          assigned_shop: assignment.shop_id,
-          ad_channel: assignment.ad_channel || 'pinterest'
+          batch_indices: assignment.batch_indices
         } as any)
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('[usePinterest] Error creating batch assignment:', error)
+        throw error
+      }
       return data
     },
     onSuccess: (_, variables) => {

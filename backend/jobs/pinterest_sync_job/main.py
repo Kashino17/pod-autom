@@ -291,6 +291,20 @@ class PinterestSyncJob:
             if not pinterest.test_connection():
                 raise ValueError("Cannot connect to Pinterest API")
 
+            # IMPORTANT: Sync campaign status from Pinterest before processing
+            # This ensures we use the current status, not stale data from our DB
+            if config.pinterest_account_id:
+                print(f"\n  Syncing campaign status from Pinterest...")
+                pinterest_campaigns = pinterest.get_campaigns(config.pinterest_account_id)
+                if pinterest_campaigns:
+                    synced_count = self.db.sync_campaign_status_from_pinterest(
+                        shop_id=config.shop_id,
+                        pinterest_campaigns=pinterest_campaigns
+                    )
+                    print(f"  Updated status for {synced_count} campaigns from Pinterest")
+                else:
+                    print(f"  No campaigns found on Pinterest or API error")
+
             # Get board ID - prefer configured default_board_id
             board_id = config.default_board_id
 

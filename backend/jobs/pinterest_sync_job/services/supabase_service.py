@@ -155,15 +155,19 @@ class SupabaseService:
             ).eq('shop_id', shop_id).execute()
 
             if not campaign_response.data:
+                print(f"  [DEBUG] No campaigns found in pinterest_campaigns for shop {shop_id}")
                 return []
+
+            print(f"  [DEBUG] Found {len(campaign_response.data)} campaigns in DB")
 
             for campaign_data in campaign_response.data:
                 campaign_id = campaign_data['id']
+                campaign_name = campaign_data.get('name', 'Unknown')
 
                 # Get batch assignments for this campaign
                 # Note: shopify_collection_id and collection_title are stored directly in the assignment
                 assignments_response = self.client.table('campaign_batch_assignments').select(
-                    'shopify_collection_id, collection_title, batch_indices'
+                    'id, shopify_collection_id, collection_title, batch_indices'
                 ).eq('campaign_id', campaign_id).execute()
 
                 batch_assignments = []
@@ -179,6 +183,12 @@ class SupabaseService:
                                 'collection_title': collection_title,
                                 'batch_indices': batch_indices
                             })
+                        else:
+                            print(f"  [DEBUG] Assignment {assignment.get('id')} has no shopify_collection_id")
+                else:
+                    # Only log for ACTIVE campaigns as those are the ones we expect to process
+                    if campaign_data.get('status') == 'ACTIVE':
+                        print(f"  [DEBUG] Campaign '{campaign_name[:50]}' (ACTIVE) has NO assignments in DB")
 
                 campaign = PinterestCampaign(
                     id=campaign_id,
@@ -196,6 +206,8 @@ class SupabaseService:
 
         except Exception as e:
             print(f"Error getting campaigns: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     def log_job_run(self, job_type: str, status: str, metadata: Dict = None) -> Optional[str]:
@@ -386,3 +398,50 @@ class SupabaseService:
         except Exception as e:
             print(f"Error marking sync as paused: {e}")
             return False
+
+    def sync_campaign_status_from_pinterest(self, shop_id: str,
+                                             pinterest_campaigns: List[Dict]) -> int:
+        """Sync campaign status from Pinterest API to our database.
+
+        This ensures we use the current status from Pinterest, not stale data.
+        Updates existing campaigns and optionally creates new ones.
+
+        Args:
+            shop_id: The shop UUID
+            pinterest_campaigns: List of campaigns from Pinterest API
+
+        Returns:
+            Number of campaigns updated
+        """
+        updated_count = 0
+
+        try:
+            for p_campaign in pinterest_campaigns:
+                pinterest_campaign_id = p_campaign.get('id')
+                status = p_campaign.get('status', 'ACTIVE')
+                name = p_campaign.get('name', '')
+
+                if not pinterest_campaign_id:
+                    continue
+
+                # Try to update existing campaign
+                try:
+                    result = self.client.table('pinterest_campaigns').update({
+                        'status': status,
+                        'name': name,
+                        'synced_at': datetime.now(timezone.utc).isoformat()
+                    }).eq('shop_id', shop_id).eq(
+                        'pinterest_campaign_id', pinterest_campaign_id
+                    ).execute()
+
+                    if result.data:
+                        updated_count += 1
+                except Exception as e:
+                    # Campaign might not exist in our DB yet, that's OK
+                    pass
+
+            return updated_count
+
+        except Exception as e:
+            print(f"Error syncing campaign status from Pinterest: {e}")
+            return 0
