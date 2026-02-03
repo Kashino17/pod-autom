@@ -2,14 +2,14 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from './database.types'
 
 // Environment Variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://demo.supabase.co'
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'demo-key'
 
-// Validation
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    'Missing Supabase environment variables. Please check your .env.local file.'
-  )
+// Demo Mode Check
+export const isDemoMode = !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY
+
+if (isDemoMode) {
+  console.warn('⚠️ Running in DEMO MODE - No Supabase connection')
 }
 
 // Create Supabase Client
