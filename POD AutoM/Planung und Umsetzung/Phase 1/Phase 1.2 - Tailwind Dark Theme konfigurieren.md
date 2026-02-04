@@ -1,0 +1,1289 @@
+# Phase 1.2 - Tailwind Dark Theme konfigurieren
+
+## Ziel
+Einrichten von Tailwind CSS 4.x mit dem POD AutoM Dark Theme (Violet Akzent), vollständigem Design System und allen UI-Komponenten.
+
+## Technische Anforderungen (Stand 2026)
+- **Tailwind CSS**: 4.x
+- **PostCSS**: 8.x
+- **Autoprefixer**: 10.x
+
+---
+
+## Design System Spezifikation
+
+### Farbpalette
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     POD AutoM Color System                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  BACKGROUNDS                                                     │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐           │
+│  │ #000000  │ │ #09090b  │ │ #18181b  │ │ #27272a  │           │
+│  │background│ │ surface  │ │ elevated │ │ highlight│           │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘           │
+│                                                                  │
+│  PRIMARY (Violet)                                                │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐           │
+│  │ #c4b5fd  │ │ #a78bfa  │ │ #8b5cf6  │ │ #7c3aed  │           │
+│  │  light   │ │  soft    │ │ DEFAULT  │ │  hover   │           │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘           │
+│                                                                  │
+│  STATUS COLORS                                                   │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐           │
+│  │ #10b981  │ │ #f59e0b  │ │ #ef4444  │ │ #3b82f6  │           │
+│  │ success  │ │ warning  │ │  error   │ │   info   │           │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘           │
+│                                                                  │
+│  TEXT                                                            │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐           │
+│  │ #ffffff  │ │ #fafafa  │ │ #a1a1aa  │ │ #71717a  │           │
+│  │ primary  │ │secondary │ │  muted   │ │ disabled │           │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘           │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Typography Scale
+| Name | Size | Line Height | Weight | Usage |
+|------|------|-------------|--------|-------|
+| `display-2xl` | 72px | 90px | 800 | Hero Headlines |
+| `display-xl` | 60px | 72px | 800 | Page Titles |
+| `display-lg` | 48px | 60px | 700 | Section Titles |
+| `display-md` | 36px | 44px | 700 | Card Titles |
+| `display-sm` | 30px | 38px | 600 | Subsections |
+| `text-xl` | 20px | 30px | 500 | Lead Text |
+| `text-lg` | 18px | 28px | 400 | Body Large |
+| `text-md` | 16px | 24px | 400 | Body Default |
+| `text-sm` | 14px | 20px | 400 | Body Small |
+| `text-xs` | 12px | 16px | 400 | Captions |
+
+### Spacing Scale
+```
+4px  → 0.25rem → p-1
+8px  → 0.5rem  → p-2
+12px → 0.75rem → p-3
+16px → 1rem    → p-4
+20px → 1.25rem → p-5
+24px → 1.5rem  → p-6
+32px → 2rem    → p-8
+40px → 2.5rem  → p-10
+48px → 3rem    → p-12
+64px → 4rem    → p-16
+80px → 5rem    → p-20
+96px → 6rem    → p-24
+```
+
+### Border Radius
+| Name | Value | Usage |
+|------|-------|-------|
+| `rounded-sm` | 4px | Badges, Tags |
+| `rounded` | 6px | Inputs, Small Buttons |
+| `rounded-md` | 8px | Buttons, Cards |
+| `rounded-lg` | 12px | Cards, Dialogs |
+| `rounded-xl` | 16px | Large Cards |
+| `rounded-2xl` | 20px | Hero Cards |
+| `rounded-full` | 9999px | Avatars, Pills |
+
+---
+
+## Schritte
+
+### 1. Tailwind CSS 4.x konfigurieren (tailwind.config.ts)
+
+```typescript
+import type { Config } from 'tailwindcss'
+
+const config: Config = {
+  content: [
+    './index.html',
+    './src/**/*.{js,ts,jsx,tsx}',
+  ],
+
+  darkMode: 'class',
+
+  theme: {
+    extend: {
+      // Custom Colors
+      colors: {
+        background: '#000000',
+        surface: {
+          DEFAULT: '#09090b',
+          elevated: '#18181b',
+          highlight: '#27272a',
+        },
+        primary: {
+          DEFAULT: '#8b5cf6',
+          hover: '#7c3aed',
+          active: '#6d28d9',
+          light: '#c4b5fd',
+          soft: '#a78bfa',
+          muted: 'rgba(139, 92, 246, 0.1)',
+        },
+        success: {
+          DEFAULT: '#10b981',
+          light: '#34d399',
+          dark: '#059669',
+          muted: 'rgba(16, 185, 129, 0.1)',
+        },
+        warning: {
+          DEFAULT: '#f59e0b',
+          light: '#fbbf24',
+          dark: '#d97706',
+          muted: 'rgba(245, 158, 11, 0.1)',
+        },
+        error: {
+          DEFAULT: '#ef4444',
+          light: '#f87171',
+          dark: '#dc2626',
+          muted: 'rgba(239, 68, 68, 0.1)',
+        },
+        info: {
+          DEFAULT: '#3b82f6',
+          light: '#60a5fa',
+          dark: '#2563eb',
+          muted: 'rgba(59, 130, 246, 0.1)',
+        },
+      },
+
+      // Typography
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+      },
+
+      fontSize: {
+        'display-2xl': ['4.5rem', { lineHeight: '5.625rem', fontWeight: '800' }],
+        'display-xl': ['3.75rem', { lineHeight: '4.5rem', fontWeight: '800' }],
+        'display-lg': ['3rem', { lineHeight: '3.75rem', fontWeight: '700' }],
+        'display-md': ['2.25rem', { lineHeight: '2.75rem', fontWeight: '700' }],
+        'display-sm': ['1.875rem', { lineHeight: '2.375rem', fontWeight: '600' }],
+      },
+
+      // Spacing
+      spacing: {
+        '18': '4.5rem',
+        '88': '22rem',
+        '128': '32rem',
+      },
+
+      // Border Radius
+      borderRadius: {
+        '4xl': '2rem',
+      },
+
+      // Box Shadow
+      boxShadow: {
+        'glow': '0 0 20px rgba(139, 92, 246, 0.3)',
+        'glow-lg': '0 0 40px rgba(139, 92, 246, 0.4)',
+        'glow-success': '0 0 20px rgba(16, 185, 129, 0.3)',
+        'glow-error': '0 0 20px rgba(239, 68, 68, 0.3)',
+        'inner-highlight': 'inset 0 1px 0 0 rgba(255, 255, 255, 0.05)',
+        'card': '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2)',
+        'card-hover': '0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3)',
+      },
+
+      // Backdrop Blur
+      backdropBlur: {
+        xs: '2px',
+      },
+
+      // Animations
+      animation: {
+        'fade-in': 'fadeIn 0.2s ease-out',
+        'fade-out': 'fadeOut 0.2s ease-in',
+        'slide-up': 'slideUp 0.3s ease-out',
+        'slide-down': 'slideDown 0.3s ease-out',
+        'slide-in-right': 'slideInRight 0.3s ease-out',
+        'slide-in-left': 'slideInLeft 0.3s ease-out',
+        'scale-in': 'scaleIn 0.2s ease-out',
+        'scale-out': 'scaleOut 0.2s ease-in',
+        'spin-slow': 'spin 3s linear infinite',
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'bounce-subtle': 'bounceSubtle 2s infinite',
+        'shimmer': 'shimmer 2s linear infinite',
+        'progress': 'progress 1s ease-in-out infinite',
+      },
+
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        fadeOut: {
+          '0%': { opacity: '1' },
+          '100%': { opacity: '0' },
+        },
+        slideUp: {
+          '0%': { transform: 'translateY(10px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        slideDown: {
+          '0%': { transform: 'translateY(-10px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        slideInRight: {
+          '0%': { transform: 'translateX(100%)', opacity: '0' },
+          '100%': { transform: 'translateX(0)', opacity: '1' },
+        },
+        slideInLeft: {
+          '0%': { transform: 'translateX(-100%)', opacity: '0' },
+          '100%': { transform: 'translateX(0)', opacity: '1' },
+        },
+        scaleIn: {
+          '0%': { transform: 'scale(0.95)', opacity: '0' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
+        scaleOut: {
+          '0%': { transform: 'scale(1)', opacity: '1' },
+          '100%': { transform: 'scale(0.95)', opacity: '0' },
+        },
+        bounceSubtle: {
+          '0%, 100%': { transform: 'translateY(-2%)' },
+          '50%': { transform: 'translateY(0)' },
+        },
+        shimmer: {
+          '0%': { backgroundPosition: '-200% 0' },
+          '100%': { backgroundPosition: '200% 0' },
+        },
+        progress: {
+          '0%': { width: '0%' },
+          '50%': { width: '70%' },
+          '100%': { width: '100%' },
+        },
+      },
+
+      // Transitions
+      transitionDuration: {
+        '250': '250ms',
+        '350': '350ms',
+        '400': '400ms',
+      },
+
+      // Z-Index Scale
+      zIndex: {
+        '60': '60',
+        '70': '70',
+        '80': '80',
+        '90': '90',
+        '100': '100',
+      },
+    },
+  },
+
+  plugins: [],
+}
+
+export default config
+```
+
+### 2. Haupt-CSS erstellen (src/styles/index.css)
+
+```css
+/* =====================================================
+   POD AutoM - Main Stylesheet
+   Version: 1.0.0 (2026)
+   ===================================================== */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =====================================================
+   FONTS
+   ===================================================== */
+
+/* Option A: Google Fonts (einfach, aber Privacy-Bedenken) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* Option B: Self-Hosted (empfohlen für Production)
+   Download: https://rsms.me/inter/
+   Dann in public/fonts/ ablegen und so einbinden:
+
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/Inter-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/Inter-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+... etc für 600, 700, 800 */
+
+/* =====================================================
+   BASE LAYER
+   ===================================================== */
+
+@layer base {
+  :root {
+    /* CSS Custom Properties für JS Zugriff */
+    --color-background: 0 0% 0%;
+    --color-surface: 240 6% 4%;
+    --color-surface-elevated: 240 6% 10%;
+    --color-surface-highlight: 240 4% 16%;
+    --color-primary: 263 70% 66%;
+    --color-primary-hover: 263 70% 58%;
+
+    /* Animation Timing */
+    --transition-fast: 150ms;
+    --transition-normal: 250ms;
+    --transition-slow: 350ms;
+
+    /* Sidebar Width */
+    --sidebar-width: 280px;
+    --sidebar-collapsed-width: 80px;
+
+    /* Header Height */
+    --header-height: 64px;
+  }
+
+  /* Reset & Base Styles */
+  *,
+  *::before,
+  *::after {
+    @apply border-zinc-800;
+  }
+
+  html {
+    @apply scroll-smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-background text-white antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Focus States - Accessibility */
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+  }
+
+  /* Reduced Motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Selection */
+  ::selection {
+    @apply bg-primary/30 text-white;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-surface;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-zinc-700 rounded-full hover:bg-zinc-600 transition-colors;
+  }
+
+  /* Firefox Scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #3f3f46 #09090b;
+  }
+
+  /* Typography Defaults */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+
+  p {
+    @apply leading-relaxed;
+  }
+
+  a {
+    @apply transition-colors duration-200;
+  }
+
+  /* Form Defaults */
+  input, textarea, select, button {
+    @apply font-sans;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-zinc-500;
+  }
+
+  /* Disabled States */
+  [disabled],
+  .disabled {
+    @apply opacity-50 cursor-not-allowed pointer-events-none;
+  }
+}
+
+/* =====================================================
+   COMPONENTS LAYER
+   ===================================================== */
+
+@layer components {
+  /* ---------------------------------------------------
+     CARDS
+     --------------------------------------------------- */
+  .card {
+    @apply bg-surface rounded-xl border border-zinc-800 p-6
+           shadow-card transition-all duration-200;
+  }
+
+  .card-elevated {
+    @apply bg-surface-elevated rounded-xl border border-zinc-800 p-6
+           shadow-card-hover;
+  }
+
+  .card-hover {
+    @apply card hover:border-zinc-700 hover:shadow-card-hover
+           hover:-translate-y-0.5 cursor-pointer;
+  }
+
+  .card-interactive {
+    @apply card-hover active:scale-[0.98];
+  }
+
+  .card-glass {
+    @apply bg-surface/80 backdrop-blur-lg rounded-xl border border-zinc-800/50 p-6;
+  }
+
+  .card-highlight {
+    @apply card border-primary/30 bg-gradient-to-br from-primary/5 to-transparent;
+  }
+
+  /* ---------------------------------------------------
+     BUTTONS
+     --------------------------------------------------- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
+           font-medium text-sm transition-all duration-200
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
+           focus-visible:ring-offset-background active:scale-[0.98];
+  }
+
+  .btn-primary {
+    @apply btn bg-primary text-white shadow-sm
+           hover:bg-primary-hover focus-visible:ring-primary;
+  }
+
+  .btn-secondary {
+    @apply btn bg-surface-highlight text-white border border-zinc-700
+           hover:bg-zinc-700 hover:border-zinc-600 focus-visible:ring-zinc-500;
+  }
+
+  .btn-ghost {
+    @apply btn text-zinc-400 hover:text-white hover:bg-surface-highlight
+           focus-visible:ring-zinc-500;
+  }
+
+  .btn-outline {
+    @apply btn border-2 border-primary text-primary bg-transparent
+           hover:bg-primary hover:text-white focus-visible:ring-primary;
+  }
+
+  .btn-danger {
+    @apply btn bg-error text-white hover:bg-error-dark focus-visible:ring-error;
+  }
+
+  .btn-success {
+    @apply btn bg-success text-white hover:bg-success-dark focus-visible:ring-success;
+  }
+
+  /* Button Sizes */
+  .btn-xs {
+    @apply px-2.5 py-1.5 text-xs rounded-md;
+  }
+
+  .btn-sm {
+    @apply px-3 py-2 text-sm rounded-md;
+  }
+
+  .btn-lg {
+    @apply px-6 py-3 text-base rounded-xl;
+  }
+
+  .btn-xl {
+    @apply px-8 py-4 text-lg rounded-xl;
+  }
+
+  /* Icon Button */
+  .btn-icon {
+    @apply btn p-2.5 aspect-square;
+  }
+
+  .btn-icon-sm {
+    @apply btn p-2 aspect-square;
+  }
+
+  .btn-icon-lg {
+    @apply btn p-3 aspect-square;
+  }
+
+  /* ---------------------------------------------------
+     INPUTS
+     --------------------------------------------------- */
+  .input {
+    @apply w-full bg-surface border border-zinc-700 rounded-lg px-4 py-2.5
+           text-white text-sm placeholder:text-zinc-500
+           focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-all duration-200;
+  }
+
+  .input-error {
+    @apply input border-error focus:ring-error/50 focus:border-error;
+  }
+
+  .input-success {
+    @apply input border-success focus:ring-success/50 focus:border-success;
+  }
+
+  /* Input with Icon */
+  .input-wrapper {
+    @apply relative;
+  }
+
+  .input-icon-left {
+    @apply absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none;
+  }
+
+  .input-icon-right {
+    @apply absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500;
+  }
+
+  .input-with-icon-left {
+    @apply input pl-10;
+  }
+
+  .input-with-icon-right {
+    @apply input pr-10;
+  }
+
+  /* Textarea */
+  .textarea {
+    @apply input min-h-[120px] resize-y;
+  }
+
+  /* ---------------------------------------------------
+     SELECT
+     --------------------------------------------------- */
+  .select {
+    @apply input appearance-none cursor-pointer
+           bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E')]
+           bg-no-repeat bg-[right_0.75rem_center] bg-[length:1rem_1rem] pr-10;
+  }
+
+  /* ---------------------------------------------------
+     CHECKBOX & RADIO
+     --------------------------------------------------- */
+  .checkbox {
+    @apply w-4 h-4 rounded border-2 border-zinc-600 bg-surface
+           appearance-none cursor-pointer
+           checked:bg-primary checked:border-primary
+           focus-visible:ring-2 focus-visible:ring-primary/50
+           transition-all duration-200;
+  }
+
+  .checkbox:checked {
+    background-image: url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%2220%206%209%2017%204%2012%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E');
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+
+  .radio {
+    @apply w-4 h-4 rounded-full border-2 border-zinc-600 bg-surface
+           appearance-none cursor-pointer
+           checked:border-primary checked:border-[5px]
+           focus-visible:ring-2 focus-visible:ring-primary/50
+           transition-all duration-200;
+  }
+
+  /* ---------------------------------------------------
+     TOGGLE / SWITCH
+     --------------------------------------------------- */
+  .toggle {
+    @apply relative w-11 h-6 rounded-full bg-zinc-700 cursor-pointer
+           transition-colors duration-200
+           after:content-[''] after:absolute after:top-0.5 after:left-0.5
+           after:w-5 after:h-5 after:bg-white after:rounded-full
+           after:transition-transform after:duration-200;
+  }
+
+  .toggle:checked {
+    @apply bg-primary after:translate-x-5;
+  }
+
+  .toggle:focus-visible {
+    @apply ring-2 ring-primary/50;
+  }
+
+  /* ---------------------------------------------------
+     BADGES
+     --------------------------------------------------- */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full
+           text-xs font-medium whitespace-nowrap;
+  }
+
+  .badge-primary {
+    @apply badge bg-primary/15 text-primary border border-primary/20;
+  }
+
+  .badge-success {
+    @apply badge bg-success/15 text-success-light border border-success/20;
+  }
+
+  .badge-warning {
+    @apply badge bg-warning/15 text-warning-light border border-warning/20;
+  }
+
+  .badge-error {
+    @apply badge bg-error/15 text-error-light border border-error/20;
+  }
+
+  .badge-info {
+    @apply badge bg-info/15 text-info-light border border-info/20;
+  }
+
+  .badge-neutral {
+    @apply badge bg-zinc-800 text-zinc-300 border border-zinc-700;
+  }
+
+  /* Badge with Dot */
+  .badge-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  .badge-dot-success {
+    @apply badge-dot bg-success animate-pulse;
+  }
+
+  .badge-dot-error {
+    @apply badge-dot bg-error animate-pulse;
+  }
+
+  /* ---------------------------------------------------
+     SKELETON LOADER
+     --------------------------------------------------- */
+  .skeleton {
+    @apply bg-surface-highlight rounded animate-pulse;
+  }
+
+  .skeleton-shimmer {
+    @apply relative overflow-hidden bg-surface-highlight rounded;
+  }
+
+  .skeleton-shimmer::after {
+    @apply absolute inset-0 animate-shimmer;
+    content: '';
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.05),
+      transparent
+    );
+    background-size: 200% 100%;
+  }
+
+  /* ---------------------------------------------------
+     TOOLTIP
+     --------------------------------------------------- */
+  .tooltip {
+    @apply relative inline-flex;
+  }
+
+  .tooltip-content {
+    @apply absolute z-50 px-2.5 py-1.5 text-xs font-medium
+           bg-zinc-900 text-white rounded-md shadow-lg border border-zinc-700
+           whitespace-nowrap opacity-0 invisible
+           transition-all duration-200;
+  }
+
+  .tooltip:hover .tooltip-content {
+    @apply opacity-100 visible;
+  }
+
+  .tooltip-top .tooltip-content {
+    @apply bottom-full left-1/2 -translate-x-1/2 mb-2;
+  }
+
+  .tooltip-bottom .tooltip-content {
+    @apply top-full left-1/2 -translate-x-1/2 mt-2;
+  }
+
+  /* ---------------------------------------------------
+     AVATAR
+     --------------------------------------------------- */
+  .avatar {
+    @apply relative inline-flex items-center justify-center
+           rounded-full bg-surface-highlight text-zinc-400 font-medium
+           overflow-hidden flex-shrink-0;
+  }
+
+  .avatar-xs { @apply w-6 h-6 text-xs; }
+  .avatar-sm { @apply w-8 h-8 text-sm; }
+  .avatar-md { @apply w-10 h-10 text-base; }
+  .avatar-lg { @apply w-12 h-12 text-lg; }
+  .avatar-xl { @apply w-16 h-16 text-xl; }
+
+  .avatar img {
+    @apply w-full h-full object-cover;
+  }
+
+  .avatar-status {
+    @apply absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background;
+  }
+
+  .avatar-status-online { @apply avatar-status bg-success; }
+  .avatar-status-offline { @apply avatar-status bg-zinc-500; }
+  .avatar-status-busy { @apply avatar-status bg-error; }
+
+  /* ---------------------------------------------------
+     PROGRESS BAR
+     --------------------------------------------------- */
+  .progress {
+    @apply w-full h-2 bg-surface-highlight rounded-full overflow-hidden;
+  }
+
+  .progress-bar {
+    @apply h-full bg-primary rounded-full transition-all duration-300;
+  }
+
+  .progress-bar-success { @apply bg-success; }
+  .progress-bar-warning { @apply bg-warning; }
+  .progress-bar-error { @apply bg-error; }
+
+  .progress-indeterminate .progress-bar {
+    @apply animate-progress;
+  }
+
+  /* ---------------------------------------------------
+     SPINNER
+     --------------------------------------------------- */
+  .spinner {
+    @apply w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin;
+  }
+
+  .spinner-sm { @apply w-4 h-4; }
+  .spinner-lg { @apply w-6 h-6; }
+  .spinner-xl { @apply w-8 h-8; }
+
+  /* ---------------------------------------------------
+     DIVIDER
+     --------------------------------------------------- */
+  .divider {
+    @apply w-full h-px bg-zinc-800 my-4;
+  }
+
+  .divider-vertical {
+    @apply w-px h-full bg-zinc-800 mx-4;
+  }
+
+  .divider-text {
+    @apply flex items-center gap-4 text-sm text-zinc-500;
+  }
+
+  .divider-text::before,
+  .divider-text::after {
+    @apply flex-1 h-px bg-zinc-800;
+    content: '';
+  }
+
+  /* ---------------------------------------------------
+     ALERT / NOTIFICATION
+     --------------------------------------------------- */
+  .alert {
+    @apply flex items-start gap-3 p-4 rounded-lg border;
+  }
+
+  .alert-info {
+    @apply alert bg-info/10 border-info/20 text-info-light;
+  }
+
+  .alert-success {
+    @apply alert bg-success/10 border-success/20 text-success-light;
+  }
+
+  .alert-warning {
+    @apply alert bg-warning/10 border-warning/20 text-warning-light;
+  }
+
+  .alert-error {
+    @apply alert bg-error/10 border-error/20 text-error-light;
+  }
+
+  /* ---------------------------------------------------
+     TOAST
+     --------------------------------------------------- */
+  .toast {
+    @apply flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg
+           bg-surface-elevated border border-zinc-700
+           animate-slide-in-right;
+  }
+
+  .toast-success {
+    @apply toast border-l-4 border-l-success;
+  }
+
+  .toast-error {
+    @apply toast border-l-4 border-l-error;
+  }
+
+  .toast-warning {
+    @apply toast border-l-4 border-l-warning;
+  }
+
+  .toast-info {
+    @apply toast border-l-4 border-l-info;
+  }
+
+  /* ---------------------------------------------------
+     MODAL / DIALOG
+     --------------------------------------------------- */
+  .modal-overlay {
+    @apply fixed inset-0 z-50 bg-black/60 backdrop-blur-sm
+           animate-fade-in;
+  }
+
+  .modal {
+    @apply fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2
+           w-full max-w-md bg-surface border border-zinc-800 rounded-2xl
+           shadow-2xl animate-scale-in;
+  }
+
+  .modal-header {
+    @apply flex items-center justify-between p-6 border-b border-zinc-800;
+  }
+
+  .modal-body {
+    @apply p-6;
+  }
+
+  .modal-footer {
+    @apply flex items-center justify-end gap-3 p-6 border-t border-zinc-800;
+  }
+
+  /* ---------------------------------------------------
+     DROPDOWN MENU
+     --------------------------------------------------- */
+  .dropdown {
+    @apply relative inline-block;
+  }
+
+  .dropdown-menu {
+    @apply absolute z-50 mt-2 min-w-[200px] py-2
+           bg-surface-elevated border border-zinc-700 rounded-xl shadow-lg
+           animate-fade-in origin-top-right;
+  }
+
+  .dropdown-item {
+    @apply flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-300
+           hover:bg-surface-highlight hover:text-white
+           transition-colors cursor-pointer;
+  }
+
+  .dropdown-item-danger {
+    @apply dropdown-item text-error hover:bg-error/10;
+  }
+
+  .dropdown-divider {
+    @apply h-px bg-zinc-700 my-2;
+  }
+
+  /* ---------------------------------------------------
+     TABS
+     --------------------------------------------------- */
+  .tabs {
+    @apply flex gap-1 p-1 bg-surface rounded-lg;
+  }
+
+  .tab {
+    @apply flex-1 px-4 py-2 text-sm font-medium text-zinc-400 rounded-md
+           transition-all duration-200 cursor-pointer
+           hover:text-white;
+  }
+
+  .tab-active {
+    @apply tab bg-surface-highlight text-white shadow-sm;
+  }
+
+  /* ---------------------------------------------------
+     TABLE
+     --------------------------------------------------- */
+  .table {
+    @apply w-full text-sm;
+  }
+
+  .table th {
+    @apply px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider
+           bg-surface-elevated border-b border-zinc-800;
+  }
+
+  .table td {
+    @apply px-4 py-4 border-b border-zinc-800/50;
+  }
+
+  .table tbody tr {
+    @apply hover:bg-surface-highlight/50 transition-colors;
+  }
+
+  /* ---------------------------------------------------
+     EMPTY STATE
+     --------------------------------------------------- */
+  .empty-state {
+    @apply flex flex-col items-center justify-center py-16 px-4 text-center;
+  }
+
+  .empty-state-icon {
+    @apply w-16 h-16 mb-4 text-zinc-600;
+  }
+
+  .empty-state-title {
+    @apply text-lg font-semibold text-white mb-2;
+  }
+
+  .empty-state-description {
+    @apply text-sm text-zinc-400 max-w-sm mb-6;
+  }
+
+  /* ---------------------------------------------------
+     KBD (Keyboard Keys)
+     --------------------------------------------------- */
+  .kbd {
+    @apply inline-flex items-center justify-center px-2 py-1
+           text-xs font-mono font-medium text-zinc-400
+           bg-surface-highlight border border-zinc-700 rounded
+           shadow-[inset_0_-2px_0_0_rgba(0,0,0,0.3)];
+  }
+
+  /* ---------------------------------------------------
+     FORM LABEL & HELPER TEXT
+     --------------------------------------------------- */
+  .label {
+    @apply block text-sm font-medium text-zinc-300 mb-2;
+  }
+
+  .label-required::after {
+    @apply text-error ml-0.5;
+    content: '*';
+  }
+
+  .helper-text {
+    @apply text-xs text-zinc-500 mt-1.5;
+  }
+
+  .error-text {
+    @apply text-xs text-error mt-1.5;
+  }
+
+  /* ---------------------------------------------------
+     LINK
+     --------------------------------------------------- */
+  .link {
+    @apply text-primary hover:text-primary-light underline underline-offset-4
+           transition-colors duration-200;
+  }
+
+  .link-subtle {
+    @apply text-zinc-400 hover:text-white no-underline
+           transition-colors duration-200;
+  }
+}
+
+/* =====================================================
+   UTILITIES LAYER
+   ===================================================== */
+
+@layer utilities {
+  /* Text Gradient */
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary via-violet-400 to-primary bg-clip-text text-transparent;
+  }
+
+  .text-gradient-gold {
+    @apply bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 bg-clip-text text-transparent;
+  }
+
+  /* Glow Effects */
+  .glow {
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+  }
+
+  .glow-hover:hover {
+    box-shadow: 0 0 30px rgba(139, 92, 246, 0.4);
+  }
+
+  .glow-success {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+  }
+
+  /* Glass Effect */
+  .glass {
+    @apply bg-surface/80 backdrop-blur-xl border border-zinc-800/50;
+  }
+
+  /* Hide Scrollbar */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Line Clamp */
+  .line-clamp-1 { @apply overflow-hidden text-ellipsis whitespace-nowrap; }
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Safe Area (for mobile notches) */
+  .safe-top { padding-top: env(safe-area-inset-top); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-left { padding-left: env(safe-area-inset-left); }
+  .safe-right { padding-right: env(safe-area-inset-right); }
+
+  /* Aspect Ratios */
+  .aspect-card { aspect-ratio: 4/3; }
+  .aspect-hero { aspect-ratio: 16/9; }
+  .aspect-portrait { aspect-ratio: 3/4; }
+
+  /* No Select */
+  .no-select {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Transition Presets */
+  .transition-base {
+    @apply transition-all duration-200 ease-out;
+  }
+
+  .transition-smooth {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  /* Debug Outline (Development) */
+  .debug * {
+    @apply outline outline-1 outline-red-500/30;
+  }
+}
+```
+
+### 3. Animations CSS erstellen (src/styles/animations.css)
+
+```css
+/* =====================================================
+   POD AutoM - Animation Library
+   ===================================================== */
+
+/* Import Framer Motion styles if using Framer Motion */
+/* Note: Most animations are handled via Framer Motion in React */
+
+/* Page Transitions */
+.page-enter {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms ease-out, transform 300ms ease-out;
+}
+
+.page-exit {
+  opacity: 1;
+}
+
+.page-exit-active {
+  opacity: 0;
+  transition: opacity 200ms ease-in;
+}
+
+/* Stagger Children Animation */
+.stagger-children > * {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: staggerFadeIn 0.3s ease-out forwards;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 50ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 100ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 150ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 200ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 250ms; }
+
+@keyframes staggerFadeIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Floating Animation (Hero Elements) */
+.float {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+
+/* Gradient Animation (Hero Background) */
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient 15s ease infinite;
+}
+
+@keyframes gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Typing Animation */
+.typing {
+  overflow: hidden;
+  border-right: 2px solid;
+  white-space: nowrap;
+  animation: typing 3.5s steps(40, end), blink-caret 0.75s step-end infinite;
+}
+
+@keyframes typing {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes blink-caret {
+  from, to { border-color: transparent; }
+  50% { border-color: currentColor; }
+}
+
+/* Counter Animation (for numbers) */
+.count-up {
+  animation: countPulse 0.3s ease-out;
+}
+
+@keyframes countPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* Attention Seeker */
+.wiggle {
+  animation: wiggle 0.5s ease-in-out;
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-5deg); }
+  75% { transform: rotate(5deg); }
+}
+
+/* Success Checkmark Animation */
+.checkmark-animate {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: checkmark 0.5s ease-out forwards;
+}
+
+@keyframes checkmark {
+  to { stroke-dashoffset: 0; }
+}
+```
+
+---
+
+## UI Komponenten Übersicht
+
+Nach dieser Phase stehen folgende CSS-Klassen zur Verfügung:
+
+| Kategorie | Klassen |
+|-----------|---------|
+| **Cards** | `.card`, `.card-hover`, `.card-interactive`, `.card-glass`, `.card-highlight`, `.card-elevated` |
+| **Buttons** | `.btn-primary`, `.btn-secondary`, `.btn-ghost`, `.btn-outline`, `.btn-danger`, `.btn-success`, `.btn-xs/sm/lg/xl`, `.btn-icon` |
+| **Inputs** | `.input`, `.input-error`, `.input-success`, `.textarea`, `.select` |
+| **Checkboxes** | `.checkbox`, `.radio`, `.toggle` |
+| **Badges** | `.badge-primary/success/warning/error/info/neutral`, `.badge-dot-*` |
+| **Feedback** | `.skeleton`, `.skeleton-shimmer`, `.spinner`, `.spinner-sm/lg/xl`, `.progress`, `.progress-bar` |
+| **Overlays** | `.tooltip`, `.modal`, `.modal-overlay`, `.dropdown`, `.dropdown-menu` |
+| **Typography** | `.text-gradient`, `.label`, `.helper-text`, `.error-text`, `.link`, `.link-subtle` |
+| **Misc** | `.divider`, `.avatar`, `.tabs`, `.table`, `.empty-state`, `.kbd`, `.alert-*`, `.toast-*` |
+
+---
+
+## Verifizierung
+
+### Visuelle Tests
+- [ ] Dark Theme wird korrekt angewendet (schwarzer Hintergrund)
+- [ ] Primärfarbe Violet (#8b5cf6) ist überall konsistent
+- [ ] Alle Statusfarben (Success, Warning, Error, Info) sind unterscheidbar
+- [ ] Scrollbar-Styling funktioniert (Chrome + Firefox)
+- [ ] Focus-States sind sichtbar (Accessibility)
+
+### Komponenten Tests
+- [ ] `.btn-primary` zeigt korrekten Hover-Effekt
+- [ ] `.input` zeigt Focus-Ring
+- [ ] `.checkbox` und `.radio` funktionieren
+- [ ] `.toggle` animiert beim Klick
+- [ ] `.skeleton-shimmer` animiert
+- [ ] `.spinner` dreht sich
+- [ ] `.modal` zentriert sich korrekt
+
+### Accessibility Tests
+- [ ] Farb-Kontrast-Ratio mindestens 4.5:1 für Text
+- [ ] Focus-Visible States sind sichtbar
+- [ ] Reduced-Motion wird respektiert
+- [ ] Touch-Targets sind mindestens 44x44px
+
+### Responsive Tests
+- [ ] Komponenten skalieren auf Mobile
+- [ ] Safe-Area-Insets funktionieren (iOS)
+- [ ] Keine horizontalen Scrollbars auf Mobile
+
+---
+
+## Abhängigkeiten
+- Phase 1.1 (Projekt Setup)
+- Tailwind CSS 4.x muss installiert sein
+- PostCSS muss konfiguriert sein
+
+## Geschätzte Dauer
+- Erfahrener Entwickler: 45-60 Minuten
+- Anfänger: 2-3 Stunden
+
+## Nächster Schritt
+→ Phase 1.3 - Supabase Client einrichten
