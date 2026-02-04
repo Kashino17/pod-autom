@@ -19,6 +19,15 @@ services:
       - type: rewrite
         source: /*
         destination: /index.html
+    envVars:
+      # Supabase Configuration (required at build time for Vite)
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      # API URL
+      - key: VITE_API_URL
+        value: https://pod-autom-api.onrender.com
 
   # =====================================================
   # BACKEND API - Web Service
