@@ -67,60 +67,28 @@ services:
   # CRON JOBS
   # =====================================================
   
-  # Product Creation Job - Generate new products
+  # Design Generation Job - Generate product designs with AI
   - type: cron
-    name: pod-autom-product-creation
+    name: pod-autom-design-generator
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    schedule: "0 */6 * * *"  # Every 6 hours
-    command: python -m jobs.product_creation.main
+    schedule: "0 */2 * * *"  # Every 2 hours
+    command: python -m jobs.generate_designs
     envVars:
       - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: OPENAI_API_KEY
         sync: false
-
-  # Pinterest Sync Job - Create pins for new products
-  - type: cron
-    name: pod-autom-pinterest-sync
-    runtime: python
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    schedule: "30 */4 * * *"  # Every 4 hours at :30
-    command: python -m jobs.pinterest_sync.main
-    envVars:
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-
-  # Sales Tracker Job - Sync orders and analytics
-  - type: cron
-    name: pod-autom-sales-tracker
-    runtime: python
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    schedule: "0 * * * *"  # Every hour
-    command: python -m jobs.sales_tracker.main
-    envVars:
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-
-  # Winner Detection - Daily analysis
-  - type: cron
-    name: pod-autom-winner-detection
-    runtime: python
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    schedule: "0 6 * * *"  # Daily at 6 AM
-    command: python -m jobs.winner_detection.main
-    envVars:
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
+      - key: OPENAI_IMAGE_MODEL
+        value: gpt-image-1.5
+      - key: OPENAI_IMAGE_QUALITY
+        value: high
+      - key: MAX_DESIGNS_PER_RUN
+        value: "20"
+      - key: MAX_DESIGNS_PER_USER
+        value: "5"

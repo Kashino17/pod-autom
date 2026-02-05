@@ -61,19 +61,41 @@ class ShopifyProductOptimizer:
         # Global OpenAI key as fallback
         self.global_openai_key = os.environ.get('OPENAI_API_KEY')
 
+        # Shop type processing flags
+        self.process_reboss = os.environ.get('PROCESS_REBOSS_SHOPS', 'true').lower() == 'true'
+        self.process_pod_autom = os.environ.get('PROCESS_POD_AUTOM_SHOPS', 'true').lower() == 'true'
+
     def run(self):
         """Main function that processes all shops."""
         try:
             logger.info("=" * 60)
-            logger.info("STARTING PRODUCT OPTIMIZE JOB - ReBoss NextGen")
+            logger.info("STARTING PRODUCT OPTIMIZE JOB - ReBoss NextGen + POD AutoM")
             logger.info(f"Time: {datetime.now(timezone.utc).isoformat()}")
+            logger.info(f"Process ReBoss: {self.process_reboss} | Process POD AutoM: {self.process_pod_autom}")
             logger.info("=" * 60)
 
-            # Get all active shops
-            shops = self.get_shops()
+            # Collect all shops
+            all_shops = []
 
-            for shop in shops:
-                logger.info(f"Processing shop: {shop.get('shop_domain', shop.get('internal_name', 'Unknown'))}")
+            # Get ReBoss shops
+            if self.process_reboss:
+                logger.info("--- Fetching ReBoss Shops ---")
+                reboss_shops = self.get_shops()
+                for shop in reboss_shops:
+                    shop['shop_type'] = 'reboss'
+                all_shops.extend(reboss_shops)
+
+            # Get POD AutoM shops
+            if self.process_pod_autom:
+                logger.info("--- Fetching POD AutoM Shops ---")
+                pod_shops = self.get_pod_autom_shops()
+                all_shops.extend(pod_shops)
+
+            logger.info(f"Total shops to process: {len(all_shops)}")
+
+            for shop in all_shops:
+                shop_type = shop.get('shop_type', 'reboss')
+                logger.info(f"Processing {shop_type} shop: {shop.get('shop_domain', shop.get('internal_name', 'Unknown'))}")
                 self.process_shop(shop)
 
             logger.info("=" * 60)
@@ -106,12 +128,81 @@ class ShopifyProductOptimizer:
 
                     shops.append(shop)
 
-            logger.info(f"Found: {len(shops)} shops")
+            logger.info(f"Found: {len(shops)} ReBoss shops")
             return shops
 
         except Exception as e:
             logger.error(f"Error getting shops: {e}")
             return []
+
+    def get_pod_autom_shops(self) -> List[Dict]:
+        """Get all active POD AutoM shops from Supabase."""
+        shops = []
+
+        try:
+            # Get POD AutoM shops that are connected
+            response = self.db.table('pod_autom_shops').select(
+                'id, internal_name, shop_domain, access_token'
+            ).eq('connection_status', 'connected').execute()
+
+            if response.data:
+                for shop in response.data:
+                    # Get POD AutoM settings for this shop
+                    settings_response = self.db.table('pod_autom_settings').select('*').eq(
+                        'shop_id', shop['id']
+                    ).execute()
+
+                    if settings_response.data and settings_response.data[0].get('enabled', False):
+                        shop['openai_api_key'] = self.global_openai_key  # POD AutoM uses global key
+                        shop['shop_type'] = 'pod_autom'
+                        shop['settings_id'] = settings_response.data[0].get('id')
+                        shops.append(shop)
+
+            logger.info(f"Found: {len(shops)} POD AutoM shops")
+            return shops
+
+        except Exception as e:
+            logger.error(f"Error getting POD AutoM shops: {e}")
+            return []
+
+    def get_pod_autom_settings(self, shop_id: str) -> Dict:
+        """Get POD AutoM settings for a shop - maps to product_creation_settings format."""
+        try:
+            response = self.db.table('pod_autom_settings').select('*').eq('shop_id', shop_id).execute()
+
+            if response.data:
+                settings = response.data[0]
+                # Map POD AutoM settings to the format expected by optimize_product
+                return {
+                    'generate_improved_description': settings.get('auto_optimize_description', True),
+                    'generate_optimized_title': settings.get('auto_optimize_title', True),
+                    'generate_and_set_tags': settings.get('auto_generate_tags', True),
+                    'translate_variants_to_german': False,  # POD products are already in German
+                    'remove_single_value_options': False,
+                    'set_compare_price': settings.get('set_compare_price', False),
+                    'compare_price_percentage': settings.get('compare_price_percentage', 30),
+                    'set_price_decimals': True,
+                    'price_decimals': 99,
+                    'set_compare_price_decimals': True,
+                    'compare_price_decimals': 99,
+                    'enable_inventory_tracking': True,
+                    'set_global_quantity': True,
+                    'global_quantity': settings.get('default_quantity', 100),
+                    'publish_all_channels': settings.get('auto_publish', True),
+                    'set_global_tags': True,
+                    'global_tags': 'POD, POD-AutoM',
+                    'change_product_status': settings.get('auto_publish', True),
+                    'product_status': 'active' if settings.get('auto_publish', True) else 'draft',
+                    'set_category_tag_fashion': False,  # POD products have their own categorization
+                    'sales_text_season': 'Spring',  # Default season
+                }
+            else:
+                logger.warning(f"No POD AutoM settings found for shop {shop_id}")
+                return {}
+
+        except Exception as e:
+            logger.error(f"Error getting POD AutoM settings: {e}")
+            return {}
 
     def get_product_settings(self, shop_id: str) -> Dict:
         """Get product creation settings for a shop."""
@@ -133,6 +224,7 @@ class ShopifyProductOptimizer:
         shop_domain = shop.get('shop_domain')
         access_token = shop.get('access_token')
         shop_id = shop['id']
+        shop_type = shop.get('shop_type', 'reboss')
 
         if not shop_domain or not access_token:
             logger.error(f"Missing shop_domain or access_token for shop {shop_id}")
@@ -148,15 +240,21 @@ class ShopifyProductOptimizer:
         # Initialize OpenAI client for this shop
         self.openai_client = OpenAI(api_key=openai_api_key)
 
-        # Get product settings
-        settings = self.get_product_settings(shop_id)
+        # Get product settings based on shop type
+        if shop_type == 'pod_autom':
+            settings = self.get_pod_autom_settings(shop_id)
+        else:
+            settings = self.get_product_settings(shop_id)
 
         if not settings:
             logger.warning(f"Skipping shop {shop_domain} - no settings found")
             return
 
-        # Get products with tag "NEW_SET"
-        products = self.get_products_with_tag(shop_domain, access_token)
+        # Get products with tag "NEW_SET" (or "POD_NEW" for POD AutoM)
+        if shop_type == 'pod_autom':
+            products = self.get_products_with_tag(shop_domain, access_token, tag="POD_NEW")
+        else:
+            products = self.get_products_with_tag(shop_domain, access_token)
 
         logger.info(f"Found: {len(products)} products to process in {shop_domain}")
 
@@ -167,8 +265,8 @@ class ShopifyProductOptimizer:
                 logger.error(f"Error with product {product['id']}: {str(e)}")
                 continue
 
-    def get_products_with_tag(self, shop_domain: str, access_token: str) -> List[Dict]:
-        """Get all products with tag 'NEW_SET' using GraphQL."""
+    def get_products_with_tag(self, shop_domain: str, access_token: str, tag: str = "NEW_SET") -> List[Dict]:
+        """Get all products with specified tag using GraphQL."""
         url = f"https://{shop_domain}/admin/api/2024-01/graphql.json"
         headers = {
             "X-Shopify-Access-Token": access_token,
@@ -214,7 +312,7 @@ class ShopifyProductOptimizer:
         while has_next_page:
             variables = {
                 "first": 50,
-                "query": "tag:NEW_SET",
+                "query": f"tag:{tag}",
                 "after": after_cursor
             }
 
@@ -235,7 +333,7 @@ class ShopifyProductOptimizer:
                 products_data = data.get('data', {}).get('products', {})
                 edges = products_data.get('edges', [])
 
-                logger.info(f"GraphQL Response: Found {len(edges)} products with tag 'NEW_SET'")
+                logger.info(f"GraphQL Response: Found {len(edges)} products with tag '{tag}'")
 
                 # Convert GraphQL response to REST API format
                 for edge in edges:
@@ -279,7 +377,7 @@ class ShopifyProductOptimizer:
                 logger.error(f"Error fetching products: {response.status_code} - {response.text}")
                 break
 
-        logger.info(f"Total found: {len(all_products)} products with tag 'NEW_SET'")
+        logger.info(f"Total found: {len(all_products)} products with tag '{tag}'")
         return all_products
 
     def get_full_product_data(self, product_id: str, shop_domain: str, access_token: str) -> Optional[Dict]:

@@ -144,6 +144,73 @@ class SupabaseService:
             print(f"Error getting shops with Pinterest: {e}")
             return []
 
+    def get_pod_autom_shops_with_pinterest(self) -> List[ShopPinterestConfig]:
+        """Get all POD AutoM shops with active Pinterest connection."""
+        shops = []
+
+        try:
+            # Get POD AutoM shops that have Pinterest configured
+            shops_response = self.client.table('pod_autom_shops').select(
+                'id, internal_name, shop_domain, access_token'
+            ).eq('connection_status', 'connected').execute()
+
+            if not shops_response.data:
+                print("No active POD AutoM shops found")
+                return []
+
+            for shop_data in shops_response.data:
+                shop_id = shop_data['id']
+
+                if not shop_data.get('access_token'):
+                    print(f"  POD Shop {shop_data.get('internal_name')} has no Shopify access token")
+                    continue
+
+                # Get POD AutoM settings (includes Pinterest config)
+                settings_response = self.client.table('pod_autom_settings').select('*').eq(
+                    'shop_id', shop_id
+                ).execute()
+
+                if not settings_response.data:
+                    continue
+
+                settings = settings_response.data[0]
+
+                if not settings.get('enabled', False):
+                    continue
+
+                # Check if Pinterest is configured for this POD AutoM shop
+                pinterest_access_token = settings.get('pinterest_access_token')
+                if not pinterest_access_token:
+                    print(f"  POD Shop {shop_data.get('internal_name')} has no Pinterest token")
+                    continue
+
+                config = ShopPinterestConfig(
+                    shop_id=shop_id,
+                    internal_name=shop_data.get('internal_name', 'POD Shop'),
+                    shop_domain=shop_data.get('shop_domain', ''),
+                    access_token=shop_data.get('access_token', ''),
+                    pinterest_access_token=pinterest_access_token,
+                    pinterest_refresh_token=settings.get('pinterest_refresh_token'),
+                    pinterest_expires_at=settings.get('pinterest_expires_at'),
+                    pinterest_user_id=settings.get('pinterest_user_id'),
+                    pinterest_account_id=settings.get('pinterest_account_id'),
+                    url_prefix=settings.get('url_prefix', ''),
+                    global_batch_size=settings.get('global_batch_size', 50),
+                    default_board_id=settings.get('default_board_id'),
+                    products_per_page=settings.get('products_per_page', 10),
+                    shop_type='pod_autom',
+                    settings_id=settings.get('id')
+                )
+
+                shops.append(config)
+                print(f"  POD Shop {config.internal_name} loaded with Pinterest")
+
+            return shops
+
+        except Exception as e:
+            print(f"Error getting POD AutoM shops with Pinterest: {e}")
+            return []
+
     def get_campaigns_with_assignments(self, shop_id: str) -> List[PinterestCampaign]:
         """Get Pinterest campaigns that have batch assignments for a shop.
 

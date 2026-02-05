@@ -45,6 +45,7 @@ const DashboardPrompts = lazy(() => import('@src/pages/DashboardPrompts'))
 const DashboardProducts = lazy(() => import('@src/pages/DashboardProducts'))
 const DashboardWinners = lazy(() => import('@src/pages/DashboardWinners'))
 const DashboardCampaigns = lazy(() => import('@src/pages/DashboardCampaigns'))
+const DashboardDesigns = lazy(() => import('@src/pages/DashboardDesigns'))
 const DashboardAnalytics = lazy(() => import('@src/pages/DashboardAnalytics'))
 
 // Other Protected Pages
@@ -194,6 +195,14 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <DashboardCampaigns />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/dashboard/designs"
+                  element={
+                    <ProtectedRoute>
+                      <DashboardDesigns />
                     </ProtectedRoute>
                   }
                 />

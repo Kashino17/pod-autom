@@ -41,19 +41,26 @@ class WinnerScalingJob:
         self.ai_service = AICreativeService()
         self.job_metrics = JobMetrics()
         self.job_id: Optional[str] = None
+        self.process_reboss = os.environ.get('PROCESS_REBOSS_SHOPS', 'true').lower() == 'true'
+        self.process_pod_autom = os.environ.get('PROCESS_POD_AUTOM_SHOPS', 'true').lower() == 'true'
 
     async def run(self):
         """Main entry point for the job."""
         print("=" * 60)
-        print("WINNER SCALING JOB")
+        print("WINNER SCALING JOB - ReBoss NextGen + POD AutoM")
         print(f"Started at: {datetime.now(timezone.utc).isoformat()}")
+        print(f"Process ReBoss: {self.process_reboss} | Process POD AutoM: {self.process_pod_autom}")
         print("=" * 60)
 
         # Log job start
         self.job_id = self.db.log_job_run(
             job_type='winner_scaling',
             status='running',
-            metadata={'started_at': datetime.now(timezone.utc).isoformat()}
+            metadata={
+                'started_at': datetime.now(timezone.utc).isoformat(),
+                'process_reboss': self.process_reboss,
+                'process_pod_autom': self.process_pod_autom
+            }
         )
 
         # Log job start to winner_scaling_log
@@ -64,15 +71,31 @@ class WinnerScalingJob:
         ))
 
         try:
-            # Get all shops with winner scaling enabled
-            shops = self.db.get_shops_with_winner_scaling_enabled()
+            # Collect shops from enabled sources
+            shops = []
+
+            # Get ReBoss shops with winner scaling enabled
+            if self.process_reboss:
+                print("\n--- Fetching ReBoss Shops ---")
+                reboss_shops = self.db.get_shops_with_winner_scaling_enabled()
+                for shop in reboss_shops:
+                    shop.shop_type = 'reboss'
+                print(f"Found {len(reboss_shops)} ReBoss shops with winner scaling enabled")
+                shops.extend(reboss_shops)
+
+            # Get POD AutoM shops with winner scaling enabled
+            if self.process_pod_autom:
+                print("\n--- Fetching POD AutoM Shops ---")
+                pod_shops = self.db.get_pod_autom_shops_with_winner_scaling()
+                print(f"Found {len(pod_shops)} POD AutoM shops with winner scaling enabled")
+                shops.extend(pod_shops)
 
             if not shops:
                 print("No shops with winner scaling enabled")
                 self._finish_job('completed')
                 return
 
-            print(f"\nFound {len(shops)} shops with winner scaling enabled")
+            print(f"\nTotal shops to process: {len(shops)}")
 
             # Process shops with concurrency limit
             semaphore = asyncio.Semaphore(5)

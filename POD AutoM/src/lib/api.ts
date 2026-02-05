@@ -34,7 +34,7 @@ async function getAuthToken(): Promise<string | null> {
 /**
  * Make an authenticated API request
  */
-export async function api<T = unknown>(
+async function apiFunction<T = unknown>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
@@ -53,11 +53,16 @@ export async function api<T = unknown>(
   
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
   
-  const response = await fetch(url, {
+  const fetchOptions: RequestInit = {
     method,
     headers: requestHeaders,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  };
+  
+  if (body !== undefined) {
+    fetchOptions.body = JSON.stringify(body);
+  }
+  
+  const response = await fetch(url, fetchOptions);
   
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -68,24 +73,35 @@ export async function api<T = unknown>(
 }
 
 /**
- * Convenience methods
+ * Convenience methods - attached to api function
  */
-export const apiClient = {
-  get: <T>(endpoint: string, headers?: Record<string, string>) => 
-    api<T>(endpoint, { method: 'GET', headers }),
-  
-  post: <T>(endpoint: string, body?: unknown, headers?: Record<string, string>) =>
-    api<T>(endpoint, { method: 'POST', body, headers }),
-  
-  put: <T>(endpoint: string, body?: unknown, headers?: Record<string, string>) =>
-    api<T>(endpoint, { method: 'PUT', body, headers }),
-  
-  delete: <T>(endpoint: string, headers?: Record<string, string>) =>
-    api<T>(endpoint, { method: 'DELETE', headers }),
-  
-  patch: <T>(endpoint: string, body?: unknown, headers?: Record<string, string>) =>
-    api<T>(endpoint, { method: 'PATCH', body, headers }),
+const apiBase = apiFunction as typeof apiFunction & {
+  get: <T>(endpoint: string, headers?: Record<string, string>) => Promise<T>;
+  post: <T>(endpoint: string, body?: unknown, headers?: Record<string, string>) => Promise<T>;
+  put: <T>(endpoint: string, body?: unknown, headers?: Record<string, string>) => Promise<T>;
+  delete: <T>(endpoint: string, headers?: Record<string, string>) => Promise<T>;
+  patch: <T>(endpoint: string, body?: unknown, headers?: Record<string, string>) => Promise<T>;
 };
+
+apiBase.get = <T>(endpoint: string, headers?: Record<string, string>) => 
+  apiFunction<T>(endpoint, { method: 'GET', ...(headers && { headers }) });
+
+apiBase.post = <T>(endpoint: string, body?: unknown, headers?: Record<string, string>) =>
+  apiFunction<T>(endpoint, { method: 'POST', body, ...(headers && { headers }) });
+
+apiBase.put = <T>(endpoint: string, body?: unknown, headers?: Record<string, string>) =>
+  apiFunction<T>(endpoint, { method: 'PUT', body, ...(headers && { headers }) });
+
+apiBase.delete = <T>(endpoint: string, headers?: Record<string, string>) =>
+  apiFunction<T>(endpoint, { method: 'DELETE', ...(headers && { headers }) });
+
+apiBase.patch = <T>(endpoint: string, body?: unknown, headers?: Record<string, string>) =>
+  apiFunction<T>(endpoint, { method: 'PATCH', body, ...(headers && { headers }) });
+
+// Create api alias for internal use and export
+const api = apiBase;
+export { api };
+export const apiClient = apiBase;
 
 // =====================================================
 // SHOPIFY API
@@ -213,6 +229,132 @@ export const generationApi = {
     }>('/api/generate/full-product', {
       method: 'POST',
       body: { niche, product_type: productType, style }
+    });
+  },
+};
+
+// =====================================================
+// DESIGNS API
+// =====================================================
+
+export interface Design {
+  id: string;
+  user_id: string;
+  niche_id: string | null;
+  template_id: string | null;
+  prompt_used: string;
+  final_prompt: string | null;
+  image_url: string | null;
+  thumbnail_url: string | null;
+  image_path: string | null;
+  slogan_text: string | null;
+  language: string;
+  status: 'pending' | 'generating' | 'ready' | 'failed' | 'archived';
+  error_message: string | null;
+  generation_model: string;
+  generation_quality: string;
+  variables_used: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  generated_at: string | null;
+  updated_at: string;
+}
+
+export interface DesignStats {
+  designs_generated: number;
+  designs_failed: number;
+  api_calls: number;
+  date: string;
+}
+
+export interface PromptTemplate {
+  id: string;
+  user_id: string;
+  niche_id: string | null;
+  name: string;
+  prompt_template: string;
+  style_hints: string | null;
+  variables: Record<string, string[]>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export const designsApi = {
+  /**
+   * Get all designs for the current user
+   */
+  getDesigns: async (params?: { status?: string; niche_id?: string; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.niche_id) query.set('niche_id', params.niche_id);
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return api<{ designs: Design[]; total: number }>(`/api/designs${qs ? `?${qs}` : ''}`);
+  },
+
+  /**
+   * Get generation stats
+   */
+  getStats: async (days?: number) => {
+    return api<{ stats: DesignStats[] }>(`/api/designs/stats${days ? `?days=${days}` : ''}`);
+  },
+
+  /**
+   * Archive a design (soft delete)
+   */
+  archiveDesign: async (designId: string) => {
+    return api<{ success: boolean }>(`/api/designs/${designId}`, { method: 'DELETE' });
+  },
+
+  /**
+   * Get download URL for a design
+   */
+  getDownloadUrl: async (designId: string) => {
+    return api<{ download_url: string }>(`/api/designs/${designId}/download`);
+  },
+
+  /**
+   * Get prompt templates
+   */
+  getTemplates: async (nicheId?: string) => {
+    const qs = nicheId ? `?niche_id=${nicheId}` : '';
+    return api<{ templates: PromptTemplate[] }>(`/api/designs/templates${qs}`);
+  },
+
+  /**
+   * Create a prompt template
+   */
+  createTemplate: async (data: {
+    name: string;
+    prompt_template: string;
+    niche_id?: string;
+    style_hints?: string;
+    variables?: Record<string, string[]>;
+  }) => {
+    return api<{ template: PromptTemplate }>('/api/designs/templates', {
+      method: 'POST',
+      body: data,
+    });
+  },
+
+  /**
+   * Update a prompt template
+   */
+  updateTemplate: async (templateId: string, data: Partial<PromptTemplate>) => {
+    return api<{ template: PromptTemplate }>(`/api/designs/templates/${templateId}`, {
+      method: 'PUT',
+      body: data,
+    });
+  },
+
+  /**
+   * Delete a prompt template
+   */
+  deleteTemplate: async (templateId: string) => {
+    return api<{ success: boolean }>(`/api/designs/templates/${templateId}`, {
+      method: 'DELETE',
     });
   },
 };

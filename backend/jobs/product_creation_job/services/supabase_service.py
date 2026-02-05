@@ -214,3 +214,130 @@ class SupabaseService:
         except Exception as e:
             print(f"Error getting shop name: {e}")
             return shop_id
+
+    # =========================================================================
+    # POD AUTOM SUPPORT
+    # =========================================================================
+
+    def get_pod_autom_shops(self) -> List[ShopConfig]:
+        """Get all POD AutoM shops with their settings."""
+        configs = []
+
+        try:
+            # Get POD AutoM shops that are active
+            shops_response = self.client.table('pod_autom_shops').select(
+                '*, pod_autom_settings(*)'
+            ).eq('connection_status', 'connected').execute()
+
+            if not shops_response.data:
+                print("No active POD AutoM shops found")
+                return configs
+
+            for shop_data in shops_response.data:
+                shop_id = shop_data['id']
+                settings = shop_data.get('pod_autom_settings')
+
+                # Skip if no settings or not enabled
+                if not settings:
+                    print(f"  Skipping POD shop {shop_id}: No settings found")
+                    continue
+
+                # Handle both list and dict settings
+                if isinstance(settings, list):
+                    settings = settings[0] if settings else {}
+
+                if not settings.get('enabled', False):
+                    print(f"  Skipping POD shop {shop_data.get('internal_name')}: Disabled")
+                    continue
+
+                creation_limit = settings.get('creation_limit', 20)
+
+                config = ShopConfig(
+                    shop_id=shop_id,
+                    shop_domain=shop_data.get('shop_domain'),
+                    access_token=shop_data.get('access_token'),
+                    internal_name=shop_data.get('internal_name', 'POD Shop'),
+                    fast_fashion_limit=creation_limit,
+                    shop_type='pod_autom',
+                    settings_id=settings.get('id')
+                )
+
+                configs.append(config)
+                print(f"  POD Shop {config.internal_name}: Limit = {config.fast_fashion_limit}")
+
+        except Exception as e:
+            print(f"Error loading POD AutoM shop configs: {e}")
+            # Don't raise - just return empty list so ReBoss shops still process
+
+        return configs
+
+    def get_pod_autom_unsynced_products(self, settings_id: str, limit: int = 100) -> List[ResearchProduct]:
+        """Get unsynced products from POD AutoM queue."""
+        try:
+            # Query pod_autom_product_queue for pending products
+            response = self.client.table('pod_autom_product_queue').select('*').eq(
+                'settings_id', settings_id
+            ).eq('status', 'pending').limit(limit).execute()
+
+            products = []
+            for row in response.data:
+                try:
+                    # Map POD queue fields to ResearchProduct
+                    product = ResearchProduct(
+                        id=row['id'],
+                        title=row.get('title', ''),
+                        description=row.get('description', ''),
+                        price=row.get('price'),
+                        compare_price=row.get('compare_price'),
+                        images=row.get('images', []),
+                        variants_string=row.get('variants')
+                    )
+                    products.append(product)
+                except Exception as e:
+                    print(f"Error parsing POD product {row.get('id')}: {e}")
+
+            return products
+
+        except Exception as e:
+            print(f"Error getting POD AutoM unsynced products: {e}")
+            return []
+
+    def mark_pod_product_synced(self, product_id: str, shopify_product_id: str = None) -> bool:
+        """Mark a POD AutoM product as synced/published."""
+        try:
+            update_data = {
+                'status': 'published',
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }
+            if shopify_product_id:
+                update_data['shopify_product_id'] = shopify_product_id
+
+            self.client.table('pod_autom_product_queue').update(update_data).eq(
+                'id', product_id
+            ).execute()
+
+            return True
+
+        except Exception as e:
+            print(f"Error marking POD product {product_id} as synced: {e}")
+            return False
+
+    def update_pod_product_status(self, product_id: str, status: str, error: str = None) -> bool:
+        """Update POD AutoM product status (pending, generating, optimizing, publishing, published, failed)."""
+        try:
+            update_data = {
+                'status': status,
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }
+            if error:
+                update_data['error'] = error
+
+            self.client.table('pod_autom_product_queue').update(update_data).eq(
+                'id', product_id
+            ).execute()
+
+            return True
+
+        except Exception as e:
+            print(f"Error updating POD product {product_id} status: {e}")
+            return False

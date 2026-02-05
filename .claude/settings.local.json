@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix\\(pinterest-sync-job\\): Sync campaign status from Pinterest API and fix batch assignments\n\n- Sync campaign status from Pinterest before processing to use current status\n- Fix batch assignment insert by removing non-existing columns \\(assigned_shop, ad_channel\\)\n- Add debug logging for campaigns with missing assignments\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push)",
+      "Bash(git commit:*)",
+      "Bash(cat:*)",
+      "WebSearch",
+      "Bash(npm create:*)",
+      "Bash(npm install)",
+      "Bash(timeout 15 npm run dev:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(npm install:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(xargs:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx eslint:*)",
+      "Bash(npm run dev:*)",
+      "Bash(ls:*)"
+    ]
+  }
+}

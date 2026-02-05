@@ -25,9 +25,13 @@ class PinterestSyncJob:
 
     def __init__(self):
         self.db: Optional[SupabaseService] = None
+        self.process_reboss = os.getenv('PROCESS_REBOSS_SHOPS', 'true').lower() == 'true'
+        self.process_pod_autom = os.getenv('PROCESS_POD_AUTOM_SHOPS', 'true').lower() == 'true'
         self.metrics = {
             'start_time': datetime.now(timezone.utc),
             'shops_processed': 0,
+            'reboss_shops': 0,
+            'pod_autom_shops': 0,
             'campaigns_processed': 0,
             'pins_created': 0,
             'pins_failed': 0,
@@ -437,8 +441,9 @@ Errors: {len(self.metrics['errors'])}
     async def run(self):
         """Main job execution."""
         print("=" * 60)
-        print("STARTING PINTEREST SYNC JOB - ReBoss NextGen")
+        print("STARTING PINTEREST SYNC JOB - ReBoss NextGen + POD AutoM")
         print(f"Time: {datetime.now(timezone.utc).isoformat()}")
+        print(f"Process ReBoss: {self.process_reboss} | Process POD AutoM: {self.process_pod_autom}")
         print("=" * 60)
 
         try:
@@ -449,11 +454,31 @@ Errors: {len(self.metrics['errors'])}
             job_id = self.db.log_job_run(
                 job_type='pinterest_sync_job',
                 status='running',
-                metadata={'start_time': datetime.now(timezone.utc).isoformat()}
+                metadata={
+                    'start_time': datetime.now(timezone.utc).isoformat(),
+                    'process_reboss': self.process_reboss,
+                    'process_pod_autom': self.process_pod_autom
+                }
             )
 
-            # Get shops with Pinterest connected
-            shops = self.db.get_shops_with_pinterest()
+            # Collect shops from enabled sources
+            shops = []
+
+            # Get ReBoss shops with Pinterest connected
+            if self.process_reboss:
+                print("\n--- Fetching ReBoss Shops ---")
+                reboss_shops = self.db.get_shops_with_pinterest()
+                for shop in reboss_shops:
+                    shop.shop_type = 'reboss'
+                print(f"Found {len(reboss_shops)} ReBoss shops with Pinterest connected")
+                shops.extend(reboss_shops)
+
+            # Get POD AutoM shops with Pinterest connected
+            if self.process_pod_autom:
+                print("\n--- Fetching POD AutoM Shops ---")
+                pod_shops = self.db.get_pod_autom_shops_with_pinterest()
+                print(f"Found {len(pod_shops)} POD AutoM shops with Pinterest connected")
+                shops.extend(pod_shops)
 
             if not shops:
                 print("No shops with Pinterest connected found")
@@ -461,7 +486,7 @@ Errors: {len(self.metrics['errors'])}
                     self.db.update_job_run(job_id, 'completed', shops_processed=0)
                 return
 
-            print(f"Found {len(shops)} shops with Pinterest connected")
+            print(f"\nTotal shops to process: {len(shops)}")
 
             # Process shops with concurrency limit
             semaphore = asyncio.Semaphore(2)  # Max 2 shops at once

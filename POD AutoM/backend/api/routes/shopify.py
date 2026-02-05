@@ -130,15 +130,10 @@ async def get_install_link(
         auth_url = f"https://{shop_domain}/admin/oauth/authorize?{urlencode(params)}"
         return RedirectResponse(url=auth_url)
     else:
-        # Return install URL for user to enter shop manually
-        # This is the Managed Installation URL format
+        # Redirect to Shopify's managed installation page
+        # User selects their shop there, then Shopify redirects back
         install_url = f"https://admin.shopify.com/oauth/install_custom_app?client_id={settings.SHOPIFY_CLIENT_ID}"
-        return {
-            "success": True,
-            "install_url": install_url,
-            "message": "Öffne diesen Link und wähle deinen Shop aus.",
-            "state": state
-        }
+        return RedirectResponse(url=install_url)
 
 
 @router.post("/oauth/start")

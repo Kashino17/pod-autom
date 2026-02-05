@@ -70,6 +70,8 @@ class ShopConfig:
     pinterest_account_id: str
     shopify_access_token: Optional[str] = None
     pinterest_settings: Optional[PinterestSettings] = None
+    shop_type: str = 'reboss'  # 'reboss' or 'pod_autom'
+    settings_id: Optional[str] = None  # For POD AutoM settings reference
 
 
 @dataclass

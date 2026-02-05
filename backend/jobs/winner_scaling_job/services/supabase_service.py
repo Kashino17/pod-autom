@@ -93,10 +93,79 @@ class SupabaseService:
                     pinterest_refresh_token=pinterest.get('refresh_token'),
                     pinterest_account_id=ad_account['pinterest_account_id'],
                     shopify_access_token=s.get('access_token'),
-                    pinterest_settings=pinterest_settings
+                    pinterest_settings=pinterest_settings,
+                    shop_type='reboss'
                 ))
 
         return shops
+
+    def get_pod_autom_shops_with_winner_scaling(self) -> List[ShopConfig]:
+        """Get POD AutoM shops that have winner scaling enabled."""
+        shops = []
+
+        try:
+            # Get POD AutoM shops that are connected
+            shops_response = self.client.table('pod_autom_shops').select(
+                'id, internal_name, shop_domain, access_token'
+            ).eq('connection_status', 'connected').execute()
+
+            if not shops_response.data:
+                print("No active POD AutoM shops found")
+                return []
+
+            for shop_data in shops_response.data:
+                shop_id = shop_data['id']
+
+                if not shop_data.get('access_token'):
+                    continue
+
+                # Get POD AutoM settings
+                settings_response = self.client.table('pod_autom_settings').select('*').eq(
+                    'shop_id', shop_id
+                ).execute()
+
+                if not settings_response.data:
+                    continue
+
+                settings = settings_response.data[0]
+
+                # Check if winner scaling is enabled for this POD shop
+                if not settings.get('winner_scaling_enabled', False):
+                    continue
+
+                # Check if Pinterest is configured
+                pinterest_access_token = settings.get('pinterest_access_token')
+                pinterest_account_id = settings.get('pinterest_account_id')
+
+                if not pinterest_access_token or not pinterest_account_id:
+                    print(f"  POD Shop {shop_data.get('internal_name')} missing Pinterest config for winner scaling")
+                    continue
+
+                # Build Pinterest settings
+                pinterest_settings = PinterestSettings(
+                    url_prefix=settings.get('url_prefix', ''),
+                    default_board_id=settings.get('default_board_id'),
+                    products_per_page=settings.get('products_per_page', 10)
+                )
+
+                shops.append(ShopConfig(
+                    shop_id=shop_id,
+                    internal_name=shop_data.get('internal_name', 'POD Shop'),
+                    shop_domain=shop_data.get('shop_domain', ''),
+                    pinterest_access_token=pinterest_access_token,
+                    pinterest_refresh_token=settings.get('pinterest_refresh_token'),
+                    pinterest_account_id=pinterest_account_id,
+                    shopify_access_token=shop_data.get('access_token'),
+                    pinterest_settings=pinterest_settings,
+                    shop_type='pod_autom',
+                    settings_id=settings.get('id')
+                ))
+
+            return shops
+
+        except Exception as e:
+            print(f"Error getting POD AutoM shops with winner scaling: {e}")
+            return []
 
     def get_winner_scaling_settings(self, shop_id: str) -> Optional[WinnerScalingSettings]:
         """Get winner scaling settings for a shop."""

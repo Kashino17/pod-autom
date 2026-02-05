@@ -30,6 +30,10 @@ class ShopPinterestConfig:
     default_board_id: Optional[str] = None
     products_per_page: int = 10  # Products per page in collection for URL calculation
 
+    # Shop type - 'reboss' or 'pod_autom'
+    shop_type: str = 'reboss'
+    settings_id: Optional[str] = None  # For POD AutoM settings reference
+
 
 @dataclass
 class PinterestCampaign:

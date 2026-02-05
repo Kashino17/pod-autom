@@ -23,6 +23,9 @@ class NicheUpdate(BaseModel):
     niche_name: Optional[str] = None
     is_active: Optional[bool] = None
     priority: Optional[int] = None
+    language: Optional[str] = None        # 'en' or 'de'
+    auto_generate: Optional[bool] = None  # Enable auto design generation
+    daily_limit: Optional[int] = None     # Max designs per day
 
 
 class NicheResponse(BaseModel):

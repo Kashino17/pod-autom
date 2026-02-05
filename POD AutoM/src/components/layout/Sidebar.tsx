@@ -12,6 +12,7 @@ import {
   Crown,
   ChevronLeft,
   ChevronRight,
+  Sparkles,
 } from 'lucide-react'
 import { useSubscription } from '@src/contexts/SubscriptionContext'
 
@@ -51,6 +52,12 @@ const NAV_ITEMS: NavItem[] = [
     path: '/dashboard/prompts',
     label: 'KI-Prompts',
     icon: <Wand2 className="w-5 h-5" />,
+  },
+  {
+    path: '/dashboard/designs',
+    label: 'Meine Motive',
+    icon: <Sparkles className="w-5 h-5" />,
+    badge: 'NEU',
   },
   {
     path: '/dashboard/products',

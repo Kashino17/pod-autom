@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
     
     # CORS
-    CORS_ORIGINS: str = "http://localhost:3001,http://localhost:5173,https://kashino17.github.io,https://pod-autom.de"
+    CORS_ORIGINS: str = "http://localhost:3001,http://localhost:5173,https://kashino17.github.io,https://pod-autom.de,https://pod-autom-frontend.onrender.com"
     
     # Supabase
     SUPABASE_URL: str

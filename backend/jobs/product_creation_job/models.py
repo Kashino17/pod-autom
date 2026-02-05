@@ -14,6 +14,8 @@ class ShopConfig:
     access_token: str
     internal_name: str
     fast_fashion_limit: int
+    shop_type: str = 'reboss'  # 'reboss' or 'pod_autom'
+    settings_id: Optional[str] = None  # POD AutoM settings ID
 
 
 @dataclass
