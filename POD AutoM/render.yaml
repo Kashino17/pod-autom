@@ -67,13 +67,13 @@ services:
   # CRON JOBS
   # =====================================================
   
-  # Design Generation Job - Generate product designs with AI
+  # Design Generation Job - Check user schedules and generate designs
   - type: cron
     name: pod-autom-design-generator
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    schedule: "0 */2 * * *"  # Every 2 hours
+    schedule: "*/30 * * * *"  # Every 30 minutes (checks user schedules)
     command: python -m jobs.generate_designs
     envVars:
       - key: SUPABASE_URL
@@ -88,7 +88,7 @@ services:
         value: gpt-image-1.5
       - key: OPENAI_IMAGE_QUALITY
         value: high
+      - key: OPENAI_TEXT_MODEL
+        value: gpt-5.1-mini
       - key: MAX_DESIGNS_PER_RUN
-        value: "20"
-      - key: MAX_DESIGNS_PER_USER
-        value: "5"
+        value: "50"

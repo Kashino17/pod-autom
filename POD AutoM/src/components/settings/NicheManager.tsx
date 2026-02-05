@@ -137,7 +137,7 @@ function NicheCard({ niche, onUpdate, onDelete, isUpdating, isDeleting }: NicheC
               <Zap className="w-4 h-4 text-zinc-500" />
               <div>
                 <span className="text-sm text-zinc-300">Auto-Generierung</span>
-                <p className="text-xs text-zinc-500">Designs automatisch alle 2h erstellen</p>
+                <p className="text-xs text-zinc-500">Designs täglich automatisch erstellen</p>
               </div>
             </div>
             <button
@@ -301,7 +301,7 @@ export function NicheManager({ settingsId }: NicheManagerProps) {
             <strong>{activeAutoGenerate} Nische(n)</strong> generieren automatisch Designs
           </p>
           <p className="text-xs text-zinc-400 mt-1 ml-6">
-            Der Cron-Job läuft alle 2 Stunden und erstellt neue Motive mit dem 5-Layer Randomness System
+            Designs werden täglich zur eingestellten Uhrzeit generiert. Du kannst die Zeit unter "Meine Motive" ändern.
           </p>
         </div>
       )}
@@ -353,7 +353,8 @@ export function NicheManager({ settingsId }: NicheManagerProps) {
           <li>• Klicke auf ⚙️ bei jeder Nische um Sprache und Auto-Generierung einzustellen</li>
           <li>• Deutsch erzeugt Slogans wie "Keine Ausreden, nur Ergebnisse"</li>
           <li>• Englisch erzeugt Slogans wie "Rise and grind"</li>
-          <li>• Auto-Generierung erstellt alle 2 Stunden neue Designs</li>
+          <li>• Designs werden täglich zur eingestellten Uhrzeit erstellt</li>
+          <li>• Unter "Meine Motive" kannst du auch manuell Designs generieren</li>
         </ul>
       </div>
     </div>

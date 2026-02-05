@@ -1,10 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Image as ImageIcon,
   Download,
   Trash2,
-  Filter,
   Search,
   RefreshCw,
   Eye,
@@ -15,17 +14,67 @@ import {
   Type,
   ChevronLeft,
   ChevronRight,
-  BarChart3,
   AlertCircle,
+  Zap,
+  Clock,
+  TrendingUp,
+  Play,
+  Settings,
+  Timer,
+  Loader2,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react'
 import { DashboardLayout } from '@src/components/layout'
-import { designsApi, type Design } from '@src/lib/api'
+import { designsApi, type Design, type PlanStatus, type GenerationJob } from '@src/lib/api'
 
 // =====================================================
 // TYPES
 // =====================================================
 
 type StatusFilter = 'all' | 'ready' | 'generating' | 'pending' | 'failed'
+
+// =====================================================
+// COUNTDOWN HOOK
+// =====================================================
+
+function useCountdown(targetDate: string | null) {
+  const [timeLeft, setTimeLeft] = useState<{
+    days: number; hours: number; minutes: number; seconds: number; total: number
+  } | null>(null)
+
+  useEffect(() => {
+    if (!targetDate) {
+      setTimeLeft(null)
+      return
+    }
+
+    const update = () => {
+      const now = new Date().getTime()
+      const target = new Date(targetDate).getTime()
+      const diff = target - now
+
+      if (diff <= 0) {
+        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, total: 0 })
+        return
+      }
+
+      setTimeLeft({
+        days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+        hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+        minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+        seconds: Math.floor((diff % (1000 * 60)) / 1000),
+        total: diff,
+      })
+    }
+
+    update()
+    const interval = setInterval(update, 1000)
+    return () => clearInterval(interval)
+  }, [targetDate])
+
+  return timeLeft
+}
 
 // =====================================================
 // STATUS BADGE
@@ -46,6 +95,328 @@ function StatusBadge({ status }: { status: Design['status'] }) {
       <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
       {c.label}
     </span>
+  )
+}
+
+// =====================================================
+// PLAN STATUS BANNER
+// =====================================================
+
+function PlanBanner({
+  planStatus,
+  onGenerateNow,
+  isGenerating,
+}: {
+  planStatus: PlanStatus
+  onGenerateNow: (count: number) => void
+  isGenerating: boolean
+}) {
+  const [manualCount, setManualCount] = useState(1)
+  const [showSchedule, setShowSchedule] = useState(false)
+  const countdown = useCountdown(planStatus.next_generation_at)
+
+  const usagePercent = planStatus.monthly_limit > 0
+    ? Math.round((planStatus.monthly_used / planStatus.monthly_limit) * 100)
+    : 0
+  const usageColor = usagePercent >= 90 ? 'bg-red-500' : usagePercent >= 70 ? 'bg-amber-500' : 'bg-violet-500'
+
+  // Max count user can request
+  const maxManual = Math.min(planStatus.monthly_remaining, 50)
+
+  return (
+    <div className="space-y-4">
+      {/* Main Stats Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Monthly Usage */}
+        <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 sm:col-span-1">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-violet-400" />
+              <span className="text-xs text-zinc-400 uppercase tracking-wider">Monatliches Kontingent</span>
+            </div>
+            <span className="text-xs text-zinc-500 px-2 py-0.5 bg-zinc-700 rounded-full">
+              {planStatus.plan_name}
+            </span>
+          </div>
+          <div className="flex items-end gap-1 mb-2">
+            <span className="text-3xl font-bold text-white">{planStatus.monthly_used}</span>
+            <span className="text-lg text-zinc-500 mb-0.5">/ {planStatus.monthly_limit}</span>
+          </div>
+          <div className="w-full h-2 bg-zinc-700 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${usageColor}`}
+              style={{ width: `${Math.min(usagePercent, 100)}%` }}
+            />
+          </div>
+          <p className="text-xs text-zinc-500 mt-1.5">
+            {planStatus.monthly_remaining} verbleibend
+          </p>
+        </div>
+
+        {/* Countdown */}
+        <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Timer className="w-4 h-4 text-amber-400" />
+            <span className="text-xs text-zinc-400 uppercase tracking-wider">Nächste Generation</span>
+          </div>
+          {countdown && countdown.total > 0 ? (
+            <>
+              <div className="flex items-end gap-2 mb-1">
+                {countdown.days > 0 && (
+                  <div className="text-center">
+                    <span className="text-2xl font-bold text-white">{countdown.days}</span>
+                    <span className="text-xs text-zinc-500 ml-0.5">T</span>
+                  </div>
+                )}
+                <div className="text-center">
+                  <span className="text-2xl font-bold text-white">{String(countdown.hours).padStart(2, '0')}</span>
+                  <span className="text-xs text-zinc-500 ml-0.5">Std</span>
+                </div>
+                <span className="text-zinc-600 text-lg mb-0.5">:</span>
+                <div className="text-center">
+                  <span className="text-2xl font-bold text-white">{String(countdown.minutes).padStart(2, '0')}</span>
+                  <span className="text-xs text-zinc-500 ml-0.5">Min</span>
+                </div>
+                <span className="text-zinc-600 text-lg mb-0.5">:</span>
+                <div className="text-center">
+                  <span className="text-2xl font-bold text-amber-400 tabular-nums">{String(countdown.seconds).padStart(2, '0')}</span>
+                  <span className="text-xs text-zinc-500 ml-0.5">Sek</span>
+                </div>
+              </div>
+              <p className="text-xs text-zinc-500">
+                Täglich um {planStatus.generation_time} Uhr ({planStatus.generation_timezone.split('/').pop()})
+              </p>
+            </>
+          ) : (
+            <div>
+              <p className="text-lg font-semibold text-emerald-400">Bereit!</p>
+              <p className="text-xs text-zinc-500">
+                Geplant für {planStatus.generation_time} Uhr ({planStatus.generation_timezone.split('/').pop()})
+              </p>
+            </div>
+          )}
+          <button
+            onClick={() => setShowSchedule(!showSchedule)}
+            className="text-xs text-violet-400 hover:text-violet-300 mt-2 flex items-center gap-1"
+          >
+            <Settings className="w-3 h-3" />
+            Zeitplan ändern
+          </button>
+        </div>
+
+        {/* Manual Trigger */}
+        <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Zap className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs text-zinc-400 uppercase tracking-wider">Jetzt generieren</span>
+          </div>
+          <div className="flex items-center gap-2 mb-3">
+            <select
+              value={manualCount}
+              onChange={(e) => setManualCount(parseInt(e.target.value))}
+              disabled={isGenerating || maxManual <= 0}
+              className="bg-zinc-700 border border-zinc-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500/50 flex-1"
+            >
+              {[1, 2, 3, 5, 10, 15, 20, 30, 50].filter(n => n <= maxManual).map((n) => (
+                <option key={n} value={n}>{n} {n === 1 ? 'Design' : 'Designs'}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => onGenerateNow(manualCount)}
+              disabled={isGenerating || maxManual <= 0}
+              className="flex items-center gap-2 px-4 py-2 bg-violet-500 hover:bg-violet-600 disabled:bg-zinc-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors font-medium text-sm"
+            >
+              {isGenerating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4" />
+              )}
+              Los!
+            </button>
+          </div>
+          {maxManual <= 0 ? (
+            <p className="text-xs text-red-400">Monatliches Limit erreicht</p>
+          ) : (
+            <p className="text-xs text-zinc-500">
+              Max. {maxManual} Designs verfügbar
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Schedule Editor (collapsible) */}
+      {showSchedule && (
+        <ScheduleEditor
+          planStatus={planStatus}
+          onClose={() => setShowSchedule(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+// =====================================================
+// SCHEDULE EDITOR
+// =====================================================
+
+function ScheduleEditor({
+  planStatus,
+  onClose,
+}: {
+  planStatus: PlanStatus
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [time, setTime] = useState(planStatus.generation_time)
+  const [timezone, setTimezone] = useState(planStatus.generation_timezone)
+  const [batch, setBatch] = useState(planStatus.designs_per_batch)
+
+  const updateMutation = useMutation({
+    mutationFn: () => designsApi.updateSchedule({
+      generation_time: time,
+      generation_timezone: timezone,
+      designs_per_batch: batch,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plan-status'] })
+      onClose()
+    },
+  })
+
+  const commonTimezones = [
+    'Europe/Berlin', 'Europe/London', 'Europe/Paris', 'Europe/Istanbul',
+    'Asia/Dubai', 'Asia/Tokyo', 'Asia/Shanghai',
+    'America/New_York', 'America/Los_Angeles', 'America/Chicago',
+    'Australia/Sydney', 'Pacific/Auckland',
+  ]
+
+  return (
+    <div className="bg-zinc-800/50 border border-violet-500/30 rounded-xl p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+          <Clock className="w-4 h-4 text-violet-400" />
+          Generierungszeitplan
+        </h4>
+        <button onClick={onClose} className="p-1 rounded hover:bg-zinc-700 text-zinc-400">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Time */}
+        <div>
+          <label className="text-xs text-zinc-400 mb-1 block">Uhrzeit</label>
+          <input
+            type="time"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+            className="w-full bg-zinc-700 border border-zinc-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500/50"
+          />
+        </div>
+
+        {/* Timezone */}
+        <div>
+          <label className="text-xs text-zinc-400 mb-1 block">Zeitzone</label>
+          <select
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            className="w-full bg-zinc-700 border border-zinc-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500/50"
+          >
+            {commonTimezones.map((tz) => (
+              <option key={tz} value={tz}>{tz.replace('_', ' ')}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Designs per batch */}
+        <div>
+          <label className="text-xs text-zinc-400 mb-1 block">Designs pro Durchlauf</label>
+          <select
+            value={batch}
+            onChange={(e) => setBatch(parseInt(e.target.value))}
+            className="w-full bg-zinc-700 border border-zinc-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500/50"
+          >
+            {[1, 2, 3, 5, 10, 15, 20, 30, 50].map((n) => (
+              <option key={n} value={n}>{n} Designs</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
+        >
+          Abbrechen
+        </button>
+        <button
+          onClick={() => updateMutation.mutate()}
+          disabled={updateMutation.isPending}
+          className="flex items-center gap-2 px-4 py-2 bg-violet-500 hover:bg-violet-600 text-white rounded-lg text-sm transition-colors"
+        >
+          {updateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+          Speichern
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// =====================================================
+// GENERATION JOB STATUS (Running Job Banner)
+// =====================================================
+
+function RunningJobBanner({ jobId }: { jobId: string }) {
+  const { data } = useQuery({
+    queryKey: ['generation-job', jobId],
+    queryFn: () => designsApi.getJob(jobId),
+    refetchInterval: 3000, // Poll every 3s
+  })
+
+  const job = data?.job
+  if (!job) return null
+
+  const isRunning = job.status === 'running'
+  const isDone = job.status === 'completed'
+  const isFailed = job.status === 'failed'
+  const progress = job.designs_requested > 0
+    ? Math.round(((job.designs_completed + job.designs_failed) / job.designs_requested) * 100)
+    : 0
+
+  return (
+    <div className={`border rounded-xl p-4 ${
+      isRunning ? 'bg-violet-500/10 border-violet-500/30' :
+      isDone ? 'bg-emerald-500/10 border-emerald-500/30' :
+      'bg-red-500/10 border-red-500/30'
+    }`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          {isRunning ? (
+            <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
+          ) : isDone ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          ) : (
+            <XCircle className="w-4 h-4 text-red-400" />
+          )}
+          <span className="text-sm font-medium text-white">
+            {isRunning ? 'Generierung läuft...' : isDone ? 'Generierung abgeschlossen' : 'Generierung fehlgeschlagen'}
+          </span>
+        </div>
+        <span className="text-xs text-zinc-500">
+          {job.designs_completed}/{job.designs_requested} fertig
+          {job.designs_failed > 0 && `, ${job.designs_failed} fehlgeschlagen`}
+        </span>
+      </div>
+      {isRunning && (
+        <div className="w-full h-2 bg-zinc-700 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-violet-500 rounded-full transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -284,35 +655,6 @@ function DesignModal({ design, onClose, onDownload, onArchive }: DesignModalProp
 }
 
 // =====================================================
-// STATS BANNER
-// =====================================================
-
-function StatsBanner({ designs }: { designs: Design[] }) {
-  const stats = useMemo(() => {
-    const ready = designs.filter((d) => d.status === 'ready').length
-    const generating = designs.filter((d) => d.status === 'generating').length
-    const failed = designs.filter((d) => d.status === 'failed').length
-    return { total: designs.length, ready, generating, failed }
-  }, [designs])
-
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      {[
-        { label: 'Gesamt', value: stats.total, color: 'text-white' },
-        { label: 'Fertig', value: stats.ready, color: 'text-emerald-400' },
-        { label: 'In Arbeit', value: stats.generating, color: 'text-amber-400' },
-        { label: 'Fehlerhaft', value: stats.failed, color: 'text-red-400' },
-      ].map((s) => (
-        <div key={s.label} className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4">
-          <p className="text-xs text-zinc-500">{s.label}</p>
-          <p className={`text-2xl font-bold ${s.color} mt-1`}>{s.value}</p>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// =====================================================
 // MAIN PAGE
 // =====================================================
 
@@ -324,6 +666,22 @@ export default function DashboardDesigns() {
   const [searchTerm, setSearchTerm] = useState('')
   const [page, setPage] = useState(0)
   const [selectedDesign, setSelectedDesign] = useState<Design | null>(null)
+  const [activeJobId, setActiveJobId] = useState<string | null>(null)
+
+  // Fetch plan status
+  const { data: planData } = useQuery({
+    queryKey: ['plan-status'],
+    queryFn: () => designsApi.getPlanStatus(),
+    refetchInterval: 60000, // Refresh every minute for countdown accuracy
+  })
+
+  const planStatus: PlanStatus = planData || {
+    plan_type: 'free', plan_name: 'Free',
+    monthly_limit: 10, monthly_used: 0, monthly_remaining: 10,
+    generation_time: '09:00', generation_timezone: 'Europe/Berlin',
+    designs_per_batch: 5, next_generation_at: null,
+    last_generation_at: null, billing_cycle_start: null,
+  }
 
   // Fetch designs
   const { data, isLoading, error } = useQuery({
@@ -339,6 +697,21 @@ export default function DashboardDesigns() {
   const designs = data?.designs || []
   const total = data?.total || 0
   const totalPages = Math.ceil(total / PAGE_SIZE)
+
+  // Manual generate mutation
+  const generateMutation = useMutation({
+    mutationFn: (count: number) => designsApi.generateNow(count),
+    onSuccess: (result) => {
+      if (result.job_id) {
+        setActiveJobId(result.job_id)
+      }
+      queryClient.invalidateQueries({ queryKey: ['plan-status'] })
+      // Refresh designs after a short delay
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['designs'] })
+      }, 5000)
+    },
+  })
 
   // Archive mutation
   const archiveMutation = useMutation({
@@ -387,6 +760,10 @@ export default function DashboardDesigns() {
     }
   }
 
+  const handleGenerateNow = useCallback((count: number) => {
+    generateMutation.mutate(count)
+  }, [generateMutation])
+
   // Status filter tabs
   const statusTabs: { value: StatusFilter; label: string }[] = [
     { value: 'all', label: 'Alle' },
@@ -406,7 +783,7 @@ export default function DashboardDesigns() {
               Meine Motive
             </h1>
             <p className="text-zinc-400 mt-1">
-              Deine KI-generierten Designs. Automatisch erstellt alle 2 Stunden.
+              KI-generierte Designs für deine Print-on-Demand Produkte
             </p>
           </div>
           <button
@@ -418,8 +795,22 @@ export default function DashboardDesigns() {
           </button>
         </div>
 
-        {/* Stats */}
-        <StatsBanner designs={designs} />
+        {/* Plan Status Banner */}
+        <PlanBanner
+          planStatus={planStatus}
+          onGenerateNow={handleGenerateNow}
+          isGenerating={generateMutation.isPending}
+        />
+
+        {/* Active Job Progress */}
+        {activeJobId && <RunningJobBanner jobId={activeJobId} />}
+
+        {/* Generation Error */}
+        {generateMutation.isError && (
+          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+            Fehler: {generateMutation.error instanceof Error ? generateMutation.error.message : 'Unbekannter Fehler'}
+          </div>
+        )}
 
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-4">
@@ -482,14 +873,14 @@ export default function DashboardDesigns() {
             <ImageIcon className="w-16 h-16 text-zinc-600 mx-auto mb-4" />
             <h3 className="text-white font-semibold text-lg">Noch keine Motive</h3>
             <p className="text-zinc-400 text-sm mt-2 max-w-md mx-auto">
-              Sobald du eine Nische mit Auto-Generierung aktiviert hast, werden hier automatisch alle 2 Stunden neue Designs erstellt.
+              Aktiviere Auto-Generierung bei deinen Nischen oder klicke "Jetzt generieren" oben.
             </p>
             <div className="mt-6 p-4 bg-zinc-800/50 border border-zinc-700 rounded-xl max-w-sm mx-auto text-left">
               <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">So geht's:</p>
               <ol className="text-sm text-zinc-400 space-y-2">
                 <li className="flex items-start gap-2">
                   <span className="text-violet-400 font-mono">1.</span>
-                  Gehe zu <span className="text-white">Nischen</span> im Menü
+                  Gehe zu <span className="text-white">Einstellungen → Nischen</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-violet-400 font-mono">2.</span>
@@ -497,7 +888,11 @@ export default function DashboardDesigns() {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-violet-400 font-mono">3.</span>
-                  Warte auf den nächsten Cron-Run (alle 2h)
+                  Stelle deine <span className="text-white">Uhrzeit</span> oben ein
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-violet-400 font-mono">4.</span>
+                  Oder klicke <span className="text-white">Jetzt generieren</span>
                 </li>
               </ol>
             </div>

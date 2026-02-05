@@ -280,6 +280,36 @@ export interface PromptTemplate {
   updated_at: string;
 }
 
+// =====================================================
+// PLAN STATUS TYPES
+// =====================================================
+
+export interface PlanStatus {
+  plan_type: string;
+  plan_name: string;
+  monthly_limit: number;
+  monthly_used: number;
+  monthly_remaining: number;
+  generation_time: string;
+  generation_timezone: string;
+  designs_per_batch: number;
+  next_generation_at: string | null;
+  last_generation_at: string | null;
+  billing_cycle_start: string | null;
+}
+
+export interface GenerationJob {
+  id: string;
+  trigger_type: 'scheduled' | 'manual';
+  designs_requested: number;
+  designs_completed: number;
+  designs_failed: number;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  started_at: string;
+  completed_at: string | null;
+  error_message: string | null;
+}
+
 export const designsApi = {
   /**
    * Get all designs for the current user
@@ -291,14 +321,68 @@ export const designsApi = {
     if (params?.limit) query.set('limit', String(params.limit));
     if (params?.offset) query.set('offset', String(params.offset));
     const qs = query.toString();
-    return api<{ designs: Design[]; total: number }>(`/api/designs${qs ? `?${qs}` : ''}`);
+    return api<{ designs: Design[]; total: number }>(`/api/designs/${qs ? `?${qs}` : ''}`);
   },
 
   /**
    * Get generation stats
    */
   getStats: async (days?: number) => {
-    return api<{ stats: DesignStats[] }>(`/api/designs/stats${days ? `?days=${days}` : ''}`);
+    return api<{ stats: DesignStats[] }>(`/api/designs/stats/${days ? `?days=${days}` : ''}`);
+  },
+
+  /**
+   * Get plan status (limits, usage, schedule)
+   */
+  getPlanStatus: async () => {
+    return api<{ success: boolean } & PlanStatus>('/api/designs/plan-status');
+  },
+
+  /**
+   * Manually trigger design generation
+   */
+  generateNow: async (count: number = 1) => {
+    return api<{
+      success: boolean;
+      job_id?: string;
+      generated: number;
+      failed: number;
+      skipped: number;
+      monthly_used: number;
+      monthly_limit: number;
+      error?: string;
+    }>('/api/designs/generate-now', {
+      method: 'POST',
+      body: { count },
+    });
+  },
+
+  /**
+   * Update generation schedule
+   */
+  updateSchedule: async (data: {
+    generation_time?: string;
+    generation_timezone?: string;
+    designs_per_batch?: number;
+  }) => {
+    return api<{ success: boolean; message: string }>('/api/designs/schedule', {
+      method: 'PUT',
+      body: data,
+    });
+  },
+
+  /**
+   * Get generation job history
+   */
+  getJobs: async (limit: number = 10) => {
+    return api<{ success: boolean; jobs: GenerationJob[] }>(`/api/designs/jobs?limit=${limit}`);
+  },
+
+  /**
+   * Get a specific job status (for polling)
+   */
+  getJob: async (jobId: string) => {
+    return api<{ success: boolean; job: GenerationJob }>(`/api/designs/jobs/${jobId}`);
   },
 
   /**
@@ -320,7 +404,7 @@ export const designsApi = {
    */
   getTemplates: async (nicheId?: string) => {
     const qs = nicheId ? `?niche_id=${nicheId}` : '';
-    return api<{ templates: PromptTemplate[] }>(`/api/designs/templates${qs}`);
+    return api<{ templates: PromptTemplate[] }>(`/api/designs/templates/${qs ? `?${qs}` : ''}`);
   },
 
   /**
@@ -333,7 +417,7 @@ export const designsApi = {
     style_hints?: string;
     variables?: Record<string, string[]>;
   }) => {
-    return api<{ template: PromptTemplate }>('/api/designs/templates', {
+    return api<{ template: PromptTemplate }>('/api/designs/templates/', {
       method: 'POST',
       body: data,
     });

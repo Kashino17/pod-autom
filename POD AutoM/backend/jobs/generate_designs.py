@@ -12,7 +12,8 @@ Layers:
 Result: 15,000+ unique combinations per niche
 
 Run: python -m jobs.generate_designs
-Schedule: Every 2 hours via Render Cron
+Schedule: Every 30 minutes via Render Cron (checks user schedules)
+Manual: POST /api/designs/generate-now (with count parameter)
 """
 import os
 import sys
@@ -20,10 +21,11 @@ import json
 import random
 import asyncio
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional, Dict, Any, List
 import base64
 import httpx
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -44,7 +46,7 @@ SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPA
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1.5")
 OPENAI_IMAGE_QUALITY = os.getenv("OPENAI_IMAGE_QUALITY", "high")
-OPENAI_TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", "gpt-4o")
+OPENAI_TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", "gpt-5.1-mini")
 
 MAX_DESIGNS_PER_RUN = int(os.getenv("MAX_DESIGNS_PER_RUN", "20"))
 
@@ -672,13 +674,334 @@ async def generate_one(supabase: Client, niche: Dict) -> bool:
 
 
 # =====================================================
-# MAIN JOB
+# PLAN DEFINITIONS
+# =====================================================
+
+PLAN_LIMITS = {
+    "free": 10,
+    "starter": 50,
+    "pro": 200,
+    "enterprise": 1000,
+}
+
+
+# =====================================================
+# MONTHLY USAGE HELPERS
+# =====================================================
+
+def get_billing_month_start(billing_cycle_start: str) -> date:
+    """Calculate the current billing month start based on original billing date."""
+    if not billing_cycle_start:
+        return date.today().replace(day=1)
+    
+    cycle_start = date.fromisoformat(str(billing_cycle_start))
+    today = date.today()
+    
+    # Find the current billing period start
+    # If billing started on the 15th, each month starts on the 15th
+    day_of_month = min(cycle_start.day, 28)  # Cap at 28 for safety
+    
+    try:
+        this_month_start = today.replace(day=day_of_month)
+    except ValueError:
+        this_month_start = today.replace(day=28)
+    
+    if this_month_start > today:
+        # We're before this month's billing day, so current period started last month
+        if this_month_start.month == 1:
+            this_month_start = this_month_start.replace(year=this_month_start.year - 1, month=12)
+        else:
+            this_month_start = this_month_start.replace(month=this_month_start.month - 1)
+    
+    return this_month_start
+
+
+async def get_monthly_usage(supabase: Client, user_id: str, month_start: date) -> int:
+    """Get how many designs were generated in the current billing month."""
+    res = supabase.table("pod_autom_monthly_usage").select(
+        "designs_generated"
+    ).eq("user_id", user_id).eq("month_start", month_start.isoformat()).execute()
+    return res.data[0]["designs_generated"] if res.data else 0
+
+
+async def bump_monthly_usage(supabase: Client, user_id: str, month_start: date, ok: bool, is_manual: bool = False):
+    """Increment monthly usage counter."""
+    try:
+        existing = supabase.table("pod_autom_monthly_usage").select("*").eq(
+            "user_id", user_id
+        ).eq("month_start", month_start.isoformat()).execute()
+
+        if existing.data:
+            cur = existing.data[0]
+            update = {
+                "designs_generated": cur["designs_generated"] + (1 if ok else 0),
+                "designs_failed": cur["designs_failed"] + (0 if ok else 1),
+                "updated_at": datetime.now(tz=None).isoformat(),
+            }
+            if is_manual:
+                update["manual_triggers"] = cur.get("manual_triggers", 0) + 1
+            else:
+                update["scheduled_runs"] = cur.get("scheduled_runs", 0) + 1
+            supabase.table("pod_autom_monthly_usage").update(update).eq("id", cur["id"]).execute()
+        else:
+            supabase.table("pod_autom_monthly_usage").insert({
+                "user_id": user_id,
+                "month_start": month_start.isoformat(),
+                "designs_generated": 1 if ok else 0,
+                "designs_failed": 0 if ok else 1,
+                "manual_triggers": 1 if is_manual else 0,
+                "scheduled_runs": 0 if is_manual else 1,
+            }).execute()
+    except Exception as e:
+        logger.warning(f"Monthly usage tracking error (non-critical): {e}")
+
+
+# =====================================================
+# SCHEDULE CHECKER
+# =====================================================
+
+def is_scheduled_now(generation_time: str, generation_timezone: str, last_run: str = None) -> bool:
+    """Check if a user's generation is scheduled for the current time window.
+    
+    The cron runs every 30 min, so we check if the user's generation_time
+    falls within a 30-minute window of the current time in their timezone.
+    """
+    try:
+        tz = ZoneInfo(generation_timezone)
+    except Exception:
+        tz = ZoneInfo("Europe/Berlin")
+    
+    now = datetime.now(tz)
+    
+    # Parse generation_time "HH:MM"
+    parts = generation_time.split(":")
+    target_hour = int(parts[0])
+    target_minute = int(parts[1]) if len(parts) > 1 else 0
+    
+    # Check if current time is within 30 min of target
+    target_today = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+    diff = (now - target_today).total_seconds()
+    
+    # Within 0 to 30 minutes after target time
+    if not (0 <= diff < 1800):  # 30 min window
+        return False
+    
+    # Check if already ran today (prevent double runs)
+    if last_run:
+        try:
+            last_dt = datetime.fromisoformat(str(last_run))
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=timezone.utc)
+            last_in_tz = last_dt.astimezone(tz)
+            if last_in_tz.date() == now.date():
+                logger.info(f"Already ran today at {last_in_tz.strftime('%H:%M')}")
+                return False
+        except Exception as e:
+            logger.warning(f"Error parsing last_run: {e}")
+    
+    return True
+
+
+# =====================================================
+# BATCH GENERATION (for both scheduled and manual)
+# =====================================================
+
+async def generate_batch(
+    supabase: Client,
+    user_id: str,
+    niche_list: List[Dict],
+    count: int,
+    monthly_limit: int,
+    month_start: date,
+    trigger_type: str = "scheduled",
+    job_id: str = None,
+) -> Dict[str, int]:
+    """Generate a batch of designs across niches for a user.
+    
+    Returns: {"generated": N, "failed": N, "skipped": N}
+    """
+    # Check monthly limit
+    current_usage = await get_monthly_usage(supabase, user_id, month_start)
+    remaining = monthly_limit - current_usage
+    
+    if remaining <= 0:
+        logger.info(f"User {user_id[:8]}... monthly limit reached ({current_usage}/{monthly_limit})")
+        return {"generated": 0, "failed": 0, "skipped": count}
+    
+    # Cap count to remaining
+    actual_count = min(count, remaining)
+    if actual_count < count:
+        logger.info(f"Capped from {count} to {actual_count} (remaining: {remaining})")
+    
+    generated = 0
+    failed = 0
+    is_manual = trigger_type == "manual"
+    
+    # Distribute designs across niches (round-robin)
+    niche_index = 0
+    for i in range(actual_count):
+        niche = niche_list[niche_index % len(niche_list)]
+        niche_index += 1
+        
+        ok = await generate_one(supabase, niche)
+        if ok:
+            generated += 1
+        else:
+            failed += 1
+        
+        # Update monthly usage
+        await bump_monthly_usage(supabase, user_id, month_start, ok, is_manual)
+        
+        # Also update daily stats (backward compat)
+        try:
+            await bump_stats(supabase, user_id, ok)
+        except Exception:
+            pass
+        
+        # Update job progress if we have a job_id
+        if job_id:
+            try:
+                supabase.table("pod_autom_generation_jobs").update({
+                    "designs_completed": generated,
+                    "designs_failed": failed,
+                }).eq("id", job_id).execute()
+            except Exception:
+                pass
+        
+        # Delay between generations
+        if i < actual_count - 1:
+            await asyncio.sleep(2)
+    
+    return {"generated": generated, "failed": failed, "skipped": count - actual_count}
+
+
+# =====================================================
+# MANUAL GENERATION (called from API)
+# =====================================================
+
+async def generate_manual(user_id: str, count: int = 1) -> Dict[str, Any]:
+    """Trigger manual design generation for a user.
+    
+    Called from API endpoint POST /api/designs/generate-now
+    Returns: job status with counts
+    """
+    logger.info(f"Manual generation: user={user_id[:8]}... count={count}")
+    
+    if not OPENAI_API_KEY:
+        return {"success": False, "error": "OPENAI_API_KEY not configured"}
+    
+    sb = get_supabase()
+    
+    # Get user settings (plan, limits)
+    settings = sb.table("pod_autom_settings").select(
+        "*, pod_autom_shops(user_id)"
+    ).eq("pod_autom_shops.user_id", user_id).execute()
+    
+    if not settings.data:
+        # Try alternate query: get shop first
+        shops = sb.table("pod_autom_shops").select("id").eq("user_id", user_id).execute()
+        if not shops.data:
+            return {"success": False, "error": "Kein Shop verbunden"}
+        shop_id = shops.data[0]["id"]
+        settings = sb.table("pod_autom_settings").select("*").eq("shop_id", shop_id).execute()
+        if not settings.data:
+            return {"success": False, "error": "Keine Einstellungen gefunden"}
+    
+    user_settings = settings.data[0]
+    plan_type = user_settings.get("plan_type", "free")
+    monthly_limit = user_settings.get("monthly_design_limit") or PLAN_LIMITS.get(plan_type, 10)
+    billing_start = user_settings.get("billing_cycle_start")
+    month_start = get_billing_month_start(billing_start)
+    
+    # Check monthly limit
+    current_usage = await get_monthly_usage(sb, user_id, month_start)
+    remaining = monthly_limit - current_usage
+    
+    if remaining <= 0:
+        return {
+            "success": False,
+            "error": f"Monatliches Limit erreicht ({current_usage}/{monthly_limit})",
+            "monthly_used": current_usage,
+            "monthly_limit": monthly_limit,
+        }
+    
+    actual_count = min(count, remaining)
+    
+    # Get user's auto-generate niches
+    shops = sb.table("pod_autom_shops").select("id").eq("user_id", user_id).execute()
+    if not shops.data:
+        return {"success": False, "error": "Kein Shop verbunden"}
+    
+    shop_id = shops.data[0]["id"]
+    settings_res = sb.table("pod_autom_settings").select("id").eq("shop_id", shop_id).execute()
+    if not settings_res.data:
+        return {"success": False, "error": "Keine Einstellungen"}
+    
+    settings_id = settings_res.data[0]["id"]
+    niches = sb.table("pod_autom_niches").select("*").eq(
+        "settings_id", settings_id
+    ).eq("auto_generate", True).eq("is_active", True).execute()
+    
+    if not niches.data:
+        return {"success": False, "error": "Keine Nischen mit Auto-Generierung aktiviert"}
+    
+    niche_list = [{
+        "id": n["id"],
+        "user_id": user_id,
+        "name": n["niche_name"],
+        "language": n.get("language", "en"),
+        "daily_limit": 9999,  # Manual doesn't have daily limit, only monthly
+        "auto_generate": True,
+    } for n in niches.data]
+    
+    # Create generation job record
+    job = sb.table("pod_autom_generation_jobs").insert({
+        "user_id": user_id,
+        "trigger_type": "manual",
+        "designs_requested": actual_count,
+        "status": "running",
+    }).execute()
+    job_id = job.data[0]["id"]
+    
+    # Generate
+    result = await generate_batch(
+        supabase=sb,
+        user_id=user_id,
+        niche_list=niche_list,
+        count=actual_count,
+        monthly_limit=monthly_limit,
+        month_start=month_start,
+        trigger_type="manual",
+        job_id=job_id,
+    )
+    
+    # Complete job
+    sb.table("pod_autom_generation_jobs").update({
+        "status": "completed",
+        "designs_completed": result["generated"],
+        "designs_failed": result["failed"],
+        "completed_at": datetime.now(tz=None).isoformat(),
+    }).eq("id", job_id).execute()
+    
+    return {
+        "success": True,
+        "job_id": job_id,
+        "generated": result["generated"],
+        "failed": result["failed"],
+        "skipped": result["skipped"],
+        "monthly_used": current_usage + result["generated"],
+        "monthly_limit": monthly_limit,
+    }
+
+
+# =====================================================
+# MAIN JOB (scheduled via Render Cron)
 # =====================================================
 
 async def run():
     logger.info("=" * 60)
-    logger.info("POD AutoM Design Generator - 5-Layer Randomness Engine")
-    logger.info(f"Model: {OPENAI_IMAGE_MODEL} | Quality: {OPENAI_IMAGE_QUALITY}")
+    logger.info("POD AutoM Design Generator - Schedule-Based Engine")
+    logger.info(f"Image: {OPENAI_IMAGE_MODEL}/{OPENAI_IMAGE_QUALITY} | Text: {OPENAI_TEXT_MODEL}")
     logger.info("=" * 60)
 
     if not OPENAI_API_KEY:
@@ -690,61 +1013,107 @@ async def run():
 
     sb = get_supabase()
 
-    # Get niches with auto_generate ON (join settings → shops to get user_id)
-    niches = sb.table("pod_autom_niches").select(
-        "id, niche_name, language, daily_limit, auto_generate, settings_id, "
-        "pod_autom_settings(shop_id, pod_autom_shops(user_id))"
-    ).eq("auto_generate", True).eq("is_active", True).execute()
+    # Get ALL settings with auto_generate niches (join to get user info)
+    settings_res = sb.table("pod_autom_settings").select(
+        "id, shop_id, plan_type, monthly_design_limit, generation_time, "
+        "generation_timezone, billing_cycle_start, designs_per_batch, "
+        "last_generation_run, pod_autom_shops(user_id)"
+    ).execute()
 
-    # Flatten: extract user_id from nested join and rename niche_name → name
-    niche_list = []
-    for n in (niches.data or []):
+    if not settings_res.data:
+        logger.info("No settings found")
+        return
+
+    users_processed = 0
+    users_skipped = 0
+    total_generated = 0
+    total_failed = 0
+
+    for s in settings_res.data:
         try:
-            user_id = n["pod_autom_settings"]["pod_autom_shops"]["user_id"]
+            user_id = s["pod_autom_shops"]["user_id"]
         except (KeyError, TypeError):
-            logger.warning(f"Niche {n['id']}: could not resolve user_id, skipping")
             continue
-        niche_list.append({
+        
+        gen_time = s.get("generation_time", "09:00")
+        gen_tz = s.get("generation_timezone", "Europe/Berlin")
+        last_run = s.get("last_generation_run")
+        
+        # Check if this user is scheduled for now
+        if not is_scheduled_now(gen_time, gen_tz, last_run):
+            users_skipped += 1
+            continue
+        
+        logger.info(f"User {user_id[:8]}... scheduled at {gen_time} ({gen_tz})")
+        
+        # Get niches for this settings
+        settings_id = s["id"]
+        niches = sb.table("pod_autom_niches").select("*").eq(
+            "settings_id", settings_id
+        ).eq("auto_generate", True).eq("is_active", True).execute()
+        
+        if not niches.data:
+            logger.info(f"  No active auto-generate niches, skipping")
+            continue
+        
+        niche_list = [{
             "id": n["id"],
             "user_id": user_id,
             "name": n["niche_name"],
             "language": n.get("language", "en"),
             "daily_limit": n.get("daily_limit", 5),
-            "auto_generate": n["auto_generate"],
-        })
-
-    logger.info(f"Found {len(niche_list)} active auto-generate niches")
-
-    if not niche_list:
-        logger.info("Nothing to do")
-        return
-
-    generated = 0
-    failed = 0
-
-    for niche in niche_list:
-        # Check daily limit
-        daily_limit = niche.get("daily_limit", 5)
-        current = await get_daily_count(sb, niche["user_id"])
-        if current >= daily_limit:
-            logger.info(f"User {niche['user_id'][:8]}... hit limit ({current}/{daily_limit})")
-            continue
-
-        if generated >= MAX_DESIGNS_PER_RUN:
-            logger.info(f"Run limit reached ({MAX_DESIGNS_PER_RUN})")
-            break
-
-        ok = await generate_one(sb, niche)
-        if ok:
-            generated += 1
-        else:
-            failed += 1
-
-        # Delay between generations
-        await asyncio.sleep(2)
+            "auto_generate": True,
+        } for n in niches.data]
+        
+        plan_type = s.get("plan_type", "free")
+        monthly_limit = s.get("monthly_design_limit") or PLAN_LIMITS.get(plan_type, 10)
+        designs_per_batch = s.get("designs_per_batch", 5)
+        billing_start = s.get("billing_cycle_start")
+        month_start = get_billing_month_start(billing_start)
+        
+        # Create job record
+        job = sb.table("pod_autom_generation_jobs").insert({
+            "user_id": user_id,
+            "trigger_type": "scheduled",
+            "designs_requested": designs_per_batch,
+            "status": "running",
+        }).execute()
+        job_id = job.data[0]["id"]
+        
+        # Generate batch
+        result = await generate_batch(
+            supabase=sb,
+            user_id=user_id,
+            niche_list=niche_list,
+            count=designs_per_batch,
+            monthly_limit=monthly_limit,
+            month_start=month_start,
+            trigger_type="scheduled",
+            job_id=job_id,
+        )
+        
+        # Complete job
+        sb.table("pod_autom_generation_jobs").update({
+            "status": "completed",
+            "designs_completed": result["generated"],
+            "designs_failed": result["failed"],
+            "completed_at": datetime.now(tz=None).isoformat(),
+        }).eq("id", job_id).execute()
+        
+        # Mark last_generation_run
+        sb.table("pod_autom_settings").update({
+            "last_generation_run": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", settings_id).execute()
+        
+        users_processed += 1
+        total_generated += result["generated"]
+        total_failed += result["failed"]
+        
+        logger.info(f"  → {result['generated']} generated, {result['failed']} failed")
 
     logger.info("=" * 60)
-    logger.info(f"DONE: {generated} generated, {failed} failed")
+    logger.info(f"DONE: {users_processed} users processed, {users_skipped} skipped")
+    logger.info(f"Total: {total_generated} generated, {total_failed} failed")
     logger.info("=" * 60)
 
 
