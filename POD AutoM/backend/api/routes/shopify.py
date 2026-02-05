@@ -126,13 +126,13 @@ async def get_install_link(
     }
     
     if shop_domain:
-        # Direct to specific shop
+        # Direct to specific shop's OAuth authorize page
         auth_url = f"https://{shop_domain}/admin/oauth/authorize?{urlencode(params)}"
         return RedirectResponse(url=auth_url)
     else:
-        # Redirect to Shopify's managed installation page
-        # User selects their shop there, then Shopify redirects back
-        install_url = f"https://admin.shopify.com/oauth/install_custom_app?client_id={settings.SHOPIFY_CLIENT_ID}"
+        # Redirect to Shopify's managed installation page for Unlisted Apps
+        # Note: Use "install" not "install_custom_app" (which is for Custom Apps only)
+        install_url = f"https://admin.shopify.com/oauth/install?client_id={settings.SHOPIFY_CLIENT_ID}"
         return RedirectResponse(url=install_url)
 
 
@@ -193,6 +193,19 @@ async def start_oauth(
         "auth_url": auth_url,
         "shop_domain": shop_domain
     }
+
+
+@router.get("/callback")
+async def oauth_callback_short(
+    request: Request,
+    code: str = Query(...),
+    shop: str = Query(...),
+    state: str = Query(...),
+    hmac: str = Query(None),
+    timestamp: str = Query(None)
+):
+    """Alias for /oauth/callback - handles both paths."""
+    return await oauth_callback(request, code, shop, state, hmac, timestamp)
 
 
 @router.get("/oauth/callback")
