@@ -1,287 +1,466 @@
-import { supabase } from './supabase'
-import type { Database } from './database.types'
+/**
+ * API Client for POD AutoM Backend
+ * Handles all API requests with authentication.
+ */
 
-type Tables = Database['public']['Tables']
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-// =====================================================
-// HTTP API CLIENT (for backend API calls)
-// =====================================================
+interface ApiResponse<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001'
+interface RequestOptions {
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  body?: unknown;
+  headers?: Record<string, string>;
+}
 
-async function getAuthHeaders(): Promise<HeadersInit> {
-  const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token
+/**
+ * Get the current auth token from Supabase session
+ */
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const { supabase } = await import('./supabase');
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token || null;
+  } catch {
+    return null;
+  }
+}
 
-  return {
+/**
+ * Make an authenticated API request
+ */
+async function apiFunction<T = unknown>(
+  endpoint: string,
+  options: RequestOptions = {}
+): Promise<T> {
+  const { method = 'GET', body, headers = {} } = options;
+  
+  const token = await getAuthToken();
+  
+  const requestHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...headers,
+  };
+  
+  if (token) {
+    requestHeaders['Authorization'] = `Bearer ${token}`;
   }
+  
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  
+  const fetchOptions: RequestInit = {
+    method,
+    headers: requestHeaders,
+  };
+  
+  if (body !== undefined) {
+    fetchOptions.body = JSON.stringify(body);
+  }
+  
+  const response = await fetch(url, fetchOptions);
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || errorData.message || `API Error: ${response.status}`);
+  }
+  
+  return response.json();
 }
 
 /**
- * HTTP API client for backend requests
+ * Convenience methods - attached to api function
  */
-export const api = {
-  async get<T>(endpoint: string): Promise<T> {
-    const headers = await getAuthHeaders()
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      method: 'GET',
-      headers,
-    })
+const apiBase = apiFunction as typeof apiFunction & {
+  get: <T>(endpoint: string, headers?: Record<string, string>) => Promise<T>;
+  post: <T>(endpoint: string, body?: unknown, headers?: Record<string, string>) => Promise<T>;
+  put: <T>(endpoint: string, body?: unknown, headers?: Record<string, string>) => Promise<T>;
+  delete: <T>(endpoint: string, headers?: Record<string, string>) => Promise<T>;
+  patch: <T>(endpoint: string, body?: unknown, headers?: Record<string, string>) => Promise<T>;
+};
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Request failed' }))
-      throw new Error(error.error || 'Request failed')
-    }
+apiBase.get = <T>(endpoint: string, headers?: Record<string, string>) => 
+  apiFunction<T>(endpoint, { method: 'GET', ...(headers && { headers }) });
 
-    return response.json()
+apiBase.post = <T>(endpoint: string, body?: unknown, headers?: Record<string, string>) =>
+  apiFunction<T>(endpoint, { method: 'POST', body, ...(headers && { headers }) });
+
+apiBase.put = <T>(endpoint: string, body?: unknown, headers?: Record<string, string>) =>
+  apiFunction<T>(endpoint, { method: 'PUT', body, ...(headers && { headers }) });
+
+apiBase.delete = <T>(endpoint: string, headers?: Record<string, string>) =>
+  apiFunction<T>(endpoint, { method: 'DELETE', ...(headers && { headers }) });
+
+apiBase.patch = <T>(endpoint: string, body?: unknown, headers?: Record<string, string>) =>
+  apiFunction<T>(endpoint, { method: 'PATCH', body, ...(headers && { headers }) });
+
+// Create api alias for internal use and export
+const api = apiBase;
+export { api };
+export const apiClient = apiBase;
+
+// =====================================================
+// SHOPIFY API
+// =====================================================
+
+export interface Shop {
+  id: string;
+  shop_domain: string;
+  shop_name: string | null;
+  connection_status: string;
+  last_sync_at: string | null;
+  created_at: string;
+}
+
+export const shopifyApi = {
+  /**
+   * Start Shopify OAuth flow
+   */
+  startOAuth: async (shopDomain: string) => {
+    return api<{ success: boolean; auth_url: string; shop_domain: string }>(
+      '/api/shopify/oauth/start',
+      { method: 'POST', body: { shop_domain: shopDomain } }
+    );
   },
+  
+  /**
+   * Get connected shops
+   */
+  getShops: async () => {
+    return api<{ success: boolean; shops: Shop[] }>('/api/shopify/shops');
+  },
+  
+  /**
+   * Disconnect a shop
+   */
+  disconnectShop: async (shopId: string) => {
+    return api<{ success: boolean }>(`/api/shopify/shops/${shopId}`, { method: 'DELETE' });
+  },
+  
+  /**
+   * Trigger manual sync
+   */
+  syncShop: async (shopId: string) => {
+    return api<{ success: boolean }>(`/api/shopify/shops/${shopId}/sync`, { method: 'POST' });
+  },
+};
 
-  async post<T>(endpoint: string, data?: unknown): Promise<T> {
-    const headers = await getAuthHeaders()
-    const options: RequestInit = {
+// =====================================================
+// GENERATION API
+// =====================================================
+
+export interface DesignResult {
+  success: boolean;
+  image_url?: string;
+  prompt_used?: string;
+  error?: string;
+}
+
+export const generationApi = {
+  /**
+   * Generate a design
+   */
+  generateDesign: async (niche: string, style?: string) => {
+    return api<DesignResult>('/api/generate/design', {
       method: 'POST',
-      headers,
-    }
-
-    if (data !== undefined) {
-      options.body = JSON.stringify(data)
-    }
-
-    const response = await fetch(`${API_URL}${endpoint}`, options)
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Request failed' }))
-      throw new Error(error.error || 'Request failed')
-    }
-
-    return response.json()
+      body: { niche, style: style || 'minimalist' }
+    });
   },
-
-  async put<T>(endpoint: string, data?: unknown): Promise<T> {
-    const headers = await getAuthHeaders()
-    const options: RequestInit = {
-      method: 'PUT',
-      headers,
-    }
-
-    if (data !== undefined) {
-      options.body = JSON.stringify(data)
-    }
-
-    const response = await fetch(`${API_URL}${endpoint}`, options)
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Request failed' }))
-      throw new Error(error.error || 'Request failed')
-    }
-
-    return response.json()
-  },
-
-  async delete<T>(endpoint: string): Promise<T> {
-    const headers = await getAuthHeaders()
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      method: 'DELETE',
-      headers,
-    })
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Request failed' }))
-      throw new Error(error.error || 'Request failed')
-    }
-
-    return response.json()
-  },
-}
-
-// =====================================================
-// GENERIC CRUD HELPERS
-// =====================================================
-
-interface QueryOptions {
-  limit?: number
-  offset?: number
-  orderBy?: { column: string; ascending?: boolean }
-}
-
-/**
- * Generic Select mit Typisierung
- */
-export async function select<T extends keyof Tables>(
-  table: T,
-  options?: QueryOptions & { filter?: Partial<Tables[T]['Row']> }
-) {
-  let query = supabase.from(table).select('*')
-
-  if (options?.filter) {
-    Object.entries(options.filter).forEach(([key, value]) => {
-      if (value !== undefined) {
-        query = query.eq(key, value)
+  
+  /**
+   * Generate a product title
+   */
+  generateTitle: async (niche: string, designDescription: string, productType?: string) => {
+    return api<{ success: boolean; title: string }>('/api/generate/title', {
+      method: 'POST',
+      body: { 
+        niche, 
+        design_description: designDescription,
+        product_type: productType || 'T-Shirt'
       }
-    })
-  }
+    });
+  },
+  
+  /**
+   * Generate a product description
+   */
+  generateDescription: async (niche: string, designDescription: string, productType?: string) => {
+    return api<{ success: boolean; description: string }>('/api/generate/description', {
+      method: 'POST',
+      body: { 
+        niche, 
+        design_description: designDescription,
+        product_type: productType || 'T-Shirt'
+      }
+    });
+  },
+  
+  /**
+   * Create a mockup
+   */
+  createMockup: async (designUrl: string, productType?: string, color?: string) => {
+    return api<{ success: boolean; mockup_url: string }>('/api/generate/mockup', {
+      method: 'POST',
+      body: {
+        design_url: designUrl,
+        product_type: productType || 't-shirt',
+        color: color || 'black'
+      }
+    });
+  },
+  
+  /**
+   * Generate a full product (design + mockup + title + description)
+   */
+  generateFullProduct: async (niche: string, productType?: string, style?: string) => {
+    return api<{
+      success: boolean;
+      product: {
+        design_url: string;
+        mockup_url: string;
+        title: string;
+        description: string;
+        tags: string[];
+      }
+    }>('/api/generate/full-product', {
+      method: 'POST',
+      body: { niche, product_type: productType, style }
+    });
+  },
+};
 
-  if (options?.orderBy) {
-    query = query.order(options.orderBy.column, {
-      ascending: options.orderBy.ascending ?? true,
-    })
-  }
+// =====================================================
+// DESIGNS API
+// =====================================================
 
-  if (options?.limit) {
-    query = query.limit(options.limit)
-  }
-
-  if (options?.offset) {
-    query = query.range(options.offset, options.offset + (options.limit ?? 10) - 1)
-  }
-
-  const { data, error } = await query
-
-  return { data: data as Tables[T]['Row'][] | null, error }
+export interface Design {
+  id: string;
+  user_id: string;
+  niche_id: string | null;
+  template_id: string | null;
+  prompt_used: string;
+  final_prompt: string | null;
+  image_url: string | null;
+  thumbnail_url: string | null;
+  image_path: string | null;
+  slogan_text: string | null;
+  language: string;
+  status: 'pending' | 'generating' | 'ready' | 'failed' | 'archived';
+  error_message: string | null;
+  generation_model: string;
+  generation_quality: string;
+  variables_used: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  generated_at: string | null;
+  updated_at: string;
 }
 
-/**
- * Generic Insert
- */
-export async function insert<T extends keyof Tables>(
-  table: T,
-  data: Tables[T]['Insert']
-) {
-  const { data: result, error } = await supabase
-    .from(table)
-    .insert(data as never)
-    .select()
-    .single()
-
-  return { data: result as Tables[T]['Row'] | null, error }
+export interface DesignStats {
+  designs_generated: number;
+  designs_failed: number;
+  api_calls: number;
+  date: string;
 }
 
-/**
- * Generic Update
- */
-export async function update<T extends keyof Tables>(
-  table: T,
-  id: string,
-  data: Tables[T]['Update']
-) {
-  const { data: result, error } = await supabase
-    .from(table)
-    .update(data as never)
-    .eq('id' as never, id as never)
-    .select()
-    .single()
-
-  return { data: result as Tables[T]['Row'] | null, error }
-}
-
-/**
- * Generic Delete
- */
-export async function remove<T extends keyof Tables>(table: T, id: string) {
-  const { error } = await supabase.from(table).delete().eq('id' as never, id as never)
-
-  return { error }
+export interface PromptTemplate {
+  id: string;
+  user_id: string;
+  niche_id: string | null;
+  name: string;
+  prompt_template: string;
+  style_hints: string | null;
+  variables: Record<string, string[]>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 // =====================================================
-// POD AUTOM SPECIFIC HELPERS
+// PLAN STATUS TYPES
 // =====================================================
 
-/**
- * Holt Subscription fuer User
- */
-export async function getSubscription(userId: string) {
-  const { data, error } = await supabase
-    .from('pod_autom_subscriptions')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .maybeSingle()
-
-  return { subscription: data, error }
+export interface PlanStatus {
+  plan_type: string;
+  plan_name: string;
+  monthly_limit: number;
+  monthly_used: number;
+  monthly_remaining: number;
+  generation_time: string;
+  generation_timezone: string;
+  designs_per_batch: number;
+  next_generation_at: string | null;
+  last_generation_at: string | null;
+  billing_cycle_start: string | null;
 }
 
-/**
- * Holt alle Shops eines Users
- */
-export async function getShops(userId: string) {
-  const { data, error } = await supabase
-    .from('pod_autom_shops')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-
-  return { shops: data ?? [], error }
+export interface GenerationJob {
+  id: string;
+  trigger_type: 'scheduled' | 'manual';
+  designs_requested: number;
+  designs_completed: number;
+  designs_failed: number;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  started_at: string;
+  completed_at: string | null;
+  error_message: string | null;
 }
 
-/**
- * Holt Shop mit Settings
- */
-export async function getShopWithSettings(shopId: string) {
-  const { data, error } = await supabase
-    .from('pod_autom_shops')
-    .select(
-      `
-      *,
-      pod_autom_settings (*)
-    `
-    )
-    .eq('id', shopId)
-    .single()
+export const designsApi = {
+  /**
+   * Get all designs for the current user
+   */
+  getDesigns: async (params?: { status?: string; niche_id?: string; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.niche_id) query.set('niche_id', params.niche_id);
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return api<{ designs: Design[]; total: number }>(`/api/designs/${qs ? `?${qs}` : ''}`);
+  },
 
-  return { shop: data, error }
-}
+  /**
+   * Get generation stats
+   */
+  getStats: async (days?: number) => {
+    return api<{ stats: DesignStats[] }>(`/api/designs/stats/${days ? `?days=${days}` : ''}`);
+  },
 
-/**
- * Holt Niches fuer Settings
- */
-export async function getNiches(settingsId: string) {
-  const { data, error } = await supabase
-    .from('pod_autom_niches')
-    .select('*')
-    .eq('settings_id', settingsId)
-    .order('created_at', { ascending: true })
+  /**
+   * Get plan status (limits, usage, schedule)
+   */
+  getPlanStatus: async () => {
+    return api<{ success: boolean } & PlanStatus>('/api/designs/plan-status');
+  },
 
-  return { niches: data ?? [], error }
-}
+  /**
+   * Manually trigger design generation
+   */
+  generateNow: async (count: number = 1) => {
+    return api<{
+      success: boolean;
+      job_id?: string;
+      generated: number;
+      failed: number;
+      skipped: number;
+      monthly_used: number;
+      monthly_limit: number;
+      error?: string;
+    }>('/api/designs/generate-now', {
+      method: 'POST',
+      body: { count },
+    });
+  },
 
-/**
- * Holt Prompts fuer Settings
- */
-export async function getPrompts(settingsId: string) {
-  const { data, error } = await supabase
-    .from('pod_autom_prompts')
-    .select('*')
-    .eq('settings_id', settingsId)
-    .order('prompt_type', { ascending: true })
+  /**
+   * Update generation schedule
+   */
+  updateSchedule: async (data: {
+    generation_time?: string;
+    generation_timezone?: string;
+    designs_per_batch?: number;
+  }) => {
+    return api<{ success: boolean; message: string }>('/api/designs/schedule', {
+      method: 'PUT',
+      body: data,
+    });
+  },
 
-  return { prompts: data ?? [], error }
-}
+  /**
+   * Get generation job history
+   */
+  getJobs: async (limit: number = 10) => {
+    return api<{ success: boolean; jobs: GenerationJob[] }>(`/api/designs/jobs?limit=${limit}`);
+  },
 
-/**
- * Holt Katalog-Produkte
- */
-export async function getCatalog() {
-  const { data, error } = await supabase
-    .from('pod_autom_catalog')
-    .select('*')
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true })
+  /**
+   * Get a specific job status (for polling)
+   */
+  getJob: async (jobId: string) => {
+    return api<{ success: boolean; job: GenerationJob }>(`/api/designs/jobs/${jobId}`);
+  },
 
-  return { catalog: data ?? [], error }
-}
+  /**
+   * Archive a design (soft delete)
+   */
+  archiveDesign: async (designId: string) => {
+    return api<{ success: boolean }>(`/api/designs/${designId}`, { method: 'DELETE' });
+  },
 
-/**
- * Zaehlt aktive Niches fuer Limit-Check
- */
-export async function countActiveNiches(settingsId: string) {
-  const { count, error } = await supabase
-    .from('pod_autom_niches')
-    .select('*', { count: 'exact', head: true })
-    .eq('settings_id', settingsId)
-    .eq('is_active', true)
+  /**
+   * Get download URL for a design
+   */
+  getDownloadUrl: async (designId: string) => {
+    return api<{ download_url: string }>(`/api/designs/${designId}/download`);
+  },
 
-  return { count: count ?? 0, error }
-}
+  /**
+   * Get prompt templates
+   */
+  getTemplates: async (nicheId?: string) => {
+    const qs = nicheId ? `?niche_id=${nicheId}` : '';
+    return api<{ templates: PromptTemplate[] }>(`/api/designs/templates/${qs ? `?${qs}` : ''}`);
+  },
+
+  /**
+   * Create a prompt template
+   */
+  createTemplate: async (data: {
+    name: string;
+    prompt_template: string;
+    niche_id?: string;
+    style_hints?: string;
+    variables?: Record<string, string[]>;
+  }) => {
+    return api<{ template: PromptTemplate }>('/api/designs/templates/', {
+      method: 'POST',
+      body: data,
+    });
+  },
+
+  /**
+   * Update a prompt template
+   */
+  updateTemplate: async (templateId: string, data: Partial<PromptTemplate>) => {
+    return api<{ template: PromptTemplate }>(`/api/designs/templates/${templateId}`, {
+      method: 'PUT',
+      body: data,
+    });
+  },
+
+  /**
+   * Delete a prompt template
+   */
+  deleteTemplate: async (templateId: string) => {
+    return api<{ success: boolean }>(`/api/designs/templates/${templateId}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+// =====================================================
+// HEALTH CHECK
+// =====================================================
+
+export const healthApi = {
+  check: async () => {
+    return api<{ status: string; timestamp: string }>('/health');
+  },
+  
+  ready: async () => {
+    return api<{ status: string; checks: Record<string, boolean> }>('/health/ready');
+  },
+};
+
+// Default export for backward compatibility
+export default {
+  get: apiClient.get,
+  post: apiClient.post,
+  put: apiClient.put,
+  delete: apiClient.delete,
+};

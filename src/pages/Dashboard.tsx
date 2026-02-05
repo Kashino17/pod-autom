@@ -10,6 +10,7 @@ import {
 } from '@src/components/dashboard'
 import { SubscriptionBanner, UpgradePrompt } from '@src/components/subscription'
 import { useShops } from '@src/hooks/useShopify'
+import { ShopifyConnectButton } from '@src/components/ShopifyConnectButton'
 import { useDashboardStats } from '@src/hooks/useDashboardStats'
 import { useSubscription } from '@src/contexts/SubscriptionContext'
 
@@ -131,23 +132,20 @@ export default function Dashboard() {
 
         {/* No shop warning */}
         {!shopsLoading && !hasShop && (
-          <div className="p-6 rounded-xl bg-amber-500/10 border border-amber-500/30">
-            <div className="flex items-start gap-4">
+          <div className="p-4 sm:p-6 rounded-xl bg-amber-500/10 border border-amber-500/30">
+            <div className="flex flex-col sm:flex-row items-start gap-4">
               <div className="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
                 <Zap className="w-5 h-5 text-amber-400" />
               </div>
-              <div>
+              <div className="flex-1">
                 <h3 className="text-white font-semibold">Shop verbinden</h3>
                 <p className="text-sm text-zinc-400 mt-1">
                   Verbinde deinen Shopify Store, um mit der Automatisierung zu
                   starten.
                 </p>
-                <Link
-                  to="/onboarding"
-                  className="inline-block mt-3 text-sm text-amber-400 hover:text-amber-300"
-                >
-                  Jetzt einrichten →
-                </Link>
+                <div className="mt-3">
+                  <ShopifyConnectButton className="text-sm bg-amber-500 hover:bg-amber-600" />
+                </div>
               </div>
             </div>
           </div>

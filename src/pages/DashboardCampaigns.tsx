@@ -436,7 +436,7 @@ export default function DashboardCampaigns() {
   // Filter campaigns
   const filteredCampaigns = statusFilter === 'all'
     ? campaigns
-    : campaigns.filter((c) => c.status === statusFilter)
+    : campaigns.filter((c: Campaign) => c.status === statusFilter)
 
   const handleCreate = (data: CreateCampaignData) => {
     createCampaign(data, {
@@ -583,7 +583,7 @@ export default function DashboardCampaigns() {
               </div>
             ) : (
               <div className="grid gap-4">
-                {filteredCampaigns.map((campaign) => (
+                {filteredCampaigns.map((campaign: Campaign) => (
                   <CampaignCard
                     key={campaign.id}
                     campaign={campaign}

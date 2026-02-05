@@ -34,6 +34,9 @@ export interface Niche {
   niche_name: string
   niche_slug: string
   is_active: boolean
+  language?: string
+  auto_generate?: boolean
+  daily_limit?: number
   created_at: string
 }
 
@@ -56,7 +59,7 @@ export function useShops() {
     queryKey: ['pod-autom-shops'],
     queryFn: async () => {
       const response = await api.get<{ success: boolean; shops: Shop[] }>(
-        '/api/pod-autom/shops'
+        '/api/shopify/shops'
       )
       if (!response.success) {
         throw new Error('Failed to fetch shops')
@@ -74,7 +77,7 @@ export function useShops() {
       internal_name?: string
     }) => {
       const response = await api.post<{ success: boolean; shop: Shop; error?: string }>(
-        '/api/pod-autom/shops',
+        '/api/shopify/shops',
         data
       )
       if (!response.success) {
@@ -103,7 +106,7 @@ export function useShops() {
   const deleteShopMutation = useMutation({
     mutationFn: async (shopId: string) => {
       const response = await api.delete<{ success: boolean; error?: string }>(
-        `/api/pod-autom/shops/${shopId}`
+        `/api/shopify/shops/${shopId}`
       )
       if (!response.success) {
         throw new Error(response.error || 'Failed to delete shop')
@@ -133,7 +136,7 @@ export function useShops() {
         success: boolean
         status: string
         error?: string
-      }>(`/api/pod-autom/shops/${shopId}/test`)
+      }>(`/api/shopify/shops/${shopId}/sync`)
       return response
     },
     onSuccess: (data) => {
@@ -154,7 +157,7 @@ export function useShops() {
     },
   })
 
-  // Start Shopify OAuth flow
+  // Start Shopify OAuth flow with specific shop domain
   const startOAuthFlow = (shopDomain: string, userId: string) => {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001'
     const cleanDomain = shopDomain
@@ -163,7 +166,13 @@ export function useShops() {
       .replace(/^https?:\/\//, '')
       .replace(/\/$/, '')
 
-    window.location.href = `${apiUrl}/api/pod-autom/shopify/install?shop=${cleanDomain}&user_id=${userId}`
+    window.location.href = `${apiUrl}/api/shopify/install?shop=${cleanDomain}&user_id=${userId}`
+  }
+
+  // Quick install without specifying shop domain (user selects in Shopify)
+  const startQuickInstall = (userId: string) => {
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001'
+    window.location.href = `${apiUrl}/api/shopify/install?user_id=${userId}`
   }
 
   return {
@@ -178,6 +187,7 @@ export function useShops() {
     testConnection: testConnectionMutation.mutate,
     isTesting: testConnectionMutation.isPending,
     startOAuthFlow,
+    startQuickInstall,
   }
 }
 
@@ -304,6 +314,35 @@ export function useNiches(settingsId: string | null) {
     },
   })
 
+  // Update niche mutation
+  const updateNicheMutation = useMutation({
+    mutationFn: async ({ nicheId, data }: { nicheId: string; data: Record<string, unknown> }) => {
+      if (!settingsId) throw new Error('No settings selected')
+      const response = await api.put<{ success: boolean; niche: Niche; error?: string }>(
+        `/api/pod-autom/niches/${settingsId}/${nicheId}`,
+        data
+      )
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to update niche')
+      }
+      return response.niche
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pod-autom-niches', settingsId] })
+      addToast({
+        type: 'success',
+        title: 'Nische aktualisiert',
+      })
+    },
+    onError: (error: Error) => {
+      addToast({
+        type: 'error',
+        title: 'Fehler',
+        description: error.message,
+      })
+    },
+  })
+
   // Delete niche mutation
   const deleteNicheMutation = useMutation({
     mutationFn: async (nicheId: string) => {
@@ -337,6 +376,8 @@ export function useNiches(settingsId: string | null) {
     error,
     createNiche: createNicheMutation.mutate,
     isCreating: createNicheMutation.isPending,
+    updateNiche: updateNicheMutation.mutate,
+    isUpdating: updateNicheMutation.isPending,
     deleteNiche: deleteNicheMutation.mutate,
     isDeleting: deleteNicheMutation.isPending,
   }

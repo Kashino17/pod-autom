@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '@src/contexts/AuthContext'
 import { useShops } from '@src/hooks/useShopify'
-import { Store, Loader2, ExternalLink, Key } from 'lucide-react'
+import { Store, Loader2, ExternalLink, Key, Zap } from 'lucide-react'
 
 // =====================================================
 // SHOPIFY CONNECT BUTTON
@@ -21,11 +21,18 @@ export function ShopifyConnectButton({
 
   const [showModal, setShowModal] = useState(false)
   const [shopDomain, setShopDomain] = useState('')
-  const [connectionMode, setConnectionMode] = useState<'oauth' | 'manual'>('oauth')
+  const [connectionMode, setConnectionMode] = useState<'quick' | 'domain' | 'manual'>('quick')
 
   const handleOAuthConnect = () => {
     if (!shopDomain.trim() || !user?.id) return
     startOAuthFlow(shopDomain, user.id)
+  }
+
+  // Quick install: Opens Shopify admin to select shop
+  const handleQuickInstall = () => {
+    if (!user?.id) return
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001'
+    window.location.href = `${apiUrl}/api/shopify/install?user_id=${user.id}`
   }
 
   return (
@@ -62,35 +69,81 @@ export function ShopifyConnectButton({
             {/* Connection mode tabs */}
             <div className="flex gap-2 mb-6">
               <button
-                onClick={() => setConnectionMode('oauth')}
-                className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
-                  connectionMode === 'oauth'
+                onClick={() => setConnectionMode('quick')}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                  connectionMode === 'quick'
                     ? 'bg-violet-500 text-white'
                     : 'bg-zinc-800 text-zinc-400 hover:text-white'
                 }`}
               >
-                <div className="flex items-center justify-center gap-2">
+                <div className="flex items-center justify-center gap-1">
+                  <Zap className="w-4 h-4" />
+                  Schnell
+                </div>
+              </button>
+              <button
+                onClick={() => setConnectionMode('domain')}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                  connectionMode === 'domain'
+                    ? 'bg-violet-500 text-white'
+                    : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-1">
                   <ExternalLink className="w-4 h-4" />
-                  OAuth (Empfohlen)
+                  Domain
                 </div>
               </button>
               <button
                 onClick={() => setConnectionMode('manual')}
-                className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
                   connectionMode === 'manual'
                     ? 'bg-violet-500 text-white'
                     : 'bg-zinc-800 text-zinc-400 hover:text-white'
                 }`}
               >
-                <div className="flex items-center justify-center gap-2">
+                <div className="flex items-center justify-center gap-1">
                   <Key className="w-4 h-4" />
-                  Access Token
+                  Token
                 </div>
               </button>
             </div>
 
-            {/* OAuth Mode */}
-            {connectionMode === 'oauth' && (
+            {/* Quick Install Mode (Recommended) */}
+            {connectionMode === 'quick' && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <p className="text-sm text-emerald-300 font-medium mb-2">
+                    ⚡ Ein-Klick Installation
+                  </p>
+                  <p className="text-sm text-zinc-400">
+                    Du wirst zu Shopify weitergeleitet und kannst dort deinen Shop auswählen.
+                    Die App wird automatisch mit allen nötigen Berechtigungen installiert.
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-lg bg-zinc-800/50">
+                  <p className="text-xs text-zinc-400 font-medium mb-2">Berechtigungen:</p>
+                  <ul className="text-xs text-zinc-500 space-y-1">
+                    <li>✓ Produkte lesen & erstellen</li>
+                    <li>✓ Inventar verwalten</li>
+                    <li>✓ Bestellungen lesen</li>
+                    <li>✓ Dateien hochladen</li>
+                  </ul>
+                </div>
+
+                <button
+                  onClick={handleQuickInstall}
+                  className="btn-primary w-full py-3 bg-emerald-500 hover:bg-emerald-600"
+                >
+                  <Zap className="w-4 h-4 mr-2" />
+                  Jetzt mit Shopify verbinden
+                </button>
+              </div>
+            )}
+
+            {/* Domain Mode */}
+            {connectionMode === 'domain' && (
               <div className="space-y-4">
                 <div>
                   <label htmlFor="shopDomain" className="label">
@@ -111,14 +164,8 @@ export function ShopifyConnectButton({
 
                 <div className="p-4 rounded-lg bg-violet-500/10 border border-violet-500/20">
                   <p className="text-sm text-violet-300">
-                    Du wirst zu Shopify weitergeleitet, um die Verbindung zu autorisieren.
-                    Dabei werden folgende Berechtigungen angefragt:
+                    Du wirst direkt zu deinem Shop weitergeleitet um die Verbindung zu autorisieren.
                   </p>
-                  <ul className="mt-2 text-xs text-zinc-400 space-y-1">
-                    <li>• Produkte lesen und erstellen</li>
-                    <li>• Bestellungen lesen</li>
-                    <li>• Inventar lesen</li>
-                  </ul>
                 </div>
 
                 <button

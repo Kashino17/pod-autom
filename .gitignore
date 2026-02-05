@@ -40,3 +40,4 @@ coverage
 
 # Debug
 *.tsbuildinfo
+backend/.env

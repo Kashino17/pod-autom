@@ -1,76 +1,45 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@src/contexts/AuthContext'
-import { api } from '@src/lib/api'
+import { supabase } from '@src/lib/supabase'
 import { useToastStore } from '@src/lib/store'
 import type { NicheWithStats } from '@src/components/dashboard/NicheSelector'
 
 // =====================================================
-// MOCK DATA GENERATOR
+// LOCAL STORAGE KEY (for demo mode without auth)
 // =====================================================
 
-function generateMockNiches(): NicheWithStats[] {
-  return [
-    {
-      id: '1',
-      name: 'Fitness & Sport',
-      slug: 'fitness-sport',
-      isActive: true,
-      productCount: 15,
-      impressions: 12450,
-      sales: 23,
-      revenue: 689.77,
-      trend: 'up',
-      createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: '2',
-      name: 'Yoga & Meditation',
-      slug: 'yoga-meditation',
-      isActive: true,
-      productCount: 12,
-      impressions: 8920,
-      sales: 18,
-      revenue: 539.82,
-      trend: 'up',
-      createdAt: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: '3',
-      name: 'Gaming',
-      slug: 'gaming',
-      isActive: true,
-      productCount: 8,
-      impressions: 5670,
-      sales: 9,
-      revenue: 269.91,
-      trend: 'neutral',
-      createdAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: '4',
-      name: 'Kaffee Liebhaber',
-      slug: 'kaffee-liebhaber',
-      isActive: true,
-      productCount: 6,
-      impressions: 3240,
-      sales: 5,
-      revenue: 149.95,
-      trend: 'down',
-      createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: '5',
-      name: 'Haustiere',
-      slug: 'haustiere',
-      isActive: false,
-      productCount: 4,
-      impressions: 1890,
-      sales: 2,
-      revenue: 59.98,
-      trend: 'down',
-      createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-  ]
+const LOCAL_STORAGE_KEY = 'pod_autom_niches_demo'
+
+// =====================================================
+// HELPER FUNCTIONS
+// =====================================================
+
+function getLocalNiches(): NicheWithStats[] {
+  try {
+    const stored = localStorage.getItem(LOCAL_STORAGE_KEY)
+    return stored ? JSON.parse(stored) : []
+  } catch {
+    return []
+  }
+}
+
+function setLocalNiches(niches: NicheWithStats[]) {
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(niches))
+}
+
+function mapDbNicheToStats(niche: any): NicheWithStats {
+  return {
+    id: niche.id,
+    name: niche.niche_name,
+    slug: niche.niche_slug || '',
+    isActive: niche.is_active ?? true,
+    productCount: niche.total_products ?? 0,
+    impressions: 0, // Would come from analytics
+    sales: niche.total_sales ?? 0,
+    revenue: parseFloat(niche.total_revenue) || 0,
+    trend: 'neutral',
+    createdAt: niche.created_at,
+  }
 }
 
 // =====================================================
@@ -82,68 +51,85 @@ export function useNicheStats(settingsId: string | null) {
   const addToast = useToastStore((state) => state.addToast)
   const queryClient = useQueryClient()
 
+  const isDemo = !settingsId || !session
+
   // Fetch niches with stats
   const {
     data: niches,
     isLoading,
     error,
   } = useQuery({
-    queryKey: ['niche-stats', settingsId],
+    queryKey: ['niche-stats', settingsId, isDemo],
     queryFn: async () => {
-      if (!settingsId) {
-        return generateMockNiches()
+      // Demo mode: use localStorage
+      if (isDemo) {
+        return getLocalNiches()
       }
 
-      try {
-        const response = await api.get<{
-          success: boolean
-          niches: NicheWithStats[]
-        }>(`/api/pod-autom/niches/${settingsId}/stats`)
-        return response.niches
-      } catch {
-        // Fall back to mock data
-        return generateMockNiches()
+      // Production mode: fetch from Supabase
+      const { data, error } = await (supabase
+        .from('pod_autom_niches') as any)
+        .select('*')
+        .eq('settings_id', settingsId)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Error fetching niches:', error)
+        // Fall back to localStorage
+        return getLocalNiches()
       }
+
+      return data.map(mapDbNicheToStats)
     },
-    enabled: !!session,
+    enabled: true,
     staleTime: 1000 * 60 * 5,
   })
 
   // Add niche mutation
   const addNicheMutation = useMutation({
     mutationFn: async (nicheName: string) => {
-      if (!settingsId) {
-        // Mock adding for demo
-        const newNiche: NicheWithStats = {
-          id: Date.now().toString(),
-          name: nicheName,
-          slug: nicheName.toLowerCase().replace(/\s+/g, '-'),
-          isActive: true,
-          productCount: 0,
-          impressions: 0,
-          sales: 0,
-          revenue: 0,
-          trend: 'neutral',
-          createdAt: new Date().toISOString(),
-        }
+      const newNiche: NicheWithStats = {
+        id: crypto.randomUUID(),
+        name: nicheName,
+        slug: nicheName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+        isActive: true,
+        productCount: 0,
+        impressions: 0,
+        sales: 0,
+        revenue: 0,
+        trend: 'neutral',
+        createdAt: new Date().toISOString(),
+      }
+
+      // Demo mode: save to localStorage
+      if (isDemo) {
+        const current = getLocalNiches()
+        const updated = [newNiche, ...current]
+        setLocalNiches(updated)
         return newNiche
       }
 
-      const response = await api.post<{
-        success: boolean
-        niche: NicheWithStats
-        error?: string
-      }>(`/api/pod-autom/niches/${settingsId}`, { niche_name: nicheName })
+      // Production mode: save to Supabase
+      const { data, error } = await (supabase
+        .from('pod_autom_niches') as any)
+        .insert({
+          settings_id: settingsId,
+          niche_name: nicheName,
+          is_active: true,
+        })
+        .select()
+        .single()
 
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to add niche')
+      if (error) {
+        throw new Error(error.message)
       }
-      return response.niche
+
+      return mapDbNicheToStats(data)
     },
     onSuccess: (newNiche) => {
       queryClient.setQueryData<NicheWithStats[]>(
-        ['niche-stats', settingsId],
-        (old) => [...(old || []), newNiche]
+        ['niche-stats', settingsId, isDemo],
+        (old) => [newNiche, ...(old || [])]
       )
       addToast({
         type: 'success',
@@ -163,23 +149,31 @@ export function useNicheStats(settingsId: string | null) {
   // Toggle niche mutation
   const toggleNicheMutation = useMutation({
     mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
-      if (!settingsId) {
+      // Demo mode: update localStorage
+      if (isDemo) {
+        const current = getLocalNiches()
+        const updated = current.map((n) =>
+          n.id === id ? { ...n, isActive: active } : n
+        )
+        setLocalNiches(updated)
         return { id, active }
       }
 
-      const response = await api.put<{ success: boolean; error?: string }>(
-        `/api/pod-autom/niches/${settingsId}/${id}`,
-        { is_active: active }
-      )
+      // Production mode: update Supabase
+      const { error } = await (supabase
+        .from('pod_autom_niches') as any)
+        .update({ is_active: active })
+        .eq('id', id)
 
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to update niche')
+      if (error) {
+        throw new Error(error.message)
       }
+
       return { id, active }
     },
     onSuccess: ({ id, active }) => {
       queryClient.setQueryData<NicheWithStats[]>(
-        ['niche-stats', settingsId],
+        ['niche-stats', settingsId, isDemo],
         (old) =>
           old?.map((n) => (n.id === id ? { ...n, isActive: active } : n)) || []
       )
@@ -200,22 +194,29 @@ export function useNicheStats(settingsId: string | null) {
   // Delete niche mutation
   const deleteNicheMutation = useMutation({
     mutationFn: async (id: string) => {
-      if (!settingsId) {
+      // Demo mode: remove from localStorage
+      if (isDemo) {
+        const current = getLocalNiches()
+        const updated = current.filter((n) => n.id !== id)
+        setLocalNiches(updated)
         return id
       }
 
-      const response = await api.delete<{ success: boolean; error?: string }>(
-        `/api/pod-autom/niches/${settingsId}/${id}`
-      )
+      // Production mode: delete from Supabase
+      const { error } = await (supabase
+        .from('pod_autom_niches') as any)
+        .delete()
+        .eq('id', id)
 
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to delete niche')
+      if (error) {
+        throw new Error(error.message)
       }
+
       return id
     },
     onSuccess: (id) => {
       queryClient.setQueryData<NicheWithStats[]>(
-        ['niche-stats', settingsId],
+        ['niche-stats', settingsId, isDemo],
         (old) => old?.filter((n) => n.id !== id) || []
       )
       addToast({
@@ -236,6 +237,7 @@ export function useNicheStats(settingsId: string | null) {
     niches: niches || [],
     isLoading,
     error,
+    isDemo,
     addNiche: addNicheMutation.mutate,
     isAdding: addNicheMutation.isPending,
     toggleNiche: (id: string, active: boolean) =>

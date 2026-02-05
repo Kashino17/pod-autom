@@ -3,7 +3,6 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig({
-  base: '/pod-autom/',
   plugins: [
     react({
       // React 19 Compiler (wenn verfügbar)
