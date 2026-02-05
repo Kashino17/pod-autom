@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '@src/contexts/AuthContext'
 import { useShops } from '@src/hooks/useShopify'
-import { Store, Loader2, ExternalLink, Key, Zap } from 'lucide-react'
+import { Store, Loader2, Key, HelpCircle, ExternalLink } from 'lucide-react'
 
 // =====================================================
 // SHOPIFY CONNECT BUTTON
@@ -21,18 +21,21 @@ export function ShopifyConnectButton({
 
   const [showModal, setShowModal] = useState(false)
   const [shopDomain, setShopDomain] = useState('')
-  const [connectionMode, setConnectionMode] = useState<'quick' | 'domain' | 'manual'>('quick')
+  const [connectionMode, setConnectionMode] = useState<'domain' | 'manual'>('domain')
+  const [showHelp, setShowHelp] = useState(false)
 
   const handleOAuthConnect = () => {
     if (!shopDomain.trim() || !user?.id) return
     startOAuthFlow(shopDomain, user.id)
   }
 
-  // Quick install: Opens Shopify admin to select shop
-  const handleQuickInstall = () => {
-    if (!user?.id) return
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001'
-    window.location.href = `${apiUrl}/api/shopify/install?user_id=${user.id}`
+  // Format shop domain for display
+  const formatDomain = (input: string) => {
+    // Remove protocol if present
+    let domain = input.replace(/^https?:\/\//, '')
+    // Remove trailing slashes
+    domain = domain.replace(/\/+$/, '')
+    return domain
   }
 
   return (
@@ -55,7 +58,7 @@ export function ShopifyConnectButton({
           />
 
           {/* Modal content */}
-          <div className="relative w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-800 p-6 shadow-xl">
+          <div className="relative w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-800 p-6 shadow-xl max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="mb-6">
               <h2 className="text-xl font-bold text-white">
@@ -69,19 +72,6 @@ export function ShopifyConnectButton({
             {/* Connection mode tabs */}
             <div className="flex gap-2 mb-6">
               <button
-                onClick={() => setConnectionMode('quick')}
-                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                  connectionMode === 'quick'
-                    ? 'bg-violet-500 text-white'
-                    : 'bg-zinc-800 text-zinc-400 hover:text-white'
-                }`}
-              >
-                <div className="flex items-center justify-center gap-1">
-                  <Zap className="w-4 h-4" />
-                  Schnell
-                </div>
-              </button>
-              <button
                 onClick={() => setConnectionMode('domain')}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
                   connectionMode === 'domain'
@@ -90,8 +80,8 @@ export function ShopifyConnectButton({
                 }`}
               >
                 <div className="flex items-center justify-center gap-1">
-                  <ExternalLink className="w-4 h-4" />
-                  Domain
+                  <Store className="w-4 h-4" />
+                  Shop Domain
                 </div>
               </button>
               <button
@@ -104,77 +94,88 @@ export function ShopifyConnectButton({
               >
                 <div className="flex items-center justify-center gap-1">
                   <Key className="w-4 h-4" />
-                  Token
+                  Manuell
                 </div>
               </button>
             </div>
 
-            {/* Quick Install Mode (Recommended) */}
-            {connectionMode === 'quick' && (
-              <div className="space-y-4">
-                <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                  <p className="text-sm text-emerald-300 font-medium mb-2">
-                    ⚡ Ein-Klick Installation
-                  </p>
-                  <p className="text-sm text-zinc-400">
-                    Du wirst zu Shopify weitergeleitet und kannst dort deinen Shop auswählen.
-                    Die App wird automatisch mit allen nötigen Berechtigungen installiert.
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-lg bg-zinc-800/50">
-                  <p className="text-xs text-zinc-400 font-medium mb-2">Berechtigungen:</p>
-                  <ul className="text-xs text-zinc-500 space-y-1">
-                    <li>✓ Produkte lesen & erstellen</li>
-                    <li>✓ Inventar verwalten</li>
-                    <li>✓ Bestellungen lesen</li>
-                    <li>✓ Dateien hochladen</li>
-                  </ul>
-                </div>
-
-                <button
-                  onClick={handleQuickInstall}
-                  className="btn-primary w-full py-3 bg-emerald-500 hover:bg-emerald-600"
-                >
-                  <Zap className="w-4 h-4 mr-2" />
-                  Jetzt mit Shopify verbinden
-                </button>
-              </div>
-            )}
-
-            {/* Domain Mode */}
+            {/* Domain Mode (Primary) */}
             {connectionMode === 'domain' && (
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="shopDomain" className="label">
+                  <label htmlFor="shopDomain" className="label flex items-center gap-2">
                     Shop Domain
+                    <button
+                      type="button"
+                      onClick={() => setShowHelp(!showHelp)}
+                      className="text-zinc-500 hover:text-violet-400 transition-colors"
+                    >
+                      <HelpCircle className="w-4 h-4" />
+                    </button>
                   </label>
                   <input
                     id="shopDomain"
                     type="text"
                     value={shopDomain}
-                    onChange={(e) => setShopDomain(e.target.value)}
+                    onChange={(e) => setShopDomain(formatDomain(e.target.value))}
                     className="input"
                     placeholder="dein-shop.myshopify.com"
                   />
-                  <p className="text-xs text-zinc-500 mt-1">
-                    Gib deine Shopify Domain ein (z.B. dein-shop oder dein-shop.myshopify.com)
-                  </p>
                 </div>
 
-                <div className="p-4 rounded-lg bg-violet-500/10 border border-violet-500/20">
-                  <p className="text-sm text-violet-300">
-                    Du wirst direkt zu deinem Shop weitergeleitet um die Verbindung zu autorisieren.
+                {/* Help Section */}
+                {showHelp && (
+                  <div className="p-4 rounded-lg bg-violet-500/10 border border-violet-500/20 space-y-3">
+                    <p className="text-sm font-medium text-violet-300">
+                      📍 Wo finde ich meine Shop Domain?
+                    </p>
+                    <ol className="text-sm text-zinc-400 space-y-2 list-decimal list-inside">
+                      <li>Gehe zu <strong>admin.shopify.com</strong></li>
+                      <li>Klicke unten links auf <strong>Einstellungen</strong></li>
+                      <li>Wähle <strong>Domains</strong></li>
+                      <li>Deine <strong>myshopify.com</strong> Domain steht dort</li>
+                    </ol>
+                    <div className="pt-2 border-t border-violet-500/20">
+                      <p className="text-xs text-zinc-500">
+                        Beispiel: <code className="bg-zinc-800 px-1.5 py-0.5 rounded">mein-shop.myshopify.com</code>
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Info box */}
+                <div className="p-4 rounded-lg bg-zinc-800/50 border border-zinc-700/50">
+                  <p className="text-sm text-zinc-300 mb-3">
+                    Nach dem Verbinden erhält POD AutoM Zugriff auf:
                   </p>
+                  <ul className="text-xs text-zinc-400 space-y-1.5">
+                    <li className="flex items-center gap-2">
+                      <span className="text-emerald-400">✓</span> Produkte lesen & erstellen
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="text-emerald-400">✓</span> Inventar verwalten
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="text-emerald-400">✓</span> Bestellungen lesen
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="text-emerald-400">✓</span> Dateien hochladen
+                    </li>
+                  </ul>
                 </div>
 
                 <button
                   onClick={handleOAuthConnect}
                   disabled={!shopDomain.trim()}
-                  className="btn-primary w-full py-3"
+                  className="btn-primary w-full py-3 flex items-center justify-center gap-2"
                 >
+                  <ExternalLink className="w-4 h-4" />
                   Mit Shopify verbinden
                 </button>
+
+                <p className="text-xs text-center text-zinc-500">
+                  Du wirst zu Shopify weitergeleitet um die Verbindung zu bestätigen.
+                </p>
               </div>
             )}
 
@@ -247,6 +248,12 @@ function ManualConnectionForm({ onSuccess }: ManualConnectionFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+        <p className="text-xs text-amber-300">
+          ⚠️ Nur für fortgeschrittene User. Du musst einen Custom App Token in deinem Shopify Admin erstellen.
+        </p>
+      </div>
+
       <div>
         <label htmlFor="manualShopDomain" className="label">
           Shop Domain
@@ -276,8 +283,8 @@ function ManualConnectionForm({ onSuccess }: ManualConnectionFormProps) {
           required
         />
         <p className="text-xs text-zinc-500 mt-1">
-          Erstelle einen Custom App Token in deinem Shopify Admin unter
-          Settings &gt; Apps and sales channels &gt; Develop apps
+          Erstelle einen Custom App Token unter:<br />
+          Settings → Apps → Develop apps → Create app
         </p>
       </div>
 
