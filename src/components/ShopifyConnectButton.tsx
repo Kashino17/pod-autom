@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { useAuth } from '@src/contexts/AuthContext'
-import { useShops } from '@src/hooks/useShopify'
-import { Store, ExternalLink, Zap } from 'lucide-react'
+import { Store, Loader2 } from 'lucide-react'
+import { useUserProfile } from '@src/hooks/useAdmin'
 
 // =====================================================
 // SHOPIFY CONNECT BUTTON
@@ -16,23 +15,52 @@ export function ShopifyConnectButton({
   onConnected,
   className = '',
 }: ShopifyConnectButtonProps) {
-  const { user } = useAuth()
-  const { startOAuthFlow } = useShops()
+  const { profile, updateShopifyDomain, isUpdatingDomain } = useUserProfile()
 
   const [showModal, setShowModal] = useState(false)
   const [shopDomain, setShopDomain] = useState('')
-  const [connectionMode, setConnectionMode] = useState<'quick' | 'domain'>('quick')
+  const [error, setError] = useState<string | null>(null)
 
-  const handleOAuthConnect = () => {
-    if (!shopDomain.trim() || !user?.id) return
-    startOAuthFlow(shopDomain, user.id)
+  // Format domain
+  const formatDomain = (domain: string): string => {
+    let cleaned = domain.trim().toLowerCase()
+    cleaned = cleaned.replace(/^https?:\/\//, '')
+    cleaned = cleaned.replace(/\/+$/, '')
+    if (!cleaned.includes('.myshopify.com')) {
+      cleaned = `${cleaned}.myshopify.com`
+    }
+    return cleaned
   }
 
-  // Quick install: Opens Shopify admin to select shop
-  const handleQuickInstall = () => {
-    if (!user?.id) return
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001'
-    window.location.href = `${apiUrl}/api/shopify/install?user_id=${user.id}`
+  // Handle domain submission
+  const handleSubmit = async () => {
+    setError(null)
+
+    const formattedDomain = formatDomain(shopDomain)
+
+    if (!formattedDomain.match(/^[a-z0-9-]+\.myshopify\.com$/)) {
+      setError('Bitte gib eine gültige Shopify-Domain ein')
+      return
+    }
+
+    try {
+      await updateShopifyDomain(formattedDomain)
+      setShowModal(false)
+      setShopDomain('')
+      onConnected?.()
+    } catch {
+      setError('Fehler beim Speichern. Bitte versuche es erneut.')
+    }
+  }
+
+  // If user already has a domain pending verification
+  if (profile?.shopify_domain && profile?.verification_status === 'pending') {
+    return (
+      <div className={`flex items-center gap-2 text-yellow-400 text-sm ${className}`}>
+        <Loader2 className="w-4 h-4 animate-spin" />
+        Verifizierung ausstehend
+      </div>
+    )
   }
 
   return (
@@ -62,108 +90,58 @@ export function ShopifyConnectButton({
                 Shopify Store verbinden
               </h2>
               <p className="text-sm text-zinc-400 mt-1">
-                Verbinde deinen Shopify Store um loszulegen.
+                Gib deine Shopify-Domain ein um mit der Verknüpfung zu beginnen.
               </p>
             </div>
 
-            {/* Connection mode tabs */}
-            <div className="flex gap-2 mb-6">
-              <button
-                onClick={() => setConnectionMode('quick')}
-                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                  connectionMode === 'quick'
-                    ? 'bg-violet-500 text-white'
-                    : 'bg-zinc-800 text-zinc-400 hover:text-white'
-                }`}
-              >
-                <div className="flex items-center justify-center gap-1">
-                  <Zap className="w-4 h-4" />
-                  Schnell
+            {/* Domain Input */}
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="shopDomain" className="label">
+                  Shop Domain
+                </label>
+                <input
+                  id="shopDomain"
+                  type="text"
+                  value={shopDomain}
+                  onChange={(e) => setShopDomain(e.target.value)}
+                  className="input"
+                  placeholder="dein-shop.myshopify.com"
+                  onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                />
+                <p className="text-xs text-zinc-500 mt-1">
+                  z.B. dein-shop oder dein-shop.myshopify.com
+                </p>
+              </div>
+
+              {error && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                  {error}
                 </div>
-              </button>
+              )}
+
+              <div className="p-4 rounded-lg bg-violet-500/10 border border-violet-500/20">
+                <p className="text-sm text-violet-300">
+                  Nach dem Absenden wird dein Account verifiziert.
+                  Sobald die Verifizierung abgeschlossen ist, erhältst du Zugang zur Shopify-Installation.
+                </p>
+              </div>
+
               <button
-                onClick={() => setConnectionMode('domain')}
-                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                  connectionMode === 'domain'
-                    ? 'bg-violet-500 text-white'
-                    : 'bg-zinc-800 text-zinc-400 hover:text-white'
-                }`}
+                onClick={handleSubmit}
+                disabled={!shopDomain.trim() || isUpdatingDomain}
+                className="btn-primary w-full py-3"
               >
-                <div className="flex items-center justify-center gap-1">
-                  <ExternalLink className="w-4 h-4" />
-                  Domain
-                </div>
+                {isUpdatingDomain ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Wird gespeichert...
+                  </>
+                ) : (
+                  'Domain hinterlegen'
+                )}
               </button>
             </div>
-
-            {/* Quick Install Mode (Recommended) */}
-            {connectionMode === 'quick' && (
-              <div className="space-y-4">
-                <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                  <p className="text-sm text-emerald-300 font-medium mb-2">
-                    Ein-Klick Installation
-                  </p>
-                  <p className="text-sm text-zinc-400">
-                    Du wirst zu Shopify weitergeleitet und kannst dort deinen Shop auswählen.
-                    Die App wird automatisch mit allen nötigen Berechtigungen installiert.
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-lg bg-zinc-800/50">
-                  <p className="text-xs text-zinc-400 font-medium mb-2">Berechtigungen:</p>
-                  <ul className="text-xs text-zinc-500 space-y-1">
-                    <li>Produkte lesen & erstellen</li>
-                    <li>Inventar verwalten</li>
-                    <li>Bestellungen lesen</li>
-                    <li>Dateien hochladen</li>
-                  </ul>
-                </div>
-
-                <button
-                  onClick={handleQuickInstall}
-                  className="btn-primary w-full py-3 bg-emerald-500 hover:bg-emerald-600"
-                >
-                  <Zap className="w-4 h-4 mr-2" />
-                  Jetzt mit Shopify verbinden
-                </button>
-              </div>
-            )}
-
-            {/* Domain Mode */}
-            {connectionMode === 'domain' && (
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="shopDomain" className="label">
-                    Shop Domain
-                  </label>
-                  <input
-                    id="shopDomain"
-                    type="text"
-                    value={shopDomain}
-                    onChange={(e) => setShopDomain(e.target.value)}
-                    className="input"
-                    placeholder="dein-shop.myshopify.com"
-                  />
-                  <p className="text-xs text-zinc-500 mt-1">
-                    Gib deine Shopify Domain ein (z.B. dein-shop oder dein-shop.myshopify.com)
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-lg bg-violet-500/10 border border-violet-500/20">
-                  <p className="text-sm text-violet-300">
-                    Du wirst direkt zu deinem Shop weitergeleitet um die Verbindung zu autorisieren.
-                  </p>
-                </div>
-
-                <button
-                  onClick={handleOAuthConnect}
-                  disabled={!shopDomain.trim()}
-                  className="btn-primary w-full py-3"
-                >
-                  Mit Shopify verbinden
-                </button>
-              </div>
-            )}
 
             {/* Close button */}
             <button
