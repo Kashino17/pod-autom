@@ -1,42 +1,94 @@
-services:
-  # API Service (Flask Backend)
-  - type: web
-    name: reboss-api
-    runtime: python
-    region: frankfurt
-    plan: starter
-    rootDir: backend/api
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn main:app --bind 0.0.0.0:$PORT
-    envVars:
-      - key: PYTHON_VERSION
-        value: "3.11.0"
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_KEY
-        sync: false
-      - key: SUPABASE_ANON_KEY
-        sync: false
-      - key: PINTEREST_APP_ID
-        sync: false
-      - key: PINTEREST_APP_SECRET
-        sync: false
-    healthCheckPath: /health
-    autoDeploy: true
+# POD AutoM - Render Deployment Configuration
+# https://render.com/docs/blueprint-spec
 
-  # Frontend (React/Vite) - Static Site
+services:
+  # =====================================================
+  # FRONTEND - Static Site
+  # =====================================================
   - type: web
-    name: reboss-frontend
+    name: pod-autom-frontend
     runtime: static
-    buildCommand: npm install && npm run build
-    staticPublishPath: dist
-    envVars:
-      - key: VITE_SUPABASE_URL
-        sync: false
-      - key: VITE_SUPABASE_ANON_KEY
-        sync: false
+    buildCommand: npm install && npm run build -- --base=/
+    staticPublishPath: ./dist
+    pullRequestPreviewsEnabled: true
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
-    autoDeploy: true
+    envVars:
+      # Supabase Configuration (required at build time for Vite)
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      # API URL
+      - key: VITE_API_URL
+        value: https://pod-autom-api.onrender.com
+
+  # =====================================================
+  # BACKEND API - Web Service
+  # =====================================================
+  - type: web
+    name: pod-autom-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SHOPIFY_CLIENT_ID
+        sync: false
+      - key: SHOPIFY_CLIENT_SECRET
+        sync: false
+      - key: PINTEREST_CLIENT_ID
+        sync: false
+      - key: PINTEREST_CLIENT_SECRET
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: FRONTEND_URL
+        value: https://pod-autom-frontend.onrender.com
+
+  # =====================================================
+  # CRON JOBS
+  # =====================================================
+  
+  # Design Generation Job - Check user schedules and generate designs
+  - type: cron
+    name: pod-autom-design-generator
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    schedule: "*/30 * * * *"  # Every 30 minutes (checks user schedules)
+    command: python -m jobs.generate_designs
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_IMAGE_MODEL
+        value: gpt-image-1.5
+      - key: OPENAI_IMAGE_QUALITY
+        value: high
+      - key: OPENAI_TEXT_MODEL
+        value: gpt-5.1-mini
+      - key: MAX_DESIGNS_PER_RUN
+        value: "50"

@@ -1,68 +1,61 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="de" class="dark">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ReBoss Manager</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-              mono: ['JetBrains Mono', 'monospace'],
-            },
-            colors: {
-              background: '#09090b', // Zinc 950
-              surface: '#18181b',    // Zinc 900
-              surfaceHighlight: '#27272a', // Zinc 800
-              border: '#27272a',     // Zinc 800
-              primary: '#3b82f6',    // Blue 500
-              primaryHover: '#2563eb', // Blue 600
-              accent: '#8b5cf6',     // Violet 500
-            },
-            boxShadow: {
-              'glow': '0 0 20px -5px rgba(59, 130, 246, 0.5)',
-            }
-          }
-        }
-      }
+
+    <!-- Primary Meta Tags -->
+    <title>POD AutoM - Vollautomatisierte Print-on-Demand Lösung</title>
+    <meta name="title" content="POD AutoM - Vollautomatisierte Print-on-Demand Lösung" />
+    <meta name="description" content="KI-generierte Designs, automatische Produkt-Erstellung und intelligentes Ad-Management. Starte dein passives Einkommen mit nur wenigen Klicks." />
+    <meta name="keywords" content="Print-on-Demand, POD, Shopify, Automatisierung, KI, Passives Einkommen" />
+    <meta name="author" content="POD AutoM" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://podautom.de/" />
+    <meta property="og:title" content="POD AutoM - Dein POD-Shop auf Autopilot" />
+    <meta property="og:description" content="KI-generierte Designs, automatische Produkt-Erstellung und intelligentes Ad-Management." />
+    <meta property="og:image" content="https://podautom.de/og-image.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://podautom.de/" />
+    <meta property="twitter:title" content="POD AutoM - Dein POD-Shop auf Autopilot" />
+    <meta property="twitter:description" content="KI-generierte Designs, automatische Produkt-Erstellung und intelligentes Ad-Management." />
+    <meta property="twitter:image" content="https://podautom.de/og-image.png" />
+
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#000000" />
+
+    <!-- Preconnect to External Resources -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- Font Loading -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- Structured Data for SEO -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "POD AutoM",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "offers": {
+        "@type": "AggregateOffer",
+        "lowPrice": "200",
+        "highPrice": "835",
+        "priceCurrency": "EUR"
+      },
+      "description": "Vollautomatisierte Print-on-Demand Lösung für Shopify Stores"
+    }
     </script>
-    <style>
-      /* Smooth Scrollbar */
-      ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #27272a;
-        border-radius: 3px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #3f3f46;
-      }
-    </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
-  <body class="bg-background text-zinc-300 antialiased overflow-hidden h-screen w-screen flex">
-    <div id="root" class="flex-1 flex h-full"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>

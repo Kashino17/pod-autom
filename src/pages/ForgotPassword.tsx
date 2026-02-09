@@ -1,132 +1,153 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
-import { Mail, AlertCircle, Loader2, Check, ArrowLeft, LayoutGrid } from 'lucide-react'
+import { useAuth } from '@src/contexts/AuthContext'
+import { useToastStore } from '@src/lib/store'
+import { isValidEmail } from '@src/utils/validation'
+import { Mail, Loader2, ArrowLeft, CheckCircle } from 'lucide-react'
 
-export function ForgotPassword() {
-  const [email, setEmail] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-
+export default function ForgotPassword() {
   const { resetPassword } = useAuth()
+  const addToast = useToastStore((state) => state.addToast)
 
+  // Form state
+  const [email, setEmail] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
+
+  // Validation
+  const isEmailValid = email.length === 0 || isValidEmail(email)
+  const canSubmit = isValidEmail(email) && !isSubmitting
+
+  // Handle form submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError(null)
-    setIsLoading(true)
+    if (!canSubmit) return
 
-    try {
-      await resetPassword(email)
-      setSuccess(true)
-    } catch (err: any) {
-      setError(err.message || 'Fehler beim Zurücksetzen des Passworts')
-    } finally {
-      setIsLoading(false)
+    setIsSubmitting(true)
+    const result = await resetPassword(email)
+
+    if (result.success) {
+      setEmailSent(true)
+    } else {
+      addToast({
+        type: 'error',
+        title: 'Fehler',
+        description: result.message || 'Ein Fehler ist aufgetreten',
+      })
     }
+    setIsSubmitting(false)
   }
 
-  if (success) {
+  // Success view
+  if (emailSent) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-background p-4">
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(39,39,42,0.3)_1px,transparent_1px),linear-gradient(90deg,rgba(39,39,42,0.3)_1px,transparent_1px)] bg-[size:64px_64px] pointer-events-none" />
-
-        <div className="relative z-10 w-full max-w-md text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/20 mb-6 border border-green-500/30">
-            <Check className="w-8 h-8 text-green-400" />
+      <div className="min-h-screen bg-black flex items-center justify-center p-8">
+        <div className="max-w-md w-full text-center">
+          <div className="mb-8">
+            <div className="w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-6">
+              <CheckCircle className="w-10 h-10 text-emerald-500" />
+            </div>
+            <h1 className="text-3xl font-bold text-white mb-4">
+              E-Mail gesendet!
+            </h1>
+            <p className="text-zinc-400 mb-2">
+              Wenn ein Konto mit
+            </p>
+            <p className="text-white font-medium mb-4">{email}</p>
+            <p className="text-zinc-400">
+              existiert, haben wir dir einen Link zum Zuruecksetzen deines Passworts gesendet.
+            </p>
           </div>
-          <h1 className="text-xl font-bold text-zinc-100 mb-3">E-Mail gesendet!</h1>
-          <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
-            Falls ein Account mit dieser E-Mail existiert, haben wir dir einen Link zum Zurücksetzen deines Passworts gesendet.
-            Bitte überprüfe dein Postfach.
-          </p>
-          <Link
-            to="/login"
-            className="inline-flex items-center justify-center px-5 py-2.5 bg-primary hover:bg-primaryHover text-white text-sm font-medium rounded-lg transition-all shadow-glow"
-          >
-            Zurück zur Anmeldung
-          </Link>
+
+          <div className="space-y-4">
+            <Link to="/login" className="btn-primary w-full py-3 block">
+              Zurueck zum Login
+            </Link>
+            <button
+              onClick={() => setEmailSent(false)}
+              className="text-sm text-zinc-500 hover:text-zinc-300"
+            >
+              Andere E-Mail-Adresse verwenden
+            </button>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-background p-4">
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(39,39,42,0.3)_1px,transparent_1px),linear-gradient(90deg,rgba(39,39,42,0.3)_1px,transparent_1px)] bg-[size:64px_64px] pointer-events-none" />
-
-      <div className="relative z-10 w-full max-w-md">
-        {/* Back Link */}
+    <div className="min-h-screen bg-black flex items-center justify-center p-8">
+      <div className="max-w-md w-full">
+        {/* Back link */}
         <Link
           to="/login"
-          className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-300 mb-6 text-sm transition-colors"
+          className="inline-flex items-center gap-2 text-zinc-400 hover:text-white transition-colors mb-8"
         >
           <ArrowLeft className="w-4 h-4" />
-          Zurück zur Anmeldung
+          <span className="text-sm">Zurueck zum Login</span>
         </Link>
 
         {/* Header */}
-        <div className="mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-zinc-100 mb-4 shadow-lg">
-            <LayoutGrid className="w-7 h-7 text-zinc-900" />
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 rounded-full bg-violet-500/10 flex items-center justify-center mx-auto mb-6">
+            <Mail className="w-8 h-8 text-violet-500" />
           </div>
-          <h1 className="text-xl font-bold text-zinc-100 mb-2">Passwort vergessen?</h1>
-          <p className="text-zinc-500 text-sm">
-            Kein Problem! Gib deine E-Mail-Adresse ein und wir senden dir einen Link zum Zurücksetzen.
+          <h1 className="text-3xl font-bold text-white mb-2">
+            Passwort vergessen?
+          </h1>
+          <p className="text-zinc-400">
+            Kein Problem! Gib deine E-Mail-Adresse ein und wir senden dir einen Link zum Zuruecksetzen.
           </p>
         </div>
 
-        {/* Form Card */}
-        <div className="bg-surface border border-border rounded-xl p-6 shadow-xl">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Error Alert */}
-            {error && (
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span className="text-sm">{error}</span>
-              </div>
-            )}
-
-            {/* Email Field */}
-            <div>
-              <label htmlFor="email" className="block text-xs font-medium text-zinc-400 mb-1.5 uppercase tracking-wide">
-                E-Mail Adresse
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@beispiel.de"
-                  required
-                  className="w-full pl-10 pr-4 py-2.5 bg-surfaceHighlight border border-border rounded-lg text-zinc-200 placeholder-zinc-600 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                />
-              </div>
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Email */}
+          <div>
+            <label htmlFor="email" className="label">
+              E-Mail-Adresse
+            </label>
+            <div className="input-wrapper">
+              <Mail className="input-icon-left w-5 h-5" />
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={`input-with-icon-left ${
+                  !isEmailValid ? 'border-red-500 focus:border-red-500' : ''
+                }`}
+                placeholder="deine@email.de"
+                autoComplete="email"
+                autoFocus
+                required
+              />
             </div>
+            {!isEmailValid && (
+              <p className="error-text">Bitte gib eine gueltige E-Mail ein</p>
+            )}
+          </div>
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-2.5 px-4 bg-primary hover:bg-primaryHover disabled:bg-primary/50 disabled:cursor-not-allowed text-white font-medium text-sm rounded-lg transition-all flex items-center justify-center gap-2 shadow-glow"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Senden...
-                </>
-              ) : (
-                'Link senden'
-              )}
-            </button>
-          </form>
-        </div>
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="btn-primary w-full py-3"
+          >
+            {isSubmitting ? (
+              <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+            ) : (
+              'Link senden'
+            )}
+          </button>
+        </form>
 
-        {/* Footer */}
-        <p className="text-center text-zinc-600 text-xs mt-6">
-          &copy; {new Date().getFullYear()} ReBoss. Alle Rechte vorbehalten.
+        {/* Help text */}
+        <p className="text-center text-zinc-500 text-sm mt-8">
+          Du erinnerst dich wieder?{' '}
+          <Link to="/login" className="text-violet-400 hover:text-violet-300">
+            Jetzt anmelden
+          </Link>
         </p>
       </div>
     </div>

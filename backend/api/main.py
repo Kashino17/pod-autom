@@ -1,96 +1,105 @@
 """
-ReBoss API Service
-Flask API for Shopify proxy and OAuth flows
+POD AutoM Backend - Main FastAPI Application
 """
 import os
-from flask import Flask, jsonify
-from flask_cors import CORS
-from dotenv import load_dotenv
+import sys
 
-# Load environment variables
-load_dotenv()
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import route blueprints
-from routes.shopify import shopify_bp
-from routes.pinterest_oauth import pinterest_bp
-from routes.auth import auth_bp
-from routes.pod_autom import pod_autom_bp
-from routes.stripe_webhook import stripe_bp
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
+import logging
 
-app = Flask(__name__)
+from config import settings
+from api.routes import health, shopify, pinterest, niches, products, generation, designs, admin
 
-# Enable CORS for all routes
-CORS(app, resources={
-    r"/api/*": {
-        "origins": [
-            "http://localhost:3000",
-            "http://localhost:3001",
-            "http://localhost:3007",
-            "http://localhost:5173",
-            "https://reboss.app",
-            "https://reboss-frontend.onrender.com",
-            "https://pod-autom.de",
-            "https://app.pod-autom.de"
-        ],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
-    }
-})
+# Logging setup
+logging.basicConfig(
+    level=logging.DEBUG if settings.DEBUG else logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
-# Register blueprints
-app.register_blueprint(shopify_bp)
-app.register_blueprint(pinterest_bp)
-app.register_blueprint(auth_bp)
-app.register_blueprint(pod_autom_bp)
-app.register_blueprint(stripe_bp)
 
-@app.route('/health')
-def health():
-    """Health check endpoint"""
-    return jsonify({
-        'status': 'ok',
-        'service': 'reboss-api',
-        'version': '1.0.0'
-    })
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events."""
+    # Startup
+    logger.info(f"🚀 Starting {settings.APP_NAME} v{settings.APP_VERSION}")
+    logger.info(f"Environment: {settings.ENVIRONMENT}")
+    logger.info(f"Debug: {settings.DEBUG}")
+    
+    yield
+    
+    # Shutdown
+    logger.info("👋 Shutting down...")
 
-@app.route('/')
-def root():
-    """Root endpoint"""
-    return jsonify({
-        'message': 'ReBoss API Service',
-        'endpoints': {
-            'health': '/health',
-            'shopify': {
-                'test_connection': 'POST /api/shopify/test-connection',
-                'get_collections': 'POST /api/shopify/get-collections',
-                'get_products': 'POST /api/shopify/get-products'
-            },
-            'pinterest': {
-                'authorize': 'GET /api/oauth/pinterest/authorize',
-                'callback': 'GET /api/oauth/pinterest/callback'
-            },
-            'pod_autom': {
-                'shopify_install': 'GET /api/pod-autom/shopify/install',
-                'shops': 'GET/POST /api/pod-autom/shops',
-                'shop': 'DELETE /api/pod-autom/shops/<shop_id>',
-                'test_connection': 'POST /api/pod-autom/shops/<shop_id>/test',
-                'settings': 'GET/PUT /api/pod-autom/settings/<shop_id>',
-                'niches': 'GET/POST/DELETE /api/pod-autom/niches/<settings_id>',
-                'prompts': 'GET/POST /api/pod-autom/prompts/<settings_id>',
-                'prompt': 'PUT/DELETE /api/pod-autom/prompts/<settings_id>/<prompt_id>',
-                'product_queue': 'GET /api/pod-autom/products/<shop_id>/queue',
-                'retry_product': 'POST /api/pod-autom/products/<shop_id>/queue/<product_id>/retry',
-                'delete_product': 'DELETE /api/pod-autom/products/<shop_id>/queue/<product_id>'
-            },
-            'stripe': {
-                'webhook': 'POST /api/stripe/webhook',
-                'create_checkout': 'POST /api/stripe/create-checkout',
-                'customer_portal': 'POST /api/stripe/portal'
-            }
+
+# Create FastAPI app
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    description="Backend API für POD AutoM - Vollautomatisierte Print-on-Demand Lösung",
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
+    lifespan=lifespan,
+    redirect_slashes=False,
+)
+
+# CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "error": "Internal server error",
+            "detail": str(exc) if settings.DEBUG else None
         }
-    })
+    )
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5001))
-    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
-    app.run(host='0.0.0.0', port=port, debug=debug)
+
+# Include routers
+app.include_router(health.router, tags=["Health"])
+app.include_router(shopify.router, prefix="/api/shopify", tags=["Shopify"])
+app.include_router(pinterest.router, prefix="/api/pinterest", tags=["Pinterest"])
+app.include_router(niches.router, prefix="/api/niches", tags=["Niches"])
+app.include_router(products.router, prefix="/api/products", tags=["Products"])
+app.include_router(generation.router, prefix="/api/generate", tags=["Generation"])
+app.include_router(designs.router, prefix="/api/designs", tags=["Designs"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+
+
+# Root endpoint
+@app.get("/")
+async def root():
+    return {
+        "name": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "status": "running",
+        "docs": "/docs" if settings.DEBUG else None
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "api.main:app",
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.DEBUG
+    )

@@ -1,259 +1,375 @@
 """
-Shopify API Proxy Routes
-Handles all Shopify Admin API calls to avoid CORS issues
+Shopify OAuth & API Routes
+Handles shop connection and Shopify API interactions.
 """
-from flask import Blueprint, request, jsonify
-import requests
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
+import sys
+import secrets
+import hashlib
+import base64
+import hmac
+from urllib.parse import urlencode, parse_qs
+from datetime import datetime, timezone
+from typing import Optional
 
-shopify_bp = Blueprint('shopify', __name__)
+from fastapi import APIRouter, HTTPException, Query, Request, Depends
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
+import httpx
 
-SHOPIFY_API_VERSION = '2023-10'
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from config import settings
+from api.auth import get_current_user, User
+from services.supabase_service import supabase_client
 
-
-def clean_domain(shop_domain: str) -> str:
-    """Clean and normalize shop domain"""
-    domain = shop_domain.strip()
-    domain = domain.replace('https://', '').replace('http://', '')
-    domain = domain.rstrip('/')
-
-    if not domain.endswith('.myshopify.com'):
-        domain = f"{domain}.myshopify.com"
-
-    return domain
+router = APIRouter()
 
 
-@shopify_bp.route('/api/shopify/test-connection', methods=['POST'])
-def test_connection():
-    """Test Shopify store connection"""
-    try:
-        data = request.json
+# =====================================================
+# MODELS
+# =====================================================
 
-        if not data:
-            return jsonify({'success': False, 'error': 'No data provided'}), 400
+class ShopConnectRequest(BaseModel):
+    shop_domain: str  # e.g., "mystore.myshopify.com"
 
-        shop_domain = data.get('shop_domain')
-        access_token = data.get('access_token')
 
-        if not shop_domain or not access_token:
-            return jsonify({
-                'success': False,
-                'error': 'Missing shop_domain or access_token'
-            }), 400
+class ShopResponse(BaseModel):
+    id: str
+    shop_domain: str
+    shop_name: Optional[str]
+    connection_status: str
+    last_sync_at: Optional[str]
 
-        # Clean domain
-        clean_shop_domain = clean_domain(shop_domain)
 
-        # Call Shopify API
-        response = requests.get(
-            f'https://{clean_shop_domain}/admin/api/{SHOPIFY_API_VERSION}/shop.json',
-            headers={
-                'X-Shopify-Access-Token': access_token,
-                'Content-Type': 'application/json'
-            },
-            timeout=10
+# =====================================================
+# OAUTH HELPERS
+# =====================================================
+
+def generate_nonce() -> str:
+    """Generate a random nonce for OAuth state."""
+    return secrets.token_urlsafe(32)
+
+
+def verify_hmac(query_params: dict, secret: str) -> bool:
+    """Verify Shopify's HMAC signature."""
+    hmac_param = query_params.pop("hmac", [None])[0]
+    if not hmac_param:
+        return False
+    
+    # Sort and encode remaining params
+    sorted_params = "&".join(
+        f"{key}={value[0]}" 
+        for key, value in sorted(query_params.items())
+        if key != "hmac"
+    )
+    
+    # Calculate HMAC
+    calculated_hmac = hmac.new(
+        secret.encode("utf-8"),
+        sorted_params.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+    
+    return hmac.compare_digest(calculated_hmac, hmac_param)
+
+
+# =====================================================
+# ROUTES
+# =====================================================
+
+@router.get("/install")
+async def get_install_link(
+    user_id: str = Query(None),
+    shop: str = Query(None)
+):
+    """
+    Get the Shopify App install link for Managed Installation.
+    For Unlisted Apps: Uses the install URL that triggers OAuth.
+    
+    Usage: Redirect users to /api/shopify/install?user_id=xxx&shop=mystore.myshopify.com
+    """
+    if not settings.SHOPIFY_CLIENT_ID:
+        raise HTTPException(
+            status_code=500,
+            detail="Shopify App nicht konfiguriert."
         )
+    
+    # Clean shop domain if provided
+    shop_domain = None
+    if shop:
+        shop_domain = shop.strip().lower()
+        if not shop_domain.endswith(".myshopify.com"):
+            if "." not in shop_domain:
+                shop_domain = f"{shop_domain}.myshopify.com"
+    
+    # Generate state with user_id encoded
+    state = generate_nonce()
+    
+    # Store state in database
+    if user_id:
+        try:
+            await supabase_client.store_oauth_state(
+                user_id=user_id,
+                state=state,
+                shop_domain=shop_domain or "pending",
+                provider="shopify"
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Fehler: {e}")
+    
+    # Build OAuth URL
+    params = {
+        "client_id": settings.SHOPIFY_CLIENT_ID,
+        "scope": settings.SHOPIFY_SCOPES,
+        "redirect_uri": settings.SHOPIFY_REDIRECT_URI,
+        "state": state,
+    }
+    
+    if shop_domain:
+        # Direct to specific shop's OAuth authorize page
+        auth_url = f"https://{shop_domain}/admin/oauth/authorize?{urlencode(params)}"
+        return RedirectResponse(url=auth_url)
+    else:
+        # Redirect to Shopify's managed installation page for Unlisted Apps
+        # Note: Use "install" not "install_custom_app" (which is for Custom Apps only)
+        install_url = f"https://admin.shopify.com/oauth/install?client_id={settings.SHOPIFY_CLIENT_ID}"
+        return RedirectResponse(url=install_url)
 
-        if response.ok:
-            shop_data = response.json().get('shop', {})
-            return jsonify({
-                'success': True,
-                'shop': {
-                    'id': shop_data.get('id'),
-                    'name': shop_data.get('name'),
-                    'email': shop_data.get('email'),
-                    'domain': shop_data.get('domain'),
-                    'myshopify_domain': shop_data.get('myshopify_domain'),
-                    'plan_name': shop_data.get('plan_name'),
-                    'currency': shop_data.get('currency')
-                }
-            })
+
+@router.post("/oauth/start")
+async def start_oauth(
+    request: ShopConnectRequest,
+    user: User = Depends(get_current_user)
+):
+    """
+    Start Shopify OAuth flow.
+    Returns the authorization URL to redirect the user to.
+    """
+    if not settings.SHOPIFY_CLIENT_ID:
+        raise HTTPException(
+            status_code=500,
+            detail="Shopify App nicht konfiguriert. Bitte SHOPIFY_CLIENT_ID setzen."
+        )
+    
+    shop_domain = request.shop_domain.strip().lower()
+    
+    # Ensure .myshopify.com suffix
+    if not shop_domain.endswith(".myshopify.com"):
+        if "." not in shop_domain:
+            shop_domain = f"{shop_domain}.myshopify.com"
         else:
-            error_msg = 'Shopify API Fehler'
-            if response.status_code == 401:
-                error_msg = 'Ungültiger Access Token'
-            elif response.status_code == 403:
-                error_msg = 'Zugriff verweigert - Fehlende Berechtigungen'
-            elif response.status_code == 404:
-                error_msg = 'Shop nicht gefunden - Überprüfe die Domain'
-
-            return jsonify({
-                'success': False,
-                'error': error_msg,
-                'status': response.status_code,
-                'details': response.text[:500] if response.text else None
-            }), response.status_code
-
-    except requests.exceptions.Timeout:
-        return jsonify({
-            'success': False,
-            'error': 'Zeitüberschreitung - Shop nicht erreichbar'
-        }), 504
-    except requests.exceptions.RequestException as e:
-        return jsonify({
-            'success': False,
-            'error': f'Netzwerkfehler: {str(e)}'
-        }), 500
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f'Unerwarteter Fehler: {str(e)}'
-        }), 500
-
-
-def get_collection_product_count(shop_domain: str, headers: dict, collection_id: int) -> int:
-    """Get product count for a collection using the count endpoint"""
+            raise HTTPException(
+                status_code=400,
+                detail="Ungültige Shop-Domain. Bitte das Format 'shop-name.myshopify.com' verwenden."
+            )
+    
+    # Generate state (nonce) for CSRF protection
+    state = generate_nonce()
+    
+    # Store state in database for verification
     try:
-        response = requests.get(
-            f'https://{shop_domain}/admin/api/{SHOPIFY_API_VERSION}/products/count.json?collection_id={collection_id}',
-            headers=headers,
-            timeout=10
+        await supabase_client.store_oauth_state(
+            user_id=user.id,
+            state=state,
+            shop_domain=shop_domain,
+            provider="shopify"
         )
-        if response.ok:
-            return response.json().get('count', 0)
-    except Exception:
-        pass
-    return 0
-
-
-@shopify_bp.route('/api/shopify/get-collections', methods=['POST'])
-def get_collections():
-    """Get all collections from Shopify store with product counts"""
-    try:
-        data = request.json
-        shop_domain = data.get('shop_domain')
-        access_token = data.get('access_token')
-
-        if not shop_domain or not access_token:
-            return jsonify({
-                'success': False,
-                'error': 'Missing shop_domain or access_token'
-            }), 400
-
-        clean_shop_domain = clean_domain(shop_domain)
-        headers = {
-            'X-Shopify-Access-Token': access_token,
-            'Content-Type': 'application/json'
-        }
-
-        raw_collections = []
-
-        # Get Custom Collections
-        custom_response = requests.get(
-            f'https://{clean_shop_domain}/admin/api/{SHOPIFY_API_VERSION}/custom_collections.json?limit=250',
-            headers=headers,
-            timeout=30
-        )
-
-        if custom_response.ok:
-            custom_collections = custom_response.json().get('custom_collections', [])
-            for col in custom_collections:
-                raw_collections.append({
-                    'id': col.get('id'),
-                    'title': col.get('title'),
-                    'handle': col.get('handle'),
-                    'type': 'custom',
-                    'published_at': col.get('published_at')
-                })
-
-        # Get Smart Collections
-        smart_response = requests.get(
-            f'https://{clean_shop_domain}/admin/api/{SHOPIFY_API_VERSION}/smart_collections.json?limit=250',
-            headers=headers,
-            timeout=30
-        )
-
-        if smart_response.ok:
-            smart_collections = smart_response.json().get('smart_collections', [])
-            for col in smart_collections:
-                raw_collections.append({
-                    'id': col.get('id'),
-                    'title': col.get('title'),
-                    'handle': col.get('handle'),
-                    'type': 'smart',
-                    'published_at': col.get('published_at')
-                })
-
-        # Get product counts in parallel (max 5 concurrent to respect Shopify rate limits)
-        collections = []
-
-        def fetch_count(col):
-            """Fetch product count for a single collection"""
-            count = get_collection_product_count(clean_shop_domain, headers, col['id'])
-            return {**col, 'products_count': count}
-
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = {executor.submit(fetch_count, col): col for col in raw_collections}
-            for future in as_completed(futures):
-                try:
-                    result = future.result()
-                    collections.append(result)
-                except Exception:
-                    # On error, add collection with 0 count
-                    col = futures[future]
-                    collections.append({**col, 'products_count': 0})
-
-        # Sort by title for consistent ordering
-        collections.sort(key=lambda x: x.get('title', '').lower())
-
-        return jsonify({
-            'success': True,
-            'collections': collections,
-            'total': len(collections)
-        })
-
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        raise HTTPException(status_code=500, detail=f"Fehler beim Speichern des OAuth-Status: {e}")
+    
+    # Build authorization URL
+    params = {
+        "client_id": settings.SHOPIFY_CLIENT_ID,
+        "scope": settings.SHOPIFY_SCOPES,
+        "redirect_uri": settings.SHOPIFY_REDIRECT_URI,
+        "state": state,
+        "grant_options[]": "per-user"  # Request online access token
+    }
+    
+    auth_url = f"https://{shop_domain}/admin/oauth/authorize?{urlencode(params)}"
+    
+    return {
+        "success": True,
+        "auth_url": auth_url,
+        "shop_domain": shop_domain
+    }
 
 
-@shopify_bp.route('/api/shopify/get-products', methods=['POST'])
-def get_products():
-    """Get products from Shopify store"""
+@router.get("/callback")
+async def oauth_callback_short(
+    request: Request,
+    code: str = Query(...),
+    shop: str = Query(...),
+    state: str = Query(...),
+    hmac: str = Query(None),
+    timestamp: str = Query(None)
+):
+    """Alias for /oauth/callback - handles both paths."""
+    return await oauth_callback(request, code, shop, state, hmac, timestamp)
+
+
+@router.get("/oauth/callback")
+async def oauth_callback(
+    request: Request,
+    code: str = Query(...),
+    shop: str = Query(...),
+    state: str = Query(None),
+    hmac: str = Query(None),
+    timestamp: str = Query(None)
+):
+    """
+    Handle Shopify OAuth callback.
+    Exchanges authorization code for access token.
+
+    Supports two flows:
+    1. OAuth with state (traditional flow)
+    2. Custom Distribution install (no state, uses pending_installation)
+    """
+    if not settings.SHOPIFY_CLIENT_ID or not settings.SHOPIFY_CLIENT_SECRET:
+        raise HTTPException(status_code=500, detail="Shopify App nicht konfiguriert.")
+
+    user_id = None
+
+    # Try to get user_id from OAuth state first
+    if state:
+        oauth_state = await supabase_client.verify_oauth_state(state, "shopify")
+        if oauth_state:
+            user_id = oauth_state["user_id"]
+            # Delete used OAuth state
+            await supabase_client.delete_oauth_state(state)
+
+    # If no user_id from state, try pending_installation (Custom Distribution flow)
+    if not user_id:
+        pending = await supabase_client.get_pending_installation_by_shop(shop)
+        if pending:
+            user_id = pending["user_id"]
+            # Mark as installing
+            await supabase_client.complete_pending_installation(user_id, shop)
+
+    # If still no user_id, we can't link the shop
+    if not user_id:
+        # Redirect to frontend with error - user needs to start from webapp
+        redirect_url = f"{settings.FRONTEND_URL}/dashboard?shop_error=no_user&shop={shop}"
+        return RedirectResponse(url=redirect_url)
+
+    # Exchange code for access token
+    token_url = f"https://{shop}/admin/oauth/access_token"
+    payload = {
+        "client_id": settings.SHOPIFY_CLIENT_ID,
+        "client_secret": settings.SHOPIFY_CLIENT_SECRET,
+        "code": code
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(token_url, json=payload)
+            response.raise_for_status()
+            token_data = response.json()
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Fehler beim Token-Austausch: {e.response.text}"
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Verbindungsfehler: {e}")
+
+    access_token = token_data.get("access_token")
+    scope = token_data.get("scope")
+
+    if not access_token:
+        raise HTTPException(status_code=400, detail="Kein Access Token erhalten.")
+
+    # Get shop info from Shopify
+    shop_info = await get_shop_info(shop, access_token)
+
+    # Save shop to database
     try:
-        data = request.json
-        shop_domain = data.get('shop_domain')
-        access_token = data.get('access_token')
-        limit = data.get('limit', 50)
-        collection_id = data.get('collection_id')
-
-        if not shop_domain or not access_token:
-            return jsonify({
-                'success': False,
-                'error': 'Missing shop_domain or access_token'
-            }), 400
-
-        clean_shop_domain = clean_domain(shop_domain)
-        headers = {
-            'X-Shopify-Access-Token': access_token,
-            'Content-Type': 'application/json'
-        }
-
-        # Build URL
-        url = f'https://{clean_shop_domain}/admin/api/{SHOPIFY_API_VERSION}/products.json?limit={limit}'
-        if collection_id:
-            url += f'&collection_id={collection_id}'
-
-        response = requests.get(url, headers=headers, timeout=30)
-
-        if response.ok:
-            products = response.json().get('products', [])
-            return jsonify({
-                'success': True,
-                'products': products,
-                'total': len(products)
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': 'Fehler beim Laden der Produkte',
-                'status': response.status_code
-            }), response.status_code
-
+        shop_data = await supabase_client.save_shop(
+            user_id=user_id,
+            shop_domain=shop,
+            access_token=access_token,
+            scopes=scope,
+            shop_name=shop_info.get("name"),
+            shop_email=shop_info.get("email"),
+            shop_currency=shop_info.get("currency"),
+            shopify_shop_id=str(shop_info.get("id"))
+        )
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        raise HTTPException(status_code=500, detail=f"Fehler beim Speichern: {e}")
+
+    # Redirect to frontend with success
+    redirect_url = f"{settings.FRONTEND_URL}/dashboard?shop_connected=true&shop={shop}"
+    return RedirectResponse(url=redirect_url)
+
+
+@router.get("/shops")
+async def list_shops(user: User = Depends(get_current_user)):
+    """Get all connected shops for the current user."""
+    shops = await supabase_client.get_user_shops(user.id)
+    return {
+        "success": True,
+        "shops": shops
+    }
+
+
+@router.get("/shops/{shop_id}")
+async def get_shop(shop_id: str, user: User = Depends(get_current_user)):
+    """Get a specific shop by ID."""
+    shop = await supabase_client.get_shop(shop_id, user.id)
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop nicht gefunden.")
+    return {
+        "success": True,
+        "shop": shop
+    }
+
+
+@router.delete("/shops/{shop_id}")
+async def disconnect_shop(shop_id: str, user: User = Depends(get_current_user)):
+    """Disconnect a shop."""
+    success = await supabase_client.delete_shop(shop_id, user.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Shop nicht gefunden.")
+    return {
+        "success": True,
+        "message": "Shop erfolgreich getrennt."
+    }
+
+
+@router.post("/shops/{shop_id}/sync")
+async def sync_shop(shop_id: str, user: User = Depends(get_current_user)):
+    """Manually trigger a sync for a shop."""
+    shop = await supabase_client.get_shop(shop_id, user.id)
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop nicht gefunden.")
+    
+    # TODO: Trigger actual sync job
+    # For now, just update last_sync_at
+    await supabase_client.update_shop_sync(shop_id)
+    
+    return {
+        "success": True,
+        "message": "Sync gestartet."
+    }
+
+
+# =====================================================
+# HELPER FUNCTIONS
+# =====================================================
+
+async def get_shop_info(shop_domain: str, access_token: str) -> dict:
+    """Fetch shop information from Shopify API."""
+    url = f"https://{shop_domain}/admin/api/2026-01/shop.json"
+    headers = {
+        "X-Shopify-Access-Token": access_token,
+        "Content-Type": "application/json"
+    }
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("shop", {})
+        except Exception as e:
+            return {}

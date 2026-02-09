@@ -1,25 +1,25 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git add:*)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix\\(pinterest-sync-job\\): Sync campaign status from Pinterest API and fix batch assignments\n\n- Sync campaign status from Pinterest before processing to use current status\n- Fix batch assignment insert by removing non-existing columns \\(assigned_shop, ad_channel\\)\n- Add debug logging for campaigns with missing assignments\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(git push)",
-      "Bash(git commit:*)",
-      "Bash(cat:*)",
+      "Bash(curl:*)",
       "WebSearch",
-      "Bash(npm create:*)",
+      "WebFetch(domain:community.shopify.dev)",
+      "Bash(npm run build)",
+      "Bash(npx tsc --noEmit)",
       "Bash(npm install)",
-      "Bash(timeout 15 npm run dev:*)",
-      "Bash(npm run build:*)",
-      "Bash(npm run type-check:*)",
-      "Bash(npm install:*)",
-      "Bash(find:*)",
-      "Bash(grep:*)",
-      "Bash(xargs:*)",
-      "Bash(npx tsc:*)",
-      "Bash(npx eslint:*)",
-      "Bash(npm run dev:*)",
-      "Bash(ls:*)"
+      "Bash(git remote set-url:*)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: Admin Panel für Shopify Custom Distribution Verifizierung\n\n- Datenbank-Migration für Admin-Verifizierungssystem\n- Backend Admin API Routes \\(Benutzer, Stats, Install-Links\\)\n- Frontend Admin Panel mit Benutzer-Tabelle, Suche, Filter\n- VerificationBanner für Verifizierungsstatus im Dashboard\n- ShopConnection angepasst für neuen Verifizierungs-Flow\n- AdminRoute für geschützte Admin-Seiten\n- useAdmin Hook für Admin-Funktionen und User-Profil\n- Projektstruktur reorganisiert \\(aus Subdirectory in Root\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push -u origin master)",
+      "Bash(git fetch:*)",
+      "Bash(git push --force origin master)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(git config:*)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git commit:*)"
     ]
   }
 }

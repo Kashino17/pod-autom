@@ -1,198 +1,234 @@
-import React, { useEffect, useState } from 'react'
-// Components from /components/ (outside src)
-import { Sidebar } from '@components/Sidebar'
-import { WelcomeView } from '@components/WelcomeView'
-import { ShopDashboard } from '@components/ShopDashboard'
-import { UnsavedChangesDialog } from '@components/ui/UnsavedChangesDialog'
-// Components from /src/components/
-import { AddShopDialog } from '../components/AddShopDialog'
-import { useShops } from '../hooks/useShops'
-import { useAppStore } from '../lib/store'
-import { Loader2 } from 'lucide-react'
-import { Shop } from '../lib/database.types'
-import type { TabId } from '../../types'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Zap, Sparkles, Target, Settings, TrendingUp } from 'lucide-react'
+import { DashboardLayout } from '@src/components/layout'
+import {
+  MetricsGrid,
+  PerformanceChart,
+  RecentProducts,
+  ActivityFeed,
+  VerificationBanner,
+} from '@src/components/dashboard'
+import { SubscriptionBanner, UpgradePrompt } from '@src/components/subscription'
+import { useShops } from '@src/hooks/useShopify'
+import { ShopifyConnectButton } from '@src/components/ShopifyConnectButton'
+import { useDashboardStats } from '@src/hooks/useDashboardStats'
+import { useSubscription } from '@src/contexts/SubscriptionContext'
 
-export function Dashboard() {
-  const { data: shops, isLoading, error } = useShops()
-  const {
-    activeShopId,
-    setActiveShopId,
-    activeTabId,
-    setActiveTabId,
-    isAddShopDialogOpen,
-    setAddShopDialogOpen,
-    hasUnsavedChanges,
-    setHasUnsavedChanges,
-    pendingTabId,
-    setPendingTabId,
-    showUnsavedWarning,
-    setShowUnsavedWarning
-  } = useAppStore()
+// =====================================================
+// PERIOD SELECTOR
+// =====================================================
 
-  // State for editing a shop
-  const [editingShop, setEditingShop] = useState<Shop | null>(null)
+type Period = '7d' | '30d' | '90d'
 
-  // Handle tab change with unsaved changes warning
-  const handleTabChange = (tabId: TabId) => {
-    if (hasUnsavedChanges && tabId !== activeTabId) {
-      setPendingTabId(tabId)
-      setShowUnsavedWarning(true)
-    } else {
-      setActiveTabId(tabId)
-    }
-  }
+interface PeriodSelectorProps {
+  value: Period
+  onChange: (period: Period) => void
+}
 
-  const handleDiscardChanges = () => {
-    if (pendingTabId) {
-      setHasUnsavedChanges(false)
-      setActiveTabId(pendingTabId)
-      setPendingTabId(null)
-    }
-    setShowUnsavedWarning(false)
-  }
+function PeriodSelector({ value, onChange }: PeriodSelectorProps) {
+  const periods: { value: Period; label: string }[] = [
+    { value: '7d', label: '7 Tage' },
+    { value: '30d', label: '30 Tage' },
+    { value: '90d', label: '90 Tage' },
+  ]
 
-  const handleCancelNavigation = () => {
-    setPendingTabId(null)
-    setShowUnsavedWarning(false)
-  }
+  return (
+    <div className="flex bg-zinc-800 rounded-lg p-1">
+      {periods.map((period) => (
+        <button
+          key={period.value}
+          onClick={() => onChange(period.value)}
+          className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            value === period.value
+              ? 'bg-violet-500 text-white'
+              : 'text-zinc-400 hover:text-white'
+          }`}
+        >
+          {period.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
-  // Find active shop
-  const activeShop = activeShopId
-    ? shops?.find(s => s.id === activeShopId)
-    : null
+// =====================================================
+// QUICK ACTION COMPONENT
+// =====================================================
 
-  // Auto-select first shop if none selected and shops exist
-  useEffect(() => {
-    if (!activeShopId && shops && shops.length > 0) {
-      setActiveShopId(shops[0].id)
-    }
-  }, [shops, activeShopId, setActiveShopId])
+interface QuickActionProps {
+  title: string
+  description: string
+  icon: React.ReactNode
+  href?: string
+  onClick?: () => void
+}
 
-  // Convert Supabase shop to component format
-  const formattedShops = shops?.map(shop => ({
-    id: shop.id,
-    name: shop.internal_name,
-    domain: shop.shop_domain,
-    status: shop.connection_status as 'connected' | 'disconnected' | 'syncing' | 'error',
-    lastSync: shop.last_sync_at
-      ? new Date(shop.last_sync_at).toLocaleDateString('de-DE', {
-          day: '2-digit',
-          month: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-      : 'Nie',
-    stats: {
-      processed: 0, // TODO: Get from analytics
-      pending: 0,
-      actions: 0
-    }
-  })) || []
-
-  const formattedActiveShop = activeShop ? {
-    id: activeShop.id,
-    name: activeShop.internal_name,
-    domain: activeShop.shop_domain,
-    status: activeShop.connection_status as 'connected' | 'disconnected' | 'syncing' | 'error',
-    lastSync: activeShop.last_sync_at
-      ? new Date(activeShop.last_sync_at).toLocaleDateString('de-DE', {
-          day: '2-digit',
-          month: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-      : 'Nie',
-    stats: {
-      processed: 0,
-      pending: 0,
-      actions: 0
-    }
-  } : null
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-zinc-950">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
-          <p className="text-zinc-400">Shops werden geladen...</p>
-        </div>
+function QuickAction({ title, description, icon, href, onClick }: QuickActionProps) {
+  const content = (
+    <>
+      <div className="w-10 h-10 bg-violet-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+        {icon}
       </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-zinc-950">
-        <div className="text-center">
-          <p className="text-red-400 mb-4">Fehler beim Laden der Shops</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
-          >
-            Erneut versuchen
-          </button>
-        </div>
+      <div>
+        <p className="text-white font-medium">{title}</p>
+        <p className="text-sm text-zinc-400">{description}</p>
       </div>
+    </>
+  )
+
+  const className =
+    'flex items-start gap-4 p-4 rounded-xl bg-zinc-800/50 border border-zinc-700 hover:border-violet-500/50 hover:bg-zinc-800 transition-all text-left w-full'
+
+  if (href) {
+    return (
+      <Link to={href} className={className}>
+        {content}
+      </Link>
     )
   }
 
   return (
-    <div className="flex h-screen w-screen bg-black text-zinc-300 font-sans overflow-hidden">
-      {/* Sidebar */}
-      <Sidebar
-        shops={formattedShops}
-        activeShopId={activeShopId}
-        activeTabId={activeTabId}
-        onSelectShop={setActiveShopId}
-        onSelectTab={handleTabChange}
-        onAddShop={() => setAddShopDialogOpen(true)}
-        onEditShop={(shopId) => {
-          const shopToEdit = shops?.find(s => s.id === shopId)
-          if (shopToEdit) {
-            setEditingShop(shopToEdit)
-          }
-        }}
-      />
+    <button onClick={onClick} className={className}>
+      {content}
+    </button>
+  )
+}
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden bg-zinc-950 relative">
-        {formattedActiveShop ? (
-          <ShopDashboard
-            key={formattedActiveShop.id}
-            shop={formattedActiveShop}
-            activeTab={activeTabId}
-          />
-        ) : (
-          <WelcomeView />
+// =====================================================
+// DASHBOARD PAGE
+// =====================================================
+
+export default function Dashboard() {
+  const { shops, isLoading: shopsLoading } = useShops()
+  const { tier } = useSubscription()
+  const [period, setPeriod] = useState<Period>('30d')
+
+  const hasShop = shops.length > 0
+  const currentShopId = shops[0]?.id || null
+
+  const { data: stats, isLoading: statsLoading } = useDashboardStats(
+    currentShopId,
+    period
+  )
+
+  const isLoading = shopsLoading || statsLoading
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+            <p className="text-zinc-400">
+              Willkommen zurück! Hier ist deine Übersicht.
+            </p>
+          </div>
+          <PeriodSelector value={period} onChange={setPeriod} />
+        </div>
+
+        {/* Subscription Status Banner */}
+        <SubscriptionBanner />
+
+        {/* Verification Status Banner */}
+        <VerificationBanner />
+
+        {/* No shop warning */}
+        {!shopsLoading && !hasShop && (
+          <div className="p-4 sm:p-6 rounded-xl bg-amber-500/10 border border-amber-500/30">
+            <div className="flex flex-col sm:flex-row items-start gap-4">
+              <div className="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Zap className="w-5 h-5 text-amber-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-white font-semibold">Shop verbinden</h3>
+                <p className="text-sm text-zinc-400 mt-1">
+                  Verbinde deinen Shopify Store, um mit der Automatisierung zu
+                  starten.
+                </p>
+                <div className="mt-3">
+                  <ShopifyConnectButton className="text-sm bg-amber-500 hover:bg-amber-600" />
+                </div>
+              </div>
+            </div>
+          </div>
         )}
-      </main>
 
-      {/* Add Shop Dialog */}
-      <AddShopDialog
-        isOpen={isAddShopDialogOpen}
-        onClose={() => setAddShopDialogOpen(false)}
-        onSuccess={(shopId) => {
-          setActiveShopId(shopId)
-          setAddShopDialogOpen(false)
-        }}
-      />
+        {/* Metrics Grid */}
+        <MetricsGrid
+          metrics={stats?.metrics || null}
+          isLoading={isLoading}
+          period={period}
+        />
 
-      {/* Edit Shop Dialog */}
-      <AddShopDialog
-        isOpen={!!editingShop}
-        onClose={() => setEditingShop(null)}
-        onSuccess={() => {
-          setEditingShop(null)
-        }}
-        editShop={editingShop}
-      />
+        {/* Performance Chart */}
+        <PerformanceChart
+          data={stats?.chartData || []}
+          isLoading={isLoading}
+        />
 
-      {/* Unsaved Changes Warning Dialog */}
-      <UnsavedChangesDialog
-        isOpen={showUnsavedWarning}
-        onDiscard={handleDiscardChanges}
-        onCancel={handleCancelNavigation}
-      />
-    </div>
+        {/* Two column layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Recent Products */}
+          <div className="lg:col-span-2">
+            <RecentProducts
+              products={stats?.recentProducts || []}
+              isLoading={isLoading}
+            />
+          </div>
+
+          {/* Activity Feed */}
+          <div>
+            <ActivityFeed
+              activities={stats?.activities || []}
+              isLoading={isLoading}
+              maxItems={6}
+            />
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-white">Schnellaktionen</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <QuickAction
+              title="Produkte erstellen"
+              description="Neue Produkte mit KI generieren"
+              icon={<Sparkles className="w-5 h-5 text-violet-400" />}
+              href="/dashboard/products"
+            />
+            <QuickAction
+              title="Kampagne starten"
+              description="Pinterest/Meta Kampagne"
+              icon={<TrendingUp className="w-5 h-5 text-violet-400" />}
+              href="/dashboard/campaigns"
+            />
+            <QuickAction
+              title="Winner skalieren"
+              description="Top-Performer identifizieren"
+              icon={<Target className="w-5 h-5 text-violet-400" />}
+              href="/dashboard/winners"
+            />
+            <QuickAction
+              title="Einstellungen"
+              description="Shop & Nischen konfigurieren"
+              icon={<Settings className="w-5 h-5 text-violet-400" />}
+              href="/settings"
+            />
+          </div>
+        </div>
+
+        {/* Tier upgrade prompt */}
+        {tier === 'basis' && (
+          <UpgradePrompt
+            variant="banner"
+            title="Mehr Power fuer dein Business"
+            description="Schalte Winner Scaling, Multi-Plattform und Priority Support frei."
+            dismissible
+          />
+        )}
+      </div>
+    </DashboardLayout>
   )
 }

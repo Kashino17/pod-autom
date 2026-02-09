@@ -1,354 +1,156 @@
-// Auto-generated types for Supabase
-// Run: npm run db:types to regenerate from your Supabase project
-
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[]
+/**
+ * Database Types for POD AutoM
+ *
+ * Diese Datei sollte nach der Migration mit dem Supabase CLI generiert werden:
+ * npx supabase gen types typescript --project-id YOUR_PROJECT_ID > src/lib/database.types.ts
+ *
+ * Die aktuelle Version spiegelt das Schema aus der Migration wider.
+ */
 
 export interface Database {
   public: {
     Tables: {
-      user_profiles: {
-        Row: {
-          id: string
-          email: string
-          full_name: string | null
-          avatar_url: string | null
-          subscription_tier: 'free' | 'pro' | 'enterprise'
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id: string
-          email: string
-          full_name?: string | null
-          avatar_url?: string | null
-          subscription_tier?: 'free' | 'pro' | 'enterprise'
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          email?: string
-          full_name?: string | null
-          avatar_url?: string | null
-          subscription_tier?: 'free' | 'pro' | 'enterprise'
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      shops: {
+      // POD AutoM Subscriptions
+      pod_autom_subscriptions: {
         Row: {
           id: string
           user_id: string
-          internal_name: string
-          shop_domain: string
-          access_token: string | null
-          is_active: boolean
-          connection_status: 'connected' | 'disconnected' | 'syncing' | 'error'
-          last_sync_at: string | null
+          tier: 'basis' | 'premium' | 'vip'
+          status: 'active' | 'canceled' | 'past_due' | 'trialing' | 'paused'
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          stripe_price_id: string | null
+          current_period_start: string | null
+          current_period_end: string | null
+          cancel_at_period_end: boolean
+          canceled_at: string | null
+          trial_start: string | null
+          trial_end: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           user_id: string
-          internal_name: string
-          shop_domain: string
-          access_token?: string | null
-          is_active?: boolean
-          connection_status?: 'connected' | 'disconnected' | 'syncing' | 'error'
-          last_sync_at?: string | null
+          tier: 'basis' | 'premium' | 'vip'
+          status?: 'active' | 'canceled' | 'past_due' | 'trialing' | 'paused'
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          stripe_price_id?: string | null
+          current_period_start?: string | null
+          current_period_end?: string | null
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
+          trial_start?: string | null
+          trial_end?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
           user_id?: string
-          internal_name?: string
-          shop_domain?: string
+          tier?: 'basis' | 'premium' | 'vip'
+          status?: 'active' | 'canceled' | 'past_due' | 'trialing' | 'paused'
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          stripe_price_id?: string | null
+          current_period_start?: string | null
+          current_period_end?: string | null
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
+          trial_start?: string | null
+          trial_end?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+
+      // POD AutoM Shops
+      pod_autom_shops: {
+        Row: {
+          id: string
+          user_id: string
+          shop_domain: string
+          shop_name: string | null
+          internal_name: string | null
+          shop_email: string | null
+          shop_currency: string
+          shop_timezone: string
+          access_token: string | null
+          scopes: string | null
+          shopify_shop_id: string | null
+          connection_status: 'connected' | 'disconnected' | 'error' | 'pending'
+          last_sync_at: string | null
+          connection_error: string | null
+          printful_api_key: string | null
+          fulfillment_provider: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          shop_domain: string
+          shop_name?: string | null
+          internal_name?: string | null
+          shop_email?: string | null
+          shop_currency?: string
+          shop_timezone?: string
           access_token?: string | null
-          is_active?: boolean
-          connection_status?: 'connected' | 'disconnected' | 'syncing' | 'error'
+          scopes?: string | null
+          shopify_shop_id?: string | null
+          connection_status?: 'connected' | 'disconnected' | 'error' | 'pending'
           last_sync_at?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      shop_rules: {
-        Row: {
-          id: string
-          shop_id: string
-          start_phase_replace_threshold: number
-          start_phase_keep_threshold: number
-          avg3_ok: number
-          avg7_ok: number
-          avg10_ok: number
-          avg14_ok: number
-          min_ok_buckets: number
-          start_phase_days: number
-          nach_phase_days: number
-          qk_tag: string
-          replace_tag_prefix: string
-          test_mode: boolean
-          url_prefix: string
-          sheet_id: string | null
-          openai_api_key: string | null
-          loser_threshold: number
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          shop_id: string
-          start_phase_replace_threshold?: number
-          start_phase_keep_threshold?: number
-          avg3_ok?: number
-          avg7_ok?: number
-          avg10_ok?: number
-          avg14_ok?: number
-          min_ok_buckets?: number
-          start_phase_days?: number
-          nach_phase_days?: number
-          qk_tag?: string
-          replace_tag_prefix?: string
-          test_mode?: boolean
-          url_prefix?: string
-          sheet_id?: string | null
-          openai_api_key?: string | null
-          loser_threshold?: number
+          connection_error?: string | null
+          printful_api_key?: string | null
+          fulfillment_provider?: string
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
-          shop_id?: string
-          start_phase_replace_threshold?: number
-          start_phase_keep_threshold?: number
-          avg3_ok?: number
-          avg7_ok?: number
-          avg10_ok?: number
-          avg14_ok?: number
-          min_ok_buckets?: number
-          start_phase_days?: number
-          nach_phase_days?: number
-          qk_tag?: string
-          replace_tag_prefix?: string
-          test_mode?: boolean
-          url_prefix?: string
-          sheet_id?: string | null
-          openai_api_key?: string | null
-          loser_threshold?: number
+          user_id?: string
+          shop_domain?: string
+          shop_name?: string | null
+          internal_name?: string | null
+          shop_email?: string | null
+          shop_currency?: string
+          shop_timezone?: string
+          access_token?: string | null
+          scopes?: string | null
+          shopify_shop_id?: string | null
+          connection_status?: 'connected' | 'disconnected' | 'error' | 'pending'
+          last_sync_at?: string | null
+          connection_error?: string | null
+          printful_api_key?: string | null
+          fulfillment_provider?: string
           created_at?: string
           updated_at?: string
         }
       }
-      discord_settings: {
-        Row: {
-          id: string
-          shop_id: string
-          application_id: string | null
-          public_key: string | null
-          bot_token: string | null
-          server_channel: string | null
-          private_chat: string | null
-          group_chat: string | null
-          announcement_channel: string | null
-          log_channel: string | null
-          is_connected: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          shop_id: string
-          application_id?: string | null
-          public_key?: string | null
-          bot_token?: string | null
-          server_channel?: string | null
-          private_chat?: string | null
-          group_chat?: string | null
-          announcement_channel?: string | null
-          log_channel?: string | null
-          is_connected?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          shop_id?: string
-          application_id?: string | null
-          public_key?: string | null
-          bot_token?: string | null
-          server_channel?: string | null
-          private_chat?: string | null
-          group_chat?: string | null
-          announcement_channel?: string | null
-          log_channel?: string | null
-          is_connected?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      shopify_collections: {
-        Row: {
-          id: string
-          shop_id: string
-          shopify_id: string
-          title: string
-          collection_type: 'custom' | 'smart'
-          product_count: number
-          is_selected: boolean
-          synced_at: string
-        }
-        Insert: {
-          id?: string
-          shop_id: string
-          shopify_id: string
-          title: string
-          collection_type: 'custom' | 'smart'
-          product_count?: number
-          is_selected?: boolean
-          synced_at?: string
-        }
-        Update: {
-          id?: string
-          shop_id?: string
-          shopify_id?: string
-          title?: string
-          collection_type?: 'custom' | 'smart'
-          product_count?: number
-          is_selected?: boolean
-          synced_at?: string
-        }
-      }
-      product_creation_settings: {
-        Row: {
-          id: string
-          shop_id: string
-          generate_optimized_title: boolean
-          generate_improved_description: boolean
-          generate_and_set_tags: boolean
-          sales_text_season: 'Spring' | 'Summer' | 'Autumn' | 'Winter'
-          translate_variants_to_german: boolean
-          remove_single_value_options: boolean
-          set_compare_price: boolean
-          compare_price_percentage: number
-          set_price_decimals: boolean
-          price_decimals: number
-          set_compare_price_decimals: boolean
-          compare_price_decimals: number
-          adjust_normal_price: boolean
-          price_adjustment_type: 'Percentage' | 'FixedAmount'
-          price_adjustment_value: number
-          price_min_enabled: boolean
-          price_min_value: number
-          price_max_enabled: boolean
-          price_max_value: number
-          compare_price_min_enabled: boolean
-          compare_price_min_value: number
-          compare_price_max_enabled: boolean
-          compare_price_max_value: number
-          set_global_quantity: boolean
-          global_quantity: number
-          enable_inventory_tracking: boolean
-          publish_all_channels: boolean
-          set_global_tags: boolean
-          global_tags: string
-          change_product_status: boolean
-          product_status: 'active' | 'draft' | 'archived'
-          set_category_tag_fashion: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          shop_id: string
-          generate_optimized_title?: boolean
-          generate_improved_description?: boolean
-          generate_and_set_tags?: boolean
-          sales_text_season?: 'Spring' | 'Summer' | 'Autumn' | 'Winter'
-          translate_variants_to_german?: boolean
-          remove_single_value_options?: boolean
-          set_compare_price?: boolean
-          compare_price_percentage?: number
-          set_price_decimals?: boolean
-          price_decimals?: number
-          set_compare_price_decimals?: boolean
-          compare_price_decimals?: number
-          adjust_normal_price?: boolean
-          price_adjustment_type?: 'Percentage' | 'FixedAmount'
-          price_adjustment_value?: number
-          price_min_enabled?: boolean
-          price_min_value?: number
-          price_max_enabled?: boolean
-          price_max_value?: number
-          compare_price_min_enabled?: boolean
-          compare_price_min_value?: number
-          compare_price_max_enabled?: boolean
-          compare_price_max_value?: number
-          set_global_quantity?: boolean
-          global_quantity?: number
-          enable_inventory_tracking?: boolean
-          publish_all_channels?: boolean
-          set_global_tags?: boolean
-          global_tags?: string
-          change_product_status?: boolean
-          product_status?: 'active' | 'draft' | 'archived'
-          set_category_tag_fashion?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          shop_id?: string
-          generate_optimized_title?: boolean
-          generate_improved_description?: boolean
-          generate_and_set_tags?: boolean
-          sales_text_season?: 'Spring' | 'Summer' | 'Autumn' | 'Winter'
-          translate_variants_to_german?: boolean
-          remove_single_value_options?: boolean
-          set_compare_price?: boolean
-          compare_price_percentage?: number
-          set_price_decimals?: boolean
-          price_decimals?: number
-          set_compare_price_decimals?: boolean
-          compare_price_decimals?: number
-          adjust_normal_price?: boolean
-          price_adjustment_type?: 'Percentage' | 'FixedAmount'
-          price_adjustment_value?: number
-          price_min_enabled?: boolean
-          price_min_value?: number
-          price_max_enabled?: boolean
-          price_max_value?: number
-          compare_price_min_enabled?: boolean
-          compare_price_min_value?: number
-          compare_price_max_enabled?: boolean
-          compare_price_max_value?: number
-          set_global_quantity?: boolean
-          global_quantity?: number
-          enable_inventory_tracking?: boolean
-          publish_all_channels?: boolean
-          set_global_tags?: boolean
-          global_tags?: string
-          change_product_status?: boolean
-          product_status?: 'active' | 'draft' | 'archived'
-          set_category_tag_fashion?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      pod_settings: {
+
+      // POD AutoM Settings
+      pod_autom_settings: {
         Row: {
           id: string
           shop_id: string
           enabled: boolean
+          auto_publish: boolean
+          auto_create_variants: boolean
           gpt_image_quality: 'LOW' | 'MEDIUM' | 'HIGH'
+          gpt_model: string
           creation_limit: number
+          daily_creation_count: number
+          last_creation_reset: string
+          default_price: number
+          price_multiplier: number
+          compare_at_price_multiplier: number
+          default_product_type: string
+          default_vendor: string
+          default_tags: string[]
+          default_collections: string[]
+          creation_schedule: string
+          preferred_time: string
           created_at: string
           updated_at: string
         }
@@ -356,8 +158,22 @@ export interface Database {
           id?: string
           shop_id: string
           enabled?: boolean
+          auto_publish?: boolean
+          auto_create_variants?: boolean
           gpt_image_quality?: 'LOW' | 'MEDIUM' | 'HIGH'
+          gpt_model?: string
           creation_limit?: number
+          daily_creation_count?: number
+          last_creation_reset?: string
+          default_price?: number
+          price_multiplier?: number
+          compare_at_price_multiplier?: number
+          default_product_type?: string
+          default_vendor?: string
+          default_tags?: string[]
+          default_collections?: string[]
+          creation_schedule?: string
+          preferred_time?: string
           created_at?: string
           updated_at?: string
         }
@@ -365,574 +181,423 @@ export interface Database {
           id?: string
           shop_id?: string
           enabled?: boolean
+          auto_publish?: boolean
+          auto_create_variants?: boolean
           gpt_image_quality?: 'LOW' | 'MEDIUM' | 'HIGH'
+          gpt_model?: string
           creation_limit?: number
+          daily_creation_count?: number
+          last_creation_reset?: string
+          default_price?: number
+          price_multiplier?: number
+          compare_at_price_multiplier?: number
+          default_product_type?: string
+          default_vendor?: string
+          default_tags?: string[]
+          default_collections?: string[]
+          creation_schedule?: string
+          preferred_time?: string
           created_at?: string
           updated_at?: string
         }
       }
-      pod_selected_niches: {
+
+      // POD AutoM Niches
+      pod_autom_niches: {
         Row: {
           id: string
-          pod_settings_id: string
-          main_category: string
-          sub_category: string
-          sort_order: number
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          pod_settings_id: string
-          main_category: string
-          sub_category: string
-          sort_order?: number
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          pod_settings_id?: string
-          main_category?: string
-          sub_category?: string
-          sort_order?: number
-          created_at?: string
-        }
-      }
-      pod_chatgpt_prompts: {
-        Row: {
-          id: string
-          pod_settings_id: string
-          title: string
-          content: string
-          is_expanded: boolean
-          sort_order: number
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          pod_settings_id: string
-          title: string
-          content: string
-          is_expanded?: boolean
-          sort_order?: number
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          pod_settings_id?: string
-          title?: string
-          content?: string
-          is_expanded?: boolean
-          sort_order?: number
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      rate_limits: {
-        Row: {
-          id: string
-          shop_id: string
-          fast_fashion_limit: number
-          pod_creation_limit: number
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          shop_id: string
-          fast_fashion_limit?: number
-          pod_creation_limit?: number
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          shop_id?: string
-          fast_fashion_limit?: number
-          pod_creation_limit?: number
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      pinterest_auth: {
-        Row: {
-          id: string
-          shop_id: string
-          access_token: string | null
-          refresh_token: string | null
-          expires_at: string | null
-          scopes: string[] | null
-          pinterest_user_id: string | null
-          pinterest_username: string | null
-          is_connected: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          shop_id: string
-          access_token?: string | null
-          refresh_token?: string | null
-          expires_at?: string | null
-          scopes?: string[] | null
-          pinterest_user_id?: string | null
-          pinterest_username?: string | null
-          is_connected?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          shop_id?: string
-          access_token?: string | null
-          refresh_token?: string | null
-          expires_at?: string | null
-          scopes?: string[] | null
-          pinterest_user_id?: string | null
-          pinterest_username?: string | null
-          is_connected?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      pinterest_ad_accounts: {
-        Row: {
-          id: string
-          shop_id: string
-          pinterest_account_id: string
-          name: string
-          country: string
-          currency: string
-          is_selected: boolean
-          synced_at: string
-        }
-        Insert: {
-          id?: string
-          shop_id: string
-          pinterest_account_id: string
-          name: string
-          country?: string
-          currency?: string
-          is_selected?: boolean
-          synced_at?: string
-        }
-        Update: {
-          id?: string
-          shop_id?: string
-          pinterest_account_id?: string
-          name?: string
-          country?: string
-          currency?: string
-          is_selected?: boolean
-          synced_at?: string
-        }
-      }
-      pinterest_campaigns: {
-        Row: {
-          id: string
-          shop_id: string
-          ad_account_id: string | null
-          pinterest_campaign_id: string
-          name: string
-          status: 'ACTIVE' | 'PAUSED' | 'ARCHIVED'
-          daily_budget: number | null
-          targeting: Json
-          performance_plus: boolean
-          synced_at: string
-        }
-        Insert: {
-          id?: string
-          shop_id: string
-          ad_account_id?: string | null
-          pinterest_campaign_id: string
-          name: string
-          status?: 'ACTIVE' | 'PAUSED' | 'ARCHIVED'
-          daily_budget?: number | null
-          targeting?: Json
-          performance_plus?: boolean
-          synced_at?: string
-        }
-        Update: {
-          id?: string
-          shop_id?: string
-          ad_account_id?: string | null
-          pinterest_campaign_id?: string
-          name?: string
-          status?: 'ACTIVE' | 'PAUSED' | 'ARCHIVED'
-          daily_budget?: number | null
-          targeting?: Json
-          performance_plus?: boolean
-          synced_at?: string
-        }
-      }
-      campaign_batch_assignments: {
-        Row: {
-          id: string
-          campaign_id: string
-          collection_id: string
-          batch_indices: number[]
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          campaign_id: string
-          collection_id: string
-          batch_indices?: number[]
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          campaign_id?: string
-          collection_id?: string
-          batch_indices?: number[]
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      pinterest_settings: {
-        Row: {
-          id: string
-          shop_id: string
-          default_budget: number
-          default_targeting: Json | null
-          auto_sync_enabled: boolean
-          url_prefix: string
-          global_batch_size: number
-        }
-        Insert: {
-          id?: string
-          shop_id: string
-          default_budget?: number
-          default_targeting?: Json | null
-          auto_sync_enabled?: boolean
-          url_prefix?: string
-          global_batch_size?: number
-        }
-        Update: {
-          id?: string
-          shop_id?: string
-          default_budget?: number
-          default_targeting?: Json | null
-          auto_sync_enabled?: boolean
-          url_prefix?: string
-          global_batch_size?: number
-        }
-      }
-      meta_auth: {
-        Row: {
-          id: string
-          shop_id: string
-          access_token: string | null
-          expires_at: string | null
-          meta_user_id: string | null
-          meta_username: string | null
-          is_connected: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          shop_id: string
-          access_token?: string | null
-          expires_at?: string | null
-          meta_user_id?: string | null
-          meta_username?: string | null
-          is_connected?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          shop_id?: string
-          access_token?: string | null
-          expires_at?: string | null
-          meta_user_id?: string | null
-          meta_username?: string | null
-          is_connected?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      meta_ad_accounts: {
-        Row: {
-          id: string
-          shop_id: string
-          meta_account_id: string
-          name: string
-          currency: string
-          is_selected: boolean
-        }
-        Insert: {
-          id?: string
-          shop_id: string
-          meta_account_id: string
-          name: string
-          currency?: string
-          is_selected?: boolean
-        }
-        Update: {
-          id?: string
-          shop_id?: string
-          meta_account_id?: string
-          name?: string
-          currency?: string
-          is_selected?: boolean
-        }
-      }
-      meta_campaigns: {
-        Row: {
-          id: string
-          shop_id: string
-          ad_account_id: string | null
-          meta_campaign_id: string
-          name: string
-          status: string
-          daily_budget: number | null
-          creative_strategy: 'single_image' | 'carousel'
-        }
-        Insert: {
-          id?: string
-          shop_id: string
-          ad_account_id?: string | null
-          meta_campaign_id: string
-          name: string
-          status?: string
-          daily_budget?: number | null
-          creative_strategy?: 'single_image' | 'carousel'
-        }
-        Update: {
-          id?: string
-          shop_id?: string
-          ad_account_id?: string | null
-          meta_campaign_id?: string
-          name?: string
-          status?: string
-          daily_budget?: number | null
-          creative_strategy?: 'single_image' | 'carousel'
-        }
-      }
-      meta_campaign_collections: {
-        Row: {
-          id: string
-          campaign_id: string
-          collection_id: string
-          batch_indices: number[]
-        }
-        Insert: {
-          id?: string
-          campaign_id: string
-          collection_id: string
-          batch_indices?: number[]
-        }
-        Update: {
-          id?: string
-          campaign_id?: string
-          collection_id?: string
-          batch_indices?: number[]
-        }
-      }
-      meta_settings: {
-        Row: {
-          id: string
-          shop_id: string
-          default_budget: number
-          global_batch_size: number
-        }
-        Insert: {
-          id?: string
-          shop_id: string
-          default_budget?: number
-          global_batch_size?: number
-        }
-        Update: {
-          id?: string
-          shop_id?: string
-          default_budget?: number
-          global_batch_size?: number
-        }
-      }
-      google_auth: {
-        Row: {
-          id: string
-          shop_id: string
-          access_token: string | null
-          refresh_token: string | null
-          expires_at: string | null
-          google_customer_id: string | null
-          is_connected: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          shop_id: string
-          access_token?: string | null
-          refresh_token?: string | null
-          expires_at?: string | null
-          google_customer_id?: string | null
-          is_connected?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          shop_id?: string
-          access_token?: string | null
-          refresh_token?: string | null
-          expires_at?: string | null
-          google_customer_id?: string | null
-          is_connected?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      google_campaigns: {
-        Row: {
-          id: string
-          shop_id: string
-          google_campaign_id: string
-          name: string
-          campaign_type: 'PMAX' | 'SEARCH'
-          status: string
-        }
-        Insert: {
-          id?: string
-          shop_id: string
-          google_campaign_id: string
-          name: string
-          campaign_type?: 'PMAX' | 'SEARCH'
-          status?: string
-        }
-        Update: {
-          id?: string
-          shop_id?: string
-          google_campaign_id?: string
-          name?: string
-          campaign_type?: 'PMAX' | 'SEARCH'
-          status?: string
-        }
-      }
-      google_campaign_collections: {
-        Row: {
-          id: string
-          campaign_id: string
-          collection_id: string
-        }
-        Insert: {
-          id?: string
-          campaign_id: string
-          collection_id: string
-        }
-        Update: {
-          id?: string
-          campaign_id?: string
-          collection_id?: string
-        }
-      }
-      product_analytics: {
-        Row: {
-          id: string
-          shop_id: string
-          shopify_product_id: string
-          product_title: string | null
-          status: 'created' | 'start_phase' | 'post_phase' | 'winner' | 'loser' | 'deleted'
-          source: 'fast_fashion' | 'pod'
-          created_at: string
-          entered_start_phase_at: string | null
-          entered_post_phase_at: string | null
-          final_status_at: string | null
+          settings_id: string
+          niche_name: string
+          niche_slug: string | null
+          description: string | null
+          is_active: boolean
+          priority: number
+          total_products: number
           total_sales: number
-          day7_sales: number
-          avg3_passed: boolean | null
-          avg7_passed: boolean | null
-          avg10_passed: boolean | null
-          avg14_passed: boolean | null
+          total_revenue: number
+          created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
-          shop_id: string
-          shopify_product_id: string
-          product_title?: string | null
-          status?: 'created' | 'start_phase' | 'post_phase' | 'winner' | 'loser' | 'deleted'
-          source?: 'fast_fashion' | 'pod'
-          created_at?: string
-          entered_start_phase_at?: string | null
-          entered_post_phase_at?: string | null
-          final_status_at?: string | null
+          settings_id: string
+          niche_name: string
+          niche_slug?: string | null
+          description?: string | null
+          is_active?: boolean
+          priority?: number
+          total_products?: number
           total_sales?: number
-          day7_sales?: number
-          avg3_passed?: boolean | null
-          avg7_passed?: boolean | null
-          avg10_passed?: boolean | null
-          avg14_passed?: boolean | null
+          total_revenue?: number
+          created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
-          shop_id?: string
-          shopify_product_id?: string
-          product_title?: string | null
-          status?: 'created' | 'start_phase' | 'post_phase' | 'winner' | 'loser' | 'deleted'
-          source?: 'fast_fashion' | 'pod'
-          created_at?: string
-          entered_start_phase_at?: string | null
-          entered_post_phase_at?: string | null
-          final_status_at?: string | null
+          settings_id?: string
+          niche_name?: string
+          niche_slug?: string | null
+          description?: string | null
+          is_active?: boolean
+          priority?: number
+          total_products?: number
           total_sales?: number
-          day7_sales?: number
-          avg3_passed?: boolean | null
-          avg7_passed?: boolean | null
-          avg10_passed?: boolean | null
-          avg14_passed?: boolean | null
+          total_revenue?: number
+          created_at?: string
+          updated_at?: string
         }
       }
-      shop_analytics_summary: {
+
+      // POD AutoM Prompts
+      pod_autom_prompts: {
+        Row: {
+          id: string
+          settings_id: string
+          prompt_type: 'image' | 'title' | 'description'
+          prompt_name: string | null
+          prompt_text: string
+          variables: Record<string, unknown>
+          is_active: boolean
+          is_default: boolean
+          version: number
+          parent_id: string | null
+          usage_count: number
+          success_rate: number | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          settings_id: string
+          prompt_type: 'image' | 'title' | 'description'
+          prompt_name?: string | null
+          prompt_text: string
+          variables?: Record<string, unknown>
+          is_active?: boolean
+          is_default?: boolean
+          version?: number
+          parent_id?: string | null
+          usage_count?: number
+          success_rate?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          settings_id?: string
+          prompt_type?: 'image' | 'title' | 'description'
+          prompt_name?: string | null
+          prompt_text?: string
+          variables?: Record<string, unknown>
+          is_active?: boolean
+          is_default?: boolean
+          version?: number
+          parent_id?: string | null
+          usage_count?: number
+          success_rate?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+
+      // POD AutoM Products
+      pod_autom_products: {
         Row: {
           id: string
           shop_id: string
-          date: string
-          products_created: number
-          products_in_start_phase: number
-          products_in_post_phase: number
-          products_won: number
-          products_lost: number
-          products_deleted: number
-          fast_fashion_created: number
-          pod_created: number
-          estimated_ad_spend_saved: number
-          estimated_time_saved_hours: number
+          niche_id: string | null
+          shopify_product_id: string | null
+          shopify_handle: string | null
+          title: string | null
+          description: string | null
+          generated_image_url: string | null
+          generated_title: string | null
+          generated_description: string | null
+          prompt_used: string | null
+          price: number | null
+          compare_at_price: number | null
+          cost_per_item: number | null
+          status: 'pending' | 'generating' | 'generated' | 'published' | 'failed' | 'archived'
+          publish_status: 'draft' | 'active' | 'archived'
+          phase: 'start_phase' | 'post_phase' | 'winner' | 'loser' | 'archived'
+          phase_start_date: string | null
+          phase_end_date: string | null
+          total_views: number
+          total_sales: number
+          total_revenue: number
+          conversion_rate: number | null
+          error_message: string | null
+          retry_count: number
+          last_retry_at: string | null
+          created_at: string
+          updated_at: string
+          published_at: string | null
         }
         Insert: {
           id?: string
           shop_id: string
-          date: string
-          products_created?: number
-          products_in_start_phase?: number
-          products_in_post_phase?: number
-          products_won?: number
-          products_lost?: number
-          products_deleted?: number
-          fast_fashion_created?: number
-          pod_created?: number
-          estimated_ad_spend_saved?: number
-          estimated_time_saved_hours?: number
+          niche_id?: string | null
+          shopify_product_id?: string | null
+          shopify_handle?: string | null
+          title?: string | null
+          description?: string | null
+          generated_image_url?: string | null
+          generated_title?: string | null
+          generated_description?: string | null
+          prompt_used?: string | null
+          price?: number | null
+          compare_at_price?: number | null
+          cost_per_item?: number | null
+          status?: 'pending' | 'generating' | 'generated' | 'published' | 'failed' | 'archived'
+          publish_status?: 'draft' | 'active' | 'archived'
+          phase?: 'start_phase' | 'post_phase' | 'winner' | 'loser' | 'archived'
+          phase_start_date?: string | null
+          phase_end_date?: string | null
+          total_views?: number
+          total_sales?: number
+          total_revenue?: number
+          conversion_rate?: number | null
+          error_message?: string | null
+          retry_count?: number
+          last_retry_at?: string | null
+          created_at?: string
+          updated_at?: string
+          published_at?: string | null
         }
         Update: {
           id?: string
           shop_id?: string
-          date?: string
-          products_created?: number
-          products_in_start_phase?: number
-          products_in_post_phase?: number
-          products_won?: number
-          products_lost?: number
-          products_deleted?: number
-          fast_fashion_created?: number
-          pod_created?: number
-          estimated_ad_spend_saved?: number
-          estimated_time_saved_hours?: number
+          niche_id?: string | null
+          shopify_product_id?: string | null
+          shopify_handle?: string | null
+          title?: string | null
+          description?: string | null
+          generated_image_url?: string | null
+          generated_title?: string | null
+          generated_description?: string | null
+          prompt_used?: string | null
+          price?: number | null
+          compare_at_price?: number | null
+          cost_per_item?: number | null
+          status?: 'pending' | 'generating' | 'generated' | 'published' | 'failed' | 'archived'
+          publish_status?: 'draft' | 'active' | 'archived'
+          phase?: 'start_phase' | 'post_phase' | 'winner' | 'loser' | 'archived'
+          phase_start_date?: string | null
+          phase_end_date?: string | null
+          total_views?: number
+          total_sales?: number
+          total_revenue?: number
+          conversion_rate?: number | null
+          error_message?: string | null
+          retry_count?: number
+          last_retry_at?: string | null
+          created_at?: string
+          updated_at?: string
+          published_at?: string | null
+        }
+      }
+
+      // POD AutoM Ad Platforms
+      pod_autom_ad_platforms: {
+        Row: {
+          id: string
+          user_id: string
+          platform: 'pinterest' | 'meta' | 'google' | 'tiktok'
+          platform_user_id: string | null
+          platform_username: string | null
+          access_token: string | null
+          refresh_token: string | null
+          token_expires_at: string | null
+          scopes: string[] | null
+          ad_account_id: string | null
+          ad_account_name: string | null
+          ad_account_currency: string | null
+          connection_status: 'connected' | 'disconnected' | 'error' | 'expired'
+          last_sync_at: string | null
+          connection_error: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          platform: 'pinterest' | 'meta' | 'google' | 'tiktok'
+          platform_user_id?: string | null
+          platform_username?: string | null
+          access_token?: string | null
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          scopes?: string[] | null
+          ad_account_id?: string | null
+          ad_account_name?: string | null
+          ad_account_currency?: string | null
+          connection_status?: 'connected' | 'disconnected' | 'error' | 'expired'
+          last_sync_at?: string | null
+          connection_error?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          platform?: 'pinterest' | 'meta' | 'google' | 'tiktok'
+          platform_user_id?: string | null
+          platform_username?: string | null
+          access_token?: string | null
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          scopes?: string[] | null
+          ad_account_id?: string | null
+          ad_account_name?: string | null
+          ad_account_currency?: string | null
+          connection_status?: 'connected' | 'disconnected' | 'error' | 'expired'
+          last_sync_at?: string | null
+          connection_error?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+
+      // POD AutoM Activity Log
+      pod_autom_activity_log: {
+        Row: {
+          id: string
+          user_id: string | null
+          shop_id: string | null
+          action: string
+          entity_type: string | null
+          entity_id: string | null
+          details: Record<string, unknown>
+          ip_address: string | null
+          user_agent: string | null
+          status: 'success' | 'warning' | 'error'
+          error_message: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          shop_id?: string | null
+          action: string
+          entity_type?: string | null
+          entity_id?: string | null
+          details?: Record<string, unknown>
+          ip_address?: string | null
+          user_agent?: string | null
+          status?: 'success' | 'warning' | 'error'
+          error_message?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          shop_id?: string | null
+          action?: string
+          entity_type?: string | null
+          entity_id?: string | null
+          details?: Record<string, unknown>
+          ip_address?: string | null
+          user_agent?: string | null
+          status?: 'success' | 'warning' | 'error'
+          error_message?: string | null
+          created_at?: string
+        }
+      }
+
+      // POD AutoM Catalog
+      pod_autom_catalog: {
+        Row: {
+          id: string
+          product_type: string
+          product_code: string | null
+          display_name: string | null
+          description: string | null
+          image_url: string | null
+          gallery_urls: string[]
+          mockup_template_url: string | null
+          sizes: string[]
+          colors: { name: string; hex: string; available: boolean }[]
+          materials: string | null
+          print_areas: Record<string, unknown>
+          weight_grams: number | null
+          dimensions: Record<string, unknown> | null
+          base_price: number
+          shipping_prices: Record<string, number>
+          bulk_pricing: Record<string, number>
+          production_time_days: number
+          supplier: string | null
+          is_active: boolean
+          is_featured: boolean
+          stock_status: 'in_stock' | 'low_stock' | 'out_of_stock'
+          category: string | null
+          sort_order: number
+          tags: string[]
+          meta_title: string | null
+          meta_description: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          product_type: string
+          product_code?: string | null
+          display_name?: string | null
+          description?: string | null
+          image_url?: string | null
+          gallery_urls?: string[]
+          mockup_template_url?: string | null
+          sizes?: string[]
+          colors?: { name: string; hex: string; available: boolean }[]
+          materials?: string | null
+          print_areas?: Record<string, unknown>
+          weight_grams?: number | null
+          dimensions?: Record<string, unknown> | null
+          base_price: number
+          shipping_prices?: Record<string, number>
+          bulk_pricing?: Record<string, number>
+          production_time_days?: number
+          supplier?: string | null
+          is_active?: boolean
+          is_featured?: boolean
+          stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock'
+          category?: string | null
+          sort_order?: number
+          tags?: string[]
+          meta_title?: string | null
+          meta_description?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          product_type?: string
+          product_code?: string | null
+          display_name?: string | null
+          description?: string | null
+          image_url?: string | null
+          gallery_urls?: string[]
+          mockup_template_url?: string | null
+          sizes?: string[]
+          colors?: { name: string; hex: string; available: boolean }[]
+          materials?: string | null
+          print_areas?: Record<string, unknown>
+          weight_grams?: number | null
+          dimensions?: Record<string, unknown> | null
+          base_price?: number
+          shipping_prices?: Record<string, number>
+          bulk_pricing?: Record<string, number>
+          production_time_days?: number
+          supplier?: string | null
+          is_active?: boolean
+          is_featured?: boolean
+          stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock'
+          category?: string | null
+          sort_order?: number
+          tags?: string[]
+          meta_title?: string | null
+          meta_description?: string | null
+          created_at?: string
+          updated_at?: string
         }
       }
     }
@@ -943,49 +608,18 @@ export interface Database {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      subscription_tier: 'basis' | 'premium' | 'vip'
+      subscription_status: 'active' | 'canceled' | 'past_due' | 'trialing' | 'paused'
+      connection_status: 'connected' | 'disconnected' | 'error' | 'pending'
+      ad_platform_status: 'connected' | 'disconnected' | 'error' | 'expired'
+      gpt_quality: 'LOW' | 'MEDIUM' | 'HIGH'
+      prompt_type: 'image' | 'title' | 'description'
+      product_status: 'pending' | 'generating' | 'generated' | 'published' | 'failed' | 'archived'
+      publish_status: 'draft' | 'active' | 'archived'
+      product_phase: 'start_phase' | 'post_phase' | 'winner' | 'loser' | 'archived'
+      ad_platform: 'pinterest' | 'meta' | 'google' | 'tiktok'
+      activity_status: 'success' | 'warning' | 'error'
+      stock_status: 'in_stock' | 'low_stock' | 'out_of_stock'
     }
   }
 }
-
-// Helper types for easier usage
-export type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row']
-export type InsertTables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert']
-export type UpdateTables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update']
-
-// Commonly used types
-export type Shop = Tables<'shops'>
-export type ShopInsert = InsertTables<'shops'>
-export type ShopUpdate = UpdateTables<'shops'>
-
-export type ShopRules = Tables<'shop_rules'>
-export type ShopRulesUpdate = UpdateTables<'shop_rules'>
-
-export type UserProfile = Tables<'user_profiles'>
-
-export type ShopifyCollection = Tables<'shopify_collections'>
-
-export type ProductCreationSettings = Tables<'product_creation_settings'>
-export type ProductCreationSettingsUpdate = UpdateTables<'product_creation_settings'>
-
-export type PodSettings = Tables<'pod_settings'>
-export type PodNiche = Tables<'pod_selected_niches'>
-export type PodPrompt = Tables<'pod_chatgpt_prompts'>
-
-export type RateLimits = Tables<'rate_limits'>
-
-export type PinterestAuth = Tables<'pinterest_auth'>
-export type PinterestAdAccount = Tables<'pinterest_ad_accounts'>
-export type PinterestCampaign = Tables<'pinterest_campaigns'>
-export type PinterestSettings = Tables<'pinterest_settings'>
-export type CampaignBatchAssignment = Tables<'campaign_batch_assignments'>
-
-export type MetaAuth = Tables<'meta_auth'>
-export type MetaAdAccount = Tables<'meta_ad_accounts'>
-export type MetaCampaign = Tables<'meta_campaigns'>
-
-export type GoogleAuth = Tables<'google_auth'>
-export type GoogleCampaign = Tables<'google_campaigns'>
-
-export type ProductAnalytics = Tables<'product_analytics'>
-export type ShopAnalyticsSummary = Tables<'shop_analytics_summary'>

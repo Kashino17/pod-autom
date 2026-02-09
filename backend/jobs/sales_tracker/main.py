@@ -1,334 +1,216 @@
 """
-Sales Tracker Job - Main Entry Point
-Migrated from Cloud Run Jobs to Render Cron Jobs
-Uses AsyncIO for parallel shop processing (20+ shops)
+Sales Tracker Job
+Tracks orders from Shopify and updates product analytics.
+
+Flow:
+1. Get all connected shops
+2. For each shop, fetch new orders from Shopify
+3. Match orders to POD AutoM products
+4. Update sales and revenue metrics
+5. Detect potential winners based on performance
+
+Runs every hour via Render Cron.
 """
 import os
 import sys
 import asyncio
-import time
-from datetime import datetime, timedelta
-from typing import List, Tuple
-from concurrent.futures import ThreadPoolExecutor
+import logging
+from datetime import datetime, timezone, timedelta
+from typing import List, Dict, Optional
+from decimal import Decimal
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from dotenv import load_dotenv
-
-# Load environment variables
 load_dotenv()
 
-from models import Shop, Collection, SalesData
-from services.supabase_service import SupabaseService
+from config import settings
+from services.supabase_service import supabase_client
 from services.shopify_service import ShopifyService
-from services.shopify_direct_service import ShopifyDirectService
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger("SalesTrackerJob")
 
 
-# Thread pool for running blocking Shopify API calls
-executor = ThreadPoolExecutor(max_workers=5)
-
-
-async def process_product(
-    shop: Shop,
-    collection: Collection,
-    product,
-    supabase_service: SupabaseService,
-    shopify_direct_service: ShopifyDirectService,
-    loop: asyncio.AbstractEventLoop
-) -> dict:
-    """Process a single product's sales data."""
-    try:
-        # Get existing sales data
-        existing_sales = supabase_service.get_sales_data(
-            shop.id, collection.id, product.id
-        )
-
-        # Determine lookback date
-        if existing_sales and existing_sales.last_update:
-            lookback_date = existing_sales.last_update - timedelta(days=1)
-        else:
-            lookback_date = datetime.now() - timedelta(days=120)
-
-        # Date added to collection
-        date_added = existing_sales.date_added_to_collection if existing_sales else datetime.now()
-
-        # Get all-time data for time-period calculations (run in thread pool)
-        all_time_lookback = datetime.now() - timedelta(days=365*2)
-        all_time_data = await loop.run_in_executor(
-            executor,
-            lambda: shopify_direct_service.get_product_sales_comprehensive(
-                product.id, all_time_lookback, date_added
-            )
-        )
-
-        # Calculate final sales data
-        if existing_sales:
-            # Get incremental new sales
-            new_sales_data = await loop.run_in_executor(
-                executor,
-                lambda: shopify_direct_service.get_product_sales_comprehensive(
-                    product.id, lookback_date
-                )
-            )
-
-            sales_data = SalesData(
-                product_id=product.id,
-                product_title=product.title,
-                total_sales=existing_sales.total_sales + new_sales_data.total_sales,
-                total_quantity=existing_sales.total_quantity + new_sales_data.total_quantity,
-                sales_first_7_days=all_time_data.sales_first_7_days,
-                sales_last_3_days=all_time_data.sales_last_3_days,
-                sales_last_7_days=all_time_data.sales_last_7_days,
-                sales_last_10_days=all_time_data.sales_last_10_days,
-                sales_last_14_days=all_time_data.sales_last_14_days,
-                last_update=datetime.now(),
-                date_added_to_collection=existing_sales.date_added_to_collection
-            )
-        else:
-            # First time processing
-            sales_data = SalesData(
-                product_id=product.id,
-                product_title=product.title,
-                total_sales=all_time_data.total_sales,
-                total_quantity=all_time_data.total_quantity,
-                sales_first_7_days=all_time_data.sales_first_7_days,
-                sales_last_3_days=all_time_data.sales_last_3_days,
-                sales_last_7_days=all_time_data.sales_last_7_days,
-                sales_last_10_days=all_time_data.sales_last_10_days,
-                sales_last_14_days=all_time_data.sales_last_14_days,
-                last_update=datetime.now(),
-                date_added_to_collection=datetime.now()
-            )
-
-        # Save to Supabase
-        supabase_service.save_sales_data(shop.id, collection.id, sales_data)
-
-        return {
-            'success': True,
-            'product_id': product.id,
-            'total_sales': sales_data.total_sales,
-            'total_quantity': sales_data.total_quantity
+class SalesTrackerJob:
+    """Job to track sales and update analytics."""
+    
+    def __init__(self):
+        self.metrics = {
+            "start_time": None,
+            "end_time": None,
+            "shops_processed": 0,
+            "orders_processed": 0,
+            "revenue_tracked": Decimal("0"),
+            "errors": []
         }
-
-    except Exception as e:
-        print(f"Error processing product {product.id}: {e}")
-        return {
-            'success': False,
-            'product_id': product.id,
-            'error': str(e)
-        }
-
-
-async def process_collection(
-    shop: Shop,
-    collection: Collection,
-    supabase_service: SupabaseService,
-    loop: asyncio.AbstractEventLoop
-) -> dict:
-    """Process a single collection for a shop."""
-    print(f"\n  Processing collection '{collection.title}' (ID: {collection.id})")
-
-    shopify_service = ShopifyService(shop.shop_domain, shop.access_token)
-    shopify_direct_service = ShopifyDirectService(shop.shop_domain, shop.access_token)
-
-    # Get products in collection (blocking call)
-    products = await loop.run_in_executor(
-        executor,
-        lambda: shopify_service.get_collection_products(collection.id)
-    )
-
-    print(f"  Found {len(products)} products in collection")
-
-    if not products:
-        return {
-            'collection_id': collection.id,
-            'products_processed': 0,
-            'products_failed': 0
-        }
-
-    processed = 0
-    failed = 0
-
-    # Process products sequentially to respect rate limits
-    for i, product in enumerate(products, 1):
-        print(f"  [{i}/{len(products)}] Processing: {product.title[:50]}...")
-
-        result = await process_product(
-            shop, collection, product,
-            supabase_service, shopify_direct_service, loop
-        )
-
-        if result['success']:
-            processed += 1
-        else:
-            failed += 1
-
-        # Rate limiting between products
-        await asyncio.sleep(0.5)
-
-    return {
-        'collection_id': collection.id,
-        'products_processed': processed,
-        'products_failed': failed
-    }
-
-
-async def process_shop(
-    shop: Shop,
-    collections: List[Collection],
-    supabase_service: SupabaseService,
-    loop: asyncio.AbstractEventLoop
-) -> dict:
-    """Process all collections for a single shop."""
-    print(f"\n{'='*60}")
-    print(f"Processing shop: {shop.internal_name}")
-    print(f"Domain: {shop.shop_domain}")
-    print(f"Collections to process: {len(collections)}")
-
-    if not collections:
-        print(f"WARNING: No collections for shop {shop.internal_name}")
-        return {
-            'shop_id': shop.id,
-            'shop_name': shop.internal_name,
-            'success': True,
-            'collections_processed': 0,
-            'products_processed': 0,
-            'products_failed': 0
-        }
-
-    total_products_processed = 0
-    total_products_failed = 0
-
-    # Process collections sequentially per shop
-    for collection in collections:
+    
+    async def run(self):
+        """Main entry point."""
+        self.metrics["start_time"] = datetime.now(timezone.utc)
+        logger.info("=" * 60)
+        logger.info("💰 Starting Sales Tracker Job")
+        logger.info("=" * 60)
+        
         try:
-            result = await process_collection(
-                shop, collection, supabase_service, loop
-            )
-            total_products_processed += result['products_processed']
-            total_products_failed += result['products_failed']
+            shops = await self.get_connected_shops()
+            logger.info(f"Found {len(shops)} connected shops")
+            
+            for shop in shops:
+                await self.process_shop(shop)
+        
         except Exception as e:
-            print(f"  Error processing collection {collection.id}: {e}")
-            total_products_failed += 1
-
-    return {
-        'shop_id': shop.id,
-        'shop_name': shop.internal_name,
-        'success': True,
-        'collections_processed': len(collections),
-        'products_processed': total_products_processed,
-        'products_failed': total_products_failed
-    }
-
-
-async def run_sales_tracker():
-    """Main async entry point for the sales tracker job."""
-    print("=" * 60)
-    print("SALES TRACKER JOB - ReBoss NextGen")
-    print(f"Start time: {datetime.now()}")
-    print("=" * 60)
-
-    # Initialize Supabase
-    try:
-        supabase_service = SupabaseService()
-    except Exception as e:
-        print(f"ERROR: Failed to connect to Supabase: {e}")
-        sys.exit(1)
-
-    # Log job start
-    job_id = supabase_service.log_job_run(
-        job_type='sales_tracker',
-        status='running',
-        metadata={'start_time': datetime.now().isoformat()}
-    )
-
-    # Get all shops with collections
-    try:
-        shops_with_collections = supabase_service.get_all_shops_with_collections()
-        print(f"\nFound {len(shops_with_collections)} shops with enabled collections")
-    except Exception as e:
-        print(f"ERROR: Failed to fetch shops: {e}")
-        supabase_service.update_job_run(
-            job_id, 'failed',
-            error_log=[{'error': str(e), 'phase': 'fetch_shops'}]
-        )
-        sys.exit(1)
-
-    if not shops_with_collections:
-        print("No shops with enabled collections found. Exiting.")
-        supabase_service.update_job_run(job_id, 'completed', shops_processed=0)
-        return
-
-    # Get event loop
-    loop = asyncio.get_event_loop()
-
-    # Process shops in parallel (max 3 concurrent)
-    semaphore = asyncio.Semaphore(3)
-
-    async def process_with_semaphore(shop, collections):
-        async with semaphore:
-            return await process_shop(shop, collections, supabase_service, loop)
-
-    # Create tasks for all shops
-    tasks = [
-        process_with_semaphore(shop, collections)
-        for shop, collections in shops_with_collections
-    ]
-
-    # Run all shops in parallel
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Aggregate results
-    shops_processed = 0
-    shops_failed = 0
-    total_products = 0
-    error_log = []
-
-    for result in results:
-        if isinstance(result, Exception):
-            shops_failed += 1
-            error_log.append({'error': str(result)})
-        elif result.get('success'):
-            shops_processed += 1
-            total_products += result.get('products_processed', 0)
+            logger.error(f"Job failed: {e}", exc_info=True)
+            self.metrics["errors"].append(str(e))
+        
+        finally:
+            self.metrics["end_time"] = datetime.now(timezone.utc)
+            self.log_metrics()
+    
+    async def get_connected_shops(self) -> List[Dict]:
+        """Get all connected shops."""
+        result = supabase_client.client.table("pod_autom_shops").select("*").eq(
+            "connection_status", "connected"
+        ).execute()
+        
+        return result.data or []
+    
+    async def process_shop(self, shop: Dict):
+        """Process orders for a shop."""
+        shop_id = shop["id"]
+        shop_domain = shop["shop_domain"]
+        access_token = shop.get("access_token")
+        
+        if not access_token:
+            logger.warning(f"Shop {shop_domain} has no access token")
+            return
+        
+        logger.info(f"\n🏪 Processing shop: {shop_domain}")
+        self.metrics["shops_processed"] += 1
+        
+        # Initialize Shopify client
+        shopify = ShopifyService(shop_domain, access_token)
+        
+        # Get last sync time or default to 24 hours ago
+        last_sync = shop.get("last_sync_at")
+        if last_sync:
+            since_date = datetime.fromisoformat(last_sync.replace("Z", "+00:00"))
         else:
-            shops_failed += 1
-            error_log.append({
-                'shop': result.get('shop_name'),
-                'error': result.get('error', 'Unknown error')
-            })
+            since_date = datetime.now(timezone.utc) - timedelta(hours=24)
+        
+        # Fetch orders
+        try:
+            orders = await shopify.get_orders(status="any", limit=50)
+            logger.info(f"  Found {len(orders)} recent orders")
+            
+            for order in orders:
+                await self.process_order(shop_id, order)
+            
+            # Update last sync time
+            await self.update_shop_sync(shop_id)
+            
+        except Exception as e:
+            logger.error(f"  Error fetching orders: {e}")
+            self.metrics["errors"].append(f"Shop {shop_domain}: {e}")
+    
+    async def process_order(self, shop_id: str, order: Dict):
+        """Process a single order."""
+        order_id = order.get("id")
+        financial_status = order.get("financial_status")
+        
+        # Only count paid orders
+        if financial_status not in ["paid", "partially_paid"]:
+            return
+        
+        self.metrics["orders_processed"] += 1
+        
+        # Process each line item
+        for item in order.get("line_items", []):
+            product_id = str(item.get("product_id"))
+            quantity = item.get("quantity", 1)
+            price = Decimal(str(item.get("price", "0")))
+            total = price * quantity
+            
+            # Find matching POD AutoM product
+            product = await self.find_product(shop_id, product_id)
+            
+            if product:
+                await self.update_product_sales(
+                    product_id=product["id"],
+                    niche_id=product.get("niche_id"),
+                    quantity=quantity,
+                    revenue=float(total)
+                )
+                
+                self.metrics["revenue_tracked"] += total
+                logger.info(f"    💵 Tracked sale: {item.get('title', 'Unknown')} - €{total:.2f}")
+    
+    async def find_product(self, shop_id: str, shopify_product_id: str) -> Optional[Dict]:
+        """Find a POD AutoM product by Shopify product ID."""
+        result = supabase_client.client.table("pod_autom_products").select("*").eq(
+            "shop_id", shop_id
+        ).eq(
+            "shopify_product_id", shopify_product_id
+        ).execute()
+        
+        return result.data[0] if result.data else None
+    
+    async def update_product_sales(
+        self,
+        product_id: str,
+        niche_id: Optional[str],
+        quantity: int,
+        revenue: float
+    ):
+        """Update sales metrics for a product."""
+        # Update product
+        supabase_client.client.rpc(
+            "increment_product_sales",
+            {
+                "p_product_id": product_id,
+                "p_quantity": quantity,
+                "p_revenue": revenue
+            }
+        ).execute()
+        
+        # Update niche if exists
+        if niche_id:
+            supabase_client.client.rpc(
+                "increment_niche_sales",
+                {
+                    "p_niche_id": niche_id,
+                    "p_quantity": quantity,
+                    "p_revenue": revenue
+                }
+            ).execute()
+    
+    async def update_shop_sync(self, shop_id: str):
+        """Update shop's last sync timestamp."""
+        supabase_client.client.table("pod_autom_shops").update({
+            "last_sync_at": datetime.now(timezone.utc).isoformat()
+        }).eq("id", shop_id).execute()
+    
+    def log_metrics(self):
+        """Log job metrics."""
+        duration = (self.metrics["end_time"] - self.metrics["start_time"]).total_seconds()
+        
+        logger.info("\n" + "=" * 60)
+        logger.info("📊 Sales Tracker Metrics")
+        logger.info("=" * 60)
+        logger.info(f"Duration: {duration:.2f}s")
+        logger.info(f"Shops processed: {self.metrics['shops_processed']}")
+        logger.info(f"Orders processed: {self.metrics['orders_processed']}")
+        logger.info(f"Revenue tracked: €{self.metrics['revenue_tracked']:.2f}")
+        logger.info("=" * 60)
 
-    # Update job run status
-    supabase_service.update_job_run(
-        job_id,
-        status='completed' if shops_failed == 0 else 'completed_with_errors',
-        shops_processed=shops_processed,
-        shops_failed=shops_failed,
-        error_log=error_log if error_log else None,
-        metadata={
-            'total_products_processed': total_products,
-            'end_time': datetime.now().isoformat()
-        }
-    )
 
-    print("\n" + "=" * 60)
-    print("SALES TRACKER JOB COMPLETED")
-    print(f"End time: {datetime.now()}")
-    print(f"Shops processed: {shops_processed}")
-    print(f"Shops failed: {shops_failed}")
-    print(f"Total products processed: {total_products}")
-    print("=" * 60)
-
-
-def main():
-    """Entry point for the Cron Job."""
-    try:
-        asyncio.run(run_sales_tracker())
-    except KeyboardInterrupt:
-        print("\nJob interrupted by user")
-        sys.exit(130)
-    except Exception as e:
-        print(f"\nFATAL ERROR: {e}")
-        sys.exit(1)
+async def main():
+    job = SalesTrackerJob()
+    await job.run()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

@@ -1,7 +1,0 @@
-# Pinterest Sync Job - Dependencies
-supabase>=2.0.0
-requests>=2.28.0
-python-dotenv>=1.0.0
-
-# OpenAI GPT-5.1 for pin description generation
-openai>=1.0.0
