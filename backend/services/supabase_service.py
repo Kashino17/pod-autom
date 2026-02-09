@@ -320,10 +320,10 @@ class SupabaseService:
     ) -> dict:
         """Get paginated list of users for admin panel."""
         try:
-            # Build query
+            # Build query - show users who have submitted a shopify_domain
             query = self.client.table("pod_autom_profiles").select(
                 "*", count="exact"
-            ).eq("role", "user").eq("onboarding_completed", True)
+            ).eq("role", "user").not_.is_("shopify_domain", "null")
 
             # Apply filters
             if status:
@@ -411,11 +411,11 @@ class SupabaseService:
     async def get_admin_stats(self) -> dict:
         """Get statistics for admin dashboard."""
         try:
-            # Count users by status
+            # Count users by status - pending users who have submitted a domain
             pending_result = self.client.table("pod_autom_profiles").select(
                 "id", count="exact"
-            ).eq("role", "user").eq("verification_status", "pending").eq(
-                "onboarding_completed", True
+            ).eq("role", "user").eq("verification_status", "pending").not_.is_(
+                "shopify_domain", "null"
             ).execute()
 
             verified_result = self.client.table("pod_autom_profiles").select(

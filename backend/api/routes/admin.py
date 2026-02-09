@@ -235,6 +235,8 @@ async def update_own_profile(
 
     if request.shopify_domain is not None:
         update_data["shopify_domain"] = request.shopify_domain
+        # When user submits a domain, set verification_status to pending
+        update_data["verification_status"] = "pending"
 
     if request.full_name is not None:
         update_data["full_name"] = request.full_name

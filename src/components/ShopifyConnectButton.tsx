@@ -56,9 +56,12 @@ export function ShopifyConnectButton({
   // If user already has a domain pending verification
   if (profile?.shopify_domain && profile?.verification_status === 'pending') {
     return (
-      <div className={`flex items-center gap-2 text-yellow-400 text-sm ${className}`}>
-        <Loader2 className="w-4 h-4 animate-spin" />
-        Verifizierung ausstehend
+      <div className={`inline-flex items-center gap-2.5 px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-xl ${className}`}>
+        <div className="relative">
+          <div className="w-2 h-2 rounded-full bg-amber-400" />
+          <div className="absolute inset-0 w-2 h-2 rounded-full bg-amber-400 animate-ping opacity-75" />
+        </div>
+        <span className="text-sm font-medium text-amber-300">In Prüfung</span>
       </div>
     )
   }
