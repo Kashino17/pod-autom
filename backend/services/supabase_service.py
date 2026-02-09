@@ -323,6 +323,25 @@ class SupabaseService:
             logger.error(f"Error completing onboarding: {e}")
             return False
 
+    async def save_onboarding_data(self, user_id: str, data: Dict[str, Any]) -> bool:
+        """Save all onboarding data and mark onboarding as complete."""
+        try:
+            # Add onboarding completion fields
+            update_data = {
+                **data,
+                "onboarding_completed": True,
+                "onboarding_completed_at": datetime.now(timezone.utc).isoformat(),
+                "verification_status": "pending"  # Set to pending for admin review
+            }
+
+            self.client.table("pod_autom_profiles").update(update_data).eq(
+                "id", user_id
+            ).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Error saving onboarding data: {e}")
+            return False
+
     # =====================================================
     # ADMIN FUNCTIONS
     # =====================================================

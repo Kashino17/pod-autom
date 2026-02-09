@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { MobileNav } from './MobileNav'
 import { SkipLink } from '@src/components/ui/SkipLink'
+import { OnboardingGuard } from '@src/components/OnboardingGuard'
 
 // =====================================================
 // TYPES
@@ -117,7 +118,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
         {/* Page content */}
         <main id="main-content" className="p-4 lg:p-6" tabIndex={-1}>
-          {children}
+          <OnboardingGuard>{children}</OnboardingGuard>
         </main>
       </div>
     </div>

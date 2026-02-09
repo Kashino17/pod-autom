@@ -54,6 +54,20 @@ class UpdateProfileRequest(BaseModel):
     full_name: Optional[str] = None
 
 
+class OnboardingDataRequest(BaseModel):
+    account_type: str  # 'individual' or 'company'
+    first_name: str
+    last_name: str
+    company_name: Optional[str] = None
+    phone: Optional[str] = None
+    tax_id: Optional[str] = None
+    billing_street: str
+    billing_city: str
+    billing_zip: str
+    billing_country: str
+    shopify_domain: str
+
+
 class PaginatedUsersResponse(BaseModel):
     success: bool
     users: List[UserProfile]
@@ -278,6 +292,73 @@ async def complete_onboarding(
     return {
         "success": True,
         "message": "Onboarding abgeschlossen. Bitte warte auf die Verifizierung."
+    }
+
+
+@router.put("/profile/onboarding")
+async def save_onboarding_data(
+    request: OnboardingDataRequest,
+    user: User = Depends(get_current_user)
+):
+    """
+    Save all onboarding data and mark onboarding as complete.
+    Validates required fields based on account type.
+    """
+    # Validate account type
+    if request.account_type not in ['individual', 'company']:
+        raise HTTPException(status_code=400, detail="Ungültiger Account-Typ.")
+
+    # Validate required fields
+    if not request.first_name or not request.first_name.strip():
+        raise HTTPException(status_code=400, detail="Vorname ist erforderlich.")
+
+    if not request.last_name or not request.last_name.strip():
+        raise HTTPException(status_code=400, detail="Nachname ist erforderlich.")
+
+    if request.account_type == 'company' and (not request.company_name or not request.company_name.strip()):
+        raise HTTPException(status_code=400, detail="Firmenname ist für Unternehmen erforderlich.")
+
+    if not request.billing_street or not request.billing_street.strip():
+        raise HTTPException(status_code=400, detail="Straße ist erforderlich.")
+
+    if not request.billing_city or not request.billing_city.strip():
+        raise HTTPException(status_code=400, detail="Stadt ist erforderlich.")
+
+    if not request.billing_zip or not request.billing_zip.strip():
+        raise HTTPException(status_code=400, detail="PLZ ist erforderlich.")
+
+    if not request.billing_country or not request.billing_country.strip():
+        raise HTTPException(status_code=400, detail="Land ist erforderlich.")
+
+    if not request.shopify_domain or not request.shopify_domain.strip():
+        raise HTTPException(status_code=400, detail="Shopify Domain ist erforderlich.")
+
+    # Prepare data
+    onboarding_data = {
+        "account_type": request.account_type,
+        "first_name": request.first_name.strip(),
+        "last_name": request.last_name.strip(),
+        "company_name": request.company_name.strip() if request.company_name else None,
+        "phone": request.phone.strip() if request.phone else None,
+        "tax_id": request.tax_id.strip() if request.tax_id else None,
+        "billing_street": request.billing_street.strip(),
+        "billing_city": request.billing_city.strip(),
+        "billing_zip": request.billing_zip.strip(),
+        "billing_country": request.billing_country.strip(),
+        "shopify_domain": request.shopify_domain.strip()
+    }
+
+    success = await supabase_client.save_onboarding_data(
+        user_id=user.id,
+        data=onboarding_data
+    )
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Fehler beim Speichern der Onboarding-Daten.")
+
+    return {
+        "success": True,
+        "message": "Onboarding erfolgreich abgeschlossen."
     }
 
 

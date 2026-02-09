@@ -24,6 +24,31 @@ export interface UserProfile {
   updated_at: string
   domain_changed_flag?: boolean
   shop_connection_status?: string | null
+  // Onboarding fields
+  account_type: 'individual' | 'company' | null
+  company_name: string | null
+  first_name: string | null
+  last_name: string | null
+  phone: string | null
+  tax_id: string | null
+  billing_street: string | null
+  billing_city: string | null
+  billing_zip: string | null
+  billing_country: string | null
+}
+
+export interface OnboardingData {
+  account_type: 'individual' | 'company'
+  first_name: string
+  last_name: string
+  company_name?: string | undefined
+  phone?: string | undefined
+  tax_id?: string | undefined
+  billing_street: string
+  billing_city: string
+  billing_zip: string
+  billing_country: string
+  shopify_domain: string
 }
 
 export interface AdminStats {
@@ -332,6 +357,35 @@ export function useUserProfile() {
     },
   })
 
+  // Save onboarding data
+  const saveOnboardingDataMutation = useMutation({
+    mutationFn: async (data: OnboardingData) => {
+      const response = await api.put<{ success: boolean; message: string }>(
+        '/api/admin/profile/onboarding',
+        data
+      )
+      if (!response.success) {
+        throw new Error('Fehler beim Speichern')
+      }
+      return response
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-profile'] })
+      addToast({
+        type: 'success',
+        title: 'Onboarding abgeschlossen',
+        description: 'Deine Daten wurden gespeichert.',
+      })
+    },
+    onError: (error: Error) => {
+      addToast({
+        type: 'error',
+        title: 'Fehler',
+        description: error.message,
+      })
+    },
+  })
+
   return {
     profile: profileQuery.data,
     isLoading: profileQuery.isLoading,
@@ -344,5 +398,7 @@ export function useUserProfile() {
     isCompletingOnboarding: completeOnboardingMutation.isPending,
     startInstallation: startInstallationMutation.mutateAsync,
     isStartingInstallation: startInstallationMutation.isPending,
+    saveOnboardingData: saveOnboardingDataMutation.mutateAsync,
+    isSavingOnboarding: saveOnboardingDataMutation.isPending,
   }
 }
