@@ -336,10 +336,11 @@ class SupabaseService:
     ) -> dict:
         """Get paginated list of users for admin panel."""
         try:
-            # Build query - show users who have submitted a shopify_domain
+            # Build query - show all non-admin users who have a shopify_domain set
+            # Using PostgREST syntax: not.is.null
             query = self.client.table("pod_autom_profiles").select(
                 "*", count="exact"
-            ).eq("role", "user").not_.is_("shopify_domain", "null")
+            ).eq("role", "user").filter("shopify_domain", "not.is", "null")
 
             # Apply filters
             if status:
@@ -430,8 +431,8 @@ class SupabaseService:
             # Count users by status - pending users who have submitted a domain
             pending_result = self.client.table("pod_autom_profiles").select(
                 "id", count="exact"
-            ).eq("role", "user").eq("verification_status", "pending").not_.is_(
-                "shopify_domain", "null"
+            ).eq("role", "user").eq("verification_status", "pending").filter(
+                "shopify_domain", "not.is", "null"
             ).execute()
 
             verified_result = self.client.table("pod_autom_profiles").select(
