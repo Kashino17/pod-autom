@@ -158,15 +158,48 @@ export function useShops() {
   })
 
   // Start Shopify OAuth flow with specific shop domain
-  const startOAuthFlow = (shopDomain: string, userId: string) => {
+  // Goes directly to the shop's OAuth page, bypassing managed installation
+  const startOAuthFlow = async (shopDomain: string, userId: string) => {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001'
-    const cleanDomain = shopDomain
+    let cleanDomain = shopDomain
       .toLowerCase()
       .trim()
       .replace(/^https?:\/\//, '')
       .replace(/\/$/, '')
 
-    window.location.href = `${apiUrl}/api/shopify/install?shop=${cleanDomain}&user_id=${userId}`
+    // Ensure .myshopify.com suffix
+    if (!cleanDomain.endsWith('.myshopify.com')) {
+      if (!cleanDomain.includes('.')) {
+        cleanDomain = `${cleanDomain}.myshopify.com`
+      }
+    }
+
+    // Call backend to start OAuth and get the direct auth URL
+    try {
+      const response = await fetch(`${apiUrl}/api/shopify/oauth/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('supabase.auth.token') || ''}`,
+        },
+        body: JSON.stringify({ shop_domain: cleanDomain }),
+        credentials: 'include',
+      })
+
+      const data = await response.json()
+
+      if (data.success && data.auth_url) {
+        window.location.href = data.auth_url
+      } else {
+        console.error('OAuth start failed:', data)
+        // Fallback to install endpoint
+        window.location.href = `${apiUrl}/api/shopify/install?shop=${cleanDomain}&user_id=${userId}`
+      }
+    } catch (error) {
+      console.error('OAuth start error:', error)
+      // Fallback to install endpoint
+      window.location.href = `${apiUrl}/api/shopify/install?shop=${cleanDomain}&user_id=${userId}`
+    }
   }
 
   // Quick install without specifying shop domain (user selects in Shopify)

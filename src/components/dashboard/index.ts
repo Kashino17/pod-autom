@@ -18,3 +18,5 @@ export type { Prompt, PromptType } from './PromptManager'
 
 export { ProductQueue } from './ProductQueue'
 export type { QueuedProduct, ProductStatus } from './ProductQueue'
+
+export { VerificationBanner } from './VerificationBanner'

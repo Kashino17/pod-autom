@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '@src/contexts/AuthContext'
 import { useShops } from '@src/hooks/useShopify'
-import { Store, Loader2, ExternalLink, Key, Zap } from 'lucide-react'
+import { Store, ExternalLink, Zap } from 'lucide-react'
 
 // =====================================================
 // SHOPIFY CONNECT BUTTON
@@ -21,7 +21,7 @@ export function ShopifyConnectButton({
 
   const [showModal, setShowModal] = useState(false)
   const [shopDomain, setShopDomain] = useState('')
-  const [connectionMode, setConnectionMode] = useState<'quick' | 'domain' | 'manual'>('quick')
+  const [connectionMode, setConnectionMode] = useState<'quick' | 'domain'>('quick')
 
   const handleOAuthConnect = () => {
     if (!shopDomain.trim() || !user?.id) return
@@ -94,19 +94,6 @@ export function ShopifyConnectButton({
                   Domain
                 </div>
               </button>
-              <button
-                onClick={() => setConnectionMode('manual')}
-                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                  connectionMode === 'manual'
-                    ? 'bg-violet-500 text-white'
-                    : 'bg-zinc-800 text-zinc-400 hover:text-white'
-                }`}
-              >
-                <div className="flex items-center justify-center gap-1">
-                  <Key className="w-4 h-4" />
-                  Token
-                </div>
-              </button>
             </div>
 
             {/* Quick Install Mode (Recommended) */}
@@ -114,7 +101,7 @@ export function ShopifyConnectButton({
               <div className="space-y-4">
                 <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                   <p className="text-sm text-emerald-300 font-medium mb-2">
-                    ⚡ Ein-Klick Installation
+                    Ein-Klick Installation
                   </p>
                   <p className="text-sm text-zinc-400">
                     Du wirst zu Shopify weitergeleitet und kannst dort deinen Shop auswählen.
@@ -125,10 +112,10 @@ export function ShopifyConnectButton({
                 <div className="p-3 rounded-lg bg-zinc-800/50">
                   <p className="text-xs text-zinc-400 font-medium mb-2">Berechtigungen:</p>
                   <ul className="text-xs text-zinc-500 space-y-1">
-                    <li>✓ Produkte lesen & erstellen</li>
-                    <li>✓ Inventar verwalten</li>
-                    <li>✓ Bestellungen lesen</li>
-                    <li>✓ Dateien hochladen</li>
+                    <li>Produkte lesen & erstellen</li>
+                    <li>Inventar verwalten</li>
+                    <li>Bestellungen lesen</li>
+                    <li>Dateien hochladen</li>
                   </ul>
                 </div>
 
@@ -178,16 +165,6 @@ export function ShopifyConnectButton({
               </div>
             )}
 
-            {/* Manual Mode */}
-            {connectionMode === 'manual' && (
-              <ManualConnectionForm
-                onSuccess={() => {
-                  setShowModal(false)
-                  onConnected?.()
-                }}
-              />
-            )}
-
             {/* Close button */}
             <button
               onClick={() => setShowModal(false)}
@@ -201,112 +178,6 @@ export function ShopifyConnectButton({
         </div>
       )}
     </>
-  )
-}
-
-// =====================================================
-// MANUAL CONNECTION FORM
-// =====================================================
-
-interface ManualConnectionFormProps {
-  onSuccess?: () => void
-}
-
-function ManualConnectionForm({ onSuccess }: ManualConnectionFormProps) {
-  const { createShop, isCreating } = useShops()
-
-  const [shopDomain, setShopDomain] = useState('')
-  const [accessToken, setAccessToken] = useState('')
-  const [internalName, setInternalName] = useState('')
-
-  const canSubmit = shopDomain.trim() && accessToken.trim() && !isCreating
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!canSubmit) return
-
-    const shopData: {
-      shop_domain: string
-      access_token: string
-      internal_name?: string
-    } = {
-      shop_domain: shopDomain,
-      access_token: accessToken,
-    }
-
-    if (internalName) {
-      shopData.internal_name = internalName
-    }
-
-    createShop(shopData, {
-      onSuccess: () => {
-        onSuccess?.()
-      },
-    })
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label htmlFor="manualShopDomain" className="label">
-          Shop Domain
-        </label>
-        <input
-          id="manualShopDomain"
-          type="text"
-          value={shopDomain}
-          onChange={(e) => setShopDomain(e.target.value)}
-          className="input"
-          placeholder="dein-shop.myshopify.com"
-          required
-        />
-      </div>
-
-      <div>
-        <label htmlFor="accessToken" className="label">
-          Admin API Access Token
-        </label>
-        <input
-          id="accessToken"
-          type="password"
-          value={accessToken}
-          onChange={(e) => setAccessToken(e.target.value)}
-          className="input"
-          placeholder="shpat_..."
-          required
-        />
-        <p className="text-xs text-zinc-500 mt-1">
-          Erstelle einen Custom App Token in deinem Shopify Admin unter
-          Settings &gt; Apps and sales channels &gt; Develop apps
-        </p>
-      </div>
-
-      <div>
-        <label htmlFor="internalName" className="label">
-          Interner Name (optional)
-        </label>
-        <input
-          id="internalName"
-          type="text"
-          value={internalName}
-          onChange={(e) => setInternalName(e.target.value)}
-          className="input"
-          placeholder="Mein Shop"
-        />
-      </div>
-
-      <button
-        type="submit"
-        disabled={!canSubmit}
-        className="btn-primary w-full py-3"
-      >
-        {isCreating ? (
-          <Loader2 className="w-5 h-5 animate-spin mx-auto" />
-        ) : (
-          'Shop verbinden'
-        )}
-      </button>
-    </form>
   )
 }
 

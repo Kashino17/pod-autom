@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     SHOPIFY_CLIENT_ID: Optional[str] = None
     SHOPIFY_CLIENT_SECRET: Optional[str] = None
     SHOPIFY_SCOPES: str = "read_products,write_products,read_orders,write_orders,read_inventory,write_inventory"
-    SHOPIFY_REDIRECT_URI: str = "https://pod-autom-api.onrender.com/api/shopify/oauth/callback"
+    SHOPIFY_REDIRECT_URI: str = "https://pod-autom-api.onrender.com/api/shopify/callback"
     
     # Pinterest App
     PINTEREST_CLIENT_ID: Optional[str] = None

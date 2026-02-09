@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '@src/contexts/AuthContext'
 import { SubscriptionProvider } from '@src/contexts/SubscriptionContext'
 import { ToastContainer } from '@src/components/ui/Toast'
-import { ProtectedRoute, PublicOnlyRoute } from '@src/components/ProtectedRoute'
+import { ProtectedRoute, PublicOnlyRoute, AdminRoute } from '@src/components/ProtectedRoute'
 import { ErrorBoundary } from '@src/components/ErrorBoundary'
 
 // =====================================================
@@ -51,6 +51,9 @@ const DashboardAnalytics = lazy(() => import('@src/pages/DashboardAnalytics'))
 // Other Protected Pages
 const Onboarding = lazy(() => import('@src/pages/Onboarding'))
 const Settings = lazy(() => import('@src/pages/Settings'))
+
+// Admin Pages
+const AdminPanel = lazy(() => import('@src/pages/AdminPanel'))
 
 // Checkout Pages
 const Checkout = lazy(() => import('@src/pages/Checkout'))
@@ -228,6 +231,16 @@ function App() {
                     <ProtectedRoute>
                       <Settings />
                     </ProtectedRoute>
+                  }
+                />
+
+                {/* Admin Routes */}
+                <Route
+                  path="/admin"
+                  element={
+                    <AdminRoute>
+                      <AdminPanel />
+                    </AdminRoute>
                   }
                 />
 
