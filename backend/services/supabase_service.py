@@ -281,11 +281,27 @@ class SupabaseService:
             return None
 
     async def update_user_profile(self, user_id: str, data: dict) -> bool:
-        """Update user profile."""
+        """Update user profile. Creates profile if it doesn't exist."""
         try:
-            self.client.table("pod_autom_profiles").update(data).eq(
-                "id", user_id
-            ).execute()
+            # First check if profile exists
+            existing = await self.get_user_profile(user_id)
+
+            if existing:
+                # Update existing profile
+                self.client.table("pod_autom_profiles").update(data).eq(
+                    "id", user_id
+                ).execute()
+            else:
+                # Create new profile with the data
+                create_data = {
+                    "id": user_id,
+                    "role": "user",
+                    "verification_status": "pending",
+                    "onboarding_completed": False,
+                    **data
+                }
+                self.client.table("pod_autom_profiles").insert(create_data).execute()
+
             return True
         except Exception as e:
             logger.error(f"Error updating user profile: {e}")

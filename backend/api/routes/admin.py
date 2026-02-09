@@ -244,6 +244,9 @@ async def update_own_profile(
     if not update_data:
         raise HTTPException(status_code=400, detail="Keine Daten zum Aktualisieren.")
 
+    # Include email for profile creation if needed
+    update_data["email"] = user.email
+
     success = await supabase_client.update_user_profile(user.id, update_data)
 
     if not success:
