@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from contextlib import asynccontextmanager
 import logging
 
@@ -86,7 +86,19 @@ app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 # Root endpoint
 @app.get("/")
-async def root():
+async def root(request: Request):
+    """
+    Root endpoint - redirects to frontend if coming from Shopify,
+    otherwise returns API info.
+    """
+    # Check if this is a Shopify embedded app redirect
+    # Shopify sends hmac, host, shop parameters after installation
+    query_params = request.query_params
+    if query_params.get("hmac") or query_params.get("host") or query_params.get("shop"):
+        # Redirect to frontend dashboard
+        logger.info(f"Shopify redirect detected, forwarding to frontend: {settings.FRONTEND_URL}")
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/dashboard", status_code=302)
+
     return {
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,
