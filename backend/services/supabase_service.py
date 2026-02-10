@@ -355,10 +355,10 @@ class SupabaseService:
     ) -> dict:
         """Get paginated list of users for admin panel."""
         try:
-            # Build query - show all non-admin users
+            # Build query - show ALL users (including admins for testing)
             query = self.client.table("pod_autom_profiles").select(
                 "*", count="exact"
-            ).eq("role", "user")
+            )
 
             # Apply filters
             if status:
@@ -453,18 +453,18 @@ class SupabaseService:
     async def get_admin_stats(self) -> dict:
         """Get statistics for admin dashboard."""
         try:
-            # Count users by status
+            # Count users by status (all users including admins)
             pending_result = self.client.table("pod_autom_profiles").select(
                 "id", count="exact"
-            ).eq("role", "user").eq("verification_status", "pending").execute()
+            ).eq("verification_status", "pending").execute()
 
             verified_result = self.client.table("pod_autom_profiles").select(
                 "id", count="exact"
-            ).eq("role", "user").eq("verification_status", "verified").execute()
+            ).eq("verification_status", "verified").execute()
 
             total_result = self.client.table("pod_autom_profiles").select(
                 "id", count="exact"
-            ).eq("role", "user").execute()
+            ).execute()
 
             # Count connected shops
             shops_result = self.client.table("pod_autom_shops").select(
