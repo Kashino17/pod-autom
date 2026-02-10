@@ -158,7 +158,29 @@ class SupabaseService:
             return True
         except Exception:
             return False
-    
+
+    async def get_shop_by_domain(self, shop_domain: str) -> Optional[dict]:
+        """Get a shop by its domain (across all users)."""
+        try:
+            result = self.client.table("pod_autom_shops").select("*").eq(
+                "shop_domain", shop_domain
+            ).limit(1).execute()
+            return result.data[0] if result.data else None
+        except Exception as e:
+            logger.error(f"Error getting shop by domain: {e}")
+            return None
+
+    async def get_user_by_shopify_domain(self, shop_domain: str) -> Optional[dict]:
+        """Get user profile by their registered Shopify domain."""
+        try:
+            result = self.client.table("pod_autom_profiles").select("*").eq(
+                "shopify_domain", shop_domain
+            ).limit(1).execute()
+            return result.data[0] if result.data else None
+        except Exception as e:
+            logger.error(f"Error getting user by shopify domain: {e}")
+            return None
+
     # =====================================================
     # SETTINGS MANAGEMENT
     # =====================================================

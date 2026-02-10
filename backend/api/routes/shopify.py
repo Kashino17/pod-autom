@@ -354,6 +354,108 @@ async def sync_shop(shop_id: str, user: User = Depends(get_current_user)):
 
 
 # =====================================================
+# CUSTOM APP LAUNCH (App URL endpoint)
+# =====================================================
+
+@router.get("/app")
+async def app_launch(
+    request: Request,
+    shop: str = Query(None),
+    host: str = Query(None),
+    hmac_param: str = Query(None, alias="hmac"),
+    timestamp: str = Query(None),
+    session: str = Query(None),
+):
+    """
+    App URL endpoint for Custom Distribution Apps.
+
+    After a Custom App is installed, Shopify redirects here (NOT to /callback).
+    We need to start an OAuth flow to get the access token.
+
+    This endpoint should be set as the "App URL" in Shopify Partner Dashboard.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"App launch called with shop={shop}, host={host}")
+
+    if not shop:
+        # Try to decode shop from host parameter
+        if host:
+            try:
+                decoded_host = base64.b64decode(host).decode('utf-8')
+                # Host format: "admin.shopify.com/store/{shop}" or "{shop}/admin"
+                if '/store/' in decoded_host:
+                    shop_handle = decoded_host.split('/store/')[-1].split('/')[0]
+                    shop = f"{shop_handle}.myshopify.com"
+                elif '.myshopify.com' in decoded_host:
+                    shop = decoded_host.split('/')[0]
+                logger.info(f"Decoded shop from host: {shop}")
+            except Exception as e:
+                logger.error(f"Failed to decode host: {e}")
+
+    if not shop:
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/dashboard?shop_error=no_shop",
+            status_code=302
+        )
+
+    # Ensure proper format
+    if not shop.endswith('.myshopify.com'):
+        shop = f"{shop}.myshopify.com"
+
+    # Check if we already have this shop connected
+    existing_shop = await supabase_client.get_shop_by_domain(shop)
+    if existing_shop and existing_shop.get('access_token'):
+        logger.info(f"Shop {shop} already connected, redirecting to dashboard")
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/dashboard?shop_connected=true&shop={shop}",
+            status_code=302
+        )
+
+    # Find the user who initiated the installation
+    pending = await supabase_client.get_pending_installation_by_shop(shop)
+    user_id = pending.get('user_id') if pending else None
+
+    if not user_id:
+        # Try to find user by shopify_domain in profile
+        user_profile = await supabase_client.get_user_by_shopify_domain(shop)
+        if user_profile:
+            user_id = user_profile.get('id')
+
+    if not user_id:
+        logger.warning(f"No user found for shop {shop}")
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/dashboard?shop_error=no_user&shop={shop}",
+            status_code=302
+        )
+
+    # Start OAuth flow to get access token
+    state = generate_nonce()
+
+    # Store OAuth state
+    await supabase_client.store_oauth_state(
+        user_id=user_id,
+        state=state,
+        shop_domain=shop,
+        provider="shopify"
+    )
+
+    # Build OAuth authorization URL
+    params = {
+        "client_id": settings.SHOPIFY_CLIENT_ID,
+        "scope": settings.SHOPIFY_SCOPES,
+        "redirect_uri": settings.SHOPIFY_REDIRECT_URI,
+        "state": state,
+    }
+
+    auth_url = f"https://{shop}/admin/oauth/authorize?{urlencode(params)}"
+    logger.info(f"Redirecting to OAuth: {auth_url}")
+
+    return RedirectResponse(url=auth_url, status_code=302)
+
+
+# =====================================================
 # HELPER FUNCTIONS
 # =====================================================
 
