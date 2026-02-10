@@ -388,11 +388,18 @@ class SupabaseService:
 
                 user["domain_changed_flag"] = domain_changed_flag
 
-                # Get shop connection status
+                # Get shop connection status and domain from connected shops
                 shop_result = self.client.table("pod_autom_shops").select(
-                    "connection_status"
+                    "connection_status, shop_domain"
                 ).eq("user_id", user["id"]).limit(1).execute()
-                user["shop_connection_status"] = shop_result.data[0]["connection_status"] if shop_result.data else None
+
+                if shop_result.data:
+                    user["shop_connection_status"] = shop_result.data[0]["connection_status"]
+                    # If profile doesn't have shopify_domain, use the connected shop's domain
+                    if not user.get("shopify_domain") and shop_result.data[0].get("shop_domain"):
+                        user["shopify_domain"] = shop_result.data[0]["shop_domain"]
+                else:
+                    user["shop_connection_status"] = None
 
                 users.append(user)
 
