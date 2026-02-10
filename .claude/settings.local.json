@@ -19,7 +19,15 @@
       "Bash(git config:*)",
       "WebFetch(domain:api.github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(python3:*)",
+      "Bash(git ls-remote https://github.com/Kashino17/pod-autom.git HEAD)",
+      "Bash(grep:*)",
+      "Bash(cd /Users/ayysir/Desktop/POD\\\\ AutoM && npm run type-check:*)",
+      "Bash(npm run lint)",
+      "Bash(npx eslint src/components/onboarding/OnboardingModal.tsx src/components/OnboardingGuard.tsx src/hooks/useOnboardingStatus.ts src/hooks/useAdmin.ts src/components/layout/DashboardLayout.tsx --ext ts,tsx --report-unused-disable-directives)",
+      "Bash(cd:*)",
+      "Bash(ls:*)"
     ]
   }
 }

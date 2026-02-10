@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 import logging
 
 from config import settings
-from api.routes import health, shopify, pinterest, niches, products, generation, designs, admin
+from api.routes import health, shopify, pinterest, niches, products, generation, designs, admin, webhooks
 
 # Logging setup
 logging.basicConfig(
@@ -82,6 +82,7 @@ app.include_router(products.router, prefix="/api/products", tags=["Products"])
 app.include_router(generation.router, prefix="/api/generate", tags=["Generation"])
 app.include_router(designs.router, prefix="/api/designs", tags=["Designs"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(webhooks.router, prefix="/api/webhooks", tags=["Webhooks"])
 
 
 # Root endpoint

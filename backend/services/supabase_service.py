@@ -554,5 +554,112 @@ class SupabaseService:
             return False
 
 
+# =====================================================
+    # COMPLIANCE & GDPR
+    # =====================================================
+
+    async def log_compliance_request(
+        self,
+        request_type: str,
+        shop_domain: str,
+        customer_id: Optional[str],
+        customer_email: Optional[str],
+        payload: Dict[str, Any]
+    ) -> bool:
+        """Log a GDPR/compliance request for auditing."""
+        try:
+            import json
+            data = {
+                "request_type": request_type,
+                "shop_domain": shop_domain,
+                "customer_id": customer_id,
+                "customer_email": customer_email,
+                "payload": json.dumps(payload),
+                "status": "received"
+            }
+            self.client.table("pod_autom_compliance_logs").insert(data).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Error logging compliance request: {e}")
+            return False
+
+    async def redact_customer_data(
+        self,
+        shop_domain: str,
+        customer_id: Optional[str],
+        orders: List[int]
+    ) -> bool:
+        """Redact/delete customer data from all tables."""
+        try:
+            # POD AutoM currently doesn't store direct customer data
+            # If you add customer-related features, implement deletion here
+            # For now, just log that we processed the request
+            logger.info(f"Customer data redaction processed for shop {shop_domain}, customer {customer_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error redacting customer data: {e}")
+            return False
+
+    async def redact_shop_data(self, shop_domain: str) -> bool:
+        """Delete all data for a shop (called 48h after uninstall)."""
+        try:
+            # Get shop by domain
+            shop_result = self.client.table("pod_autom_shops").select("id, user_id").eq(
+                "shop_domain", shop_domain
+            ).execute()
+
+            if not shop_result.data:
+                logger.info(f"No shop found for domain {shop_domain}")
+                return True
+
+            shop = shop_result.data[0]
+            shop_id = shop["id"]
+
+            # Delete related data in order (respecting foreign keys)
+            # 1. Delete niches (via settings)
+            settings_result = self.client.table("pod_autom_settings").select("id").eq(
+                "shop_id", shop_id
+            ).execute()
+
+            if settings_result.data:
+                for setting in settings_result.data:
+                    self.client.table("pod_autom_niches").delete().eq(
+                        "settings_id", setting["id"]
+                    ).execute()
+
+            # 2. Delete settings
+            self.client.table("pod_autom_settings").delete().eq(
+                "shop_id", shop_id
+            ).execute()
+
+            # 3. Delete the shop
+            self.client.table("pod_autom_shops").delete().eq(
+                "id", shop_id
+            ).execute()
+
+            # 4. Delete pending installations
+            self.client.table("pod_autom_pending_installations").delete().eq(
+                "shop_domain", shop_domain
+            ).execute()
+
+            logger.info(f"Shop data redacted for {shop_domain}")
+            return True
+        except Exception as e:
+            logger.error(f"Error redacting shop data: {e}")
+            return False
+
+    async def mark_shop_disconnected(self, shop_domain: str) -> bool:
+        """Mark a shop as disconnected (on uninstall, before redact)."""
+        try:
+            self.client.table("pod_autom_shops").update({
+                "connection_status": "disconnected",
+                "access_token": None  # Clear token immediately for security
+            }).eq("shop_domain", shop_domain).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Error marking shop disconnected: {e}")
+            return False
+
+
 # Singleton instance
 supabase_client = SupabaseService()
