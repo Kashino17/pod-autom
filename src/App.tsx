@@ -60,21 +60,12 @@ const Checkout = lazy(() => import('@src/pages/Checkout'))
 const CheckoutSuccess = lazy(() => import('@src/pages/CheckoutSuccess'))
 const CheckoutCancel = lazy(() => import('@src/pages/CheckoutCancel'))
 
+// Pricing Page
+const Pricing = lazy(() => import('@src/pages/Pricing'))
+
 // =====================================================
 // STATIC PAGES (small, no need for lazy loading)
 // =====================================================
-
-function Pricing() {
-  return (
-    <div className="min-h-screen bg-black flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-white mb-4">Preise</h1>
-        <p className="text-zinc-400">Pricing Page - Coming Soon</p>
-        <a href="/" className="link mt-4 inline-block">Zurueck zur Startseite</a>
-      </div>
-    </div>
-  )
-}
 
 function NotFound() {
   return (
