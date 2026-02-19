@@ -278,6 +278,138 @@ async def get_design_stats(user: User = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"Error fetching stats: {e}")
 
 
+# =====================================================
+# PLAN STATUS (must be before /{design_id} routes!)
+# =====================================================
+
+def _get_billing_month_start(billing_cycle_start) -> date:
+    """Calculate current billing month start."""
+    if not billing_cycle_start:
+        return date.today().replace(day=1)
+    cycle_start = date.fromisoformat(str(billing_cycle_start))
+    today = date.today()
+    day_of_month = min(cycle_start.day, 28)
+    try:
+        this_month_start = today.replace(day=day_of_month)
+    except ValueError:
+        this_month_start = today.replace(day=28)
+    if this_month_start > today:
+        if this_month_start.month == 1:
+            this_month_start = this_month_start.replace(year=this_month_start.year - 1, month=12)
+        else:
+            this_month_start = this_month_start.replace(month=this_month_start.month - 1)
+    return this_month_start
+
+
+def _calc_next_generation(gen_time: str, gen_tz: str, last_run=None) -> Optional[str]:
+    """Calculate the next generation datetime as ISO string."""
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(gen_tz)
+        now = datetime.now(tz)
+        parts = gen_time.split(":")
+        hour = int(parts[0])
+        minute = int(parts[1]) if len(parts) > 1 else 0
+
+        target_today = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+        # If already passed today or already ran today, schedule for tomorrow
+        already_ran_today = False
+        if last_run:
+            try:
+                last_dt = datetime.fromisoformat(str(last_run))
+                if last_dt.tzinfo is None:
+                    last_dt = last_dt.replace(tzinfo=timezone.utc)
+                last_in_tz = last_dt.astimezone(tz)
+                if last_in_tz.date() == now.date():
+                    already_ran_today = True
+            except Exception:
+                pass
+
+        if target_today <= now or already_ran_today:
+            # Tomorrow
+            from datetime import timedelta
+            target_today += timedelta(days=1)
+
+        return target_today.isoformat()
+    except Exception:
+        return None
+
+
+@router.get("/plan-status", response_model=PlanStatusResponse)
+async def get_plan_status(user: User = Depends(get_current_user)):
+    """Get the user's plan status including limits, usage, and schedule."""
+    try:
+        # Get user's shop → settings
+        shops = supabase_client.client.table("pod_autom_shops").select(
+            "id"
+        ).eq("user_id", user.id).limit(1).execute()
+
+        if not shops.data:
+            return PlanStatusResponse(
+                success=True, plan_type="free", plan_name="Free",
+                monthly_limit=10, monthly_used=0, monthly_remaining=10,
+                generation_time="09:00", generation_timezone="Europe/Berlin",
+                designs_per_batch=5,
+            )
+
+        shop_id = shops.data[0]["id"]
+        settings = supabase_client.client.table("pod_autom_settings").select(
+            "plan_type, monthly_design_limit, generation_time, generation_timezone, "
+            "billing_cycle_start, designs_per_batch, last_generation_run"
+        ).eq("shop_id", shop_id).limit(1).execute()
+
+        if not settings.data:
+            return PlanStatusResponse(
+                success=True, plan_type="free", plan_name="Free",
+                monthly_limit=10, monthly_used=0, monthly_remaining=10,
+                generation_time="09:00", generation_timezone="Europe/Berlin",
+                designs_per_batch=5,
+            )
+
+        s = settings.data[0]
+        plan_type = s.get("plan_type", "free")
+        monthly_limit = s.get("monthly_design_limit") or PLAN_LIMITS.get(plan_type, 10)
+        gen_time = s.get("generation_time", "09:00")
+        gen_tz = s.get("generation_timezone", "Europe/Berlin")
+        designs_per_batch = s.get("designs_per_batch", 5)
+        billing_start = s.get("billing_cycle_start")
+        last_run = s.get("last_generation_run")
+
+        month_start = _get_billing_month_start(billing_start)
+
+        # Get monthly usage
+        usage_res = supabase_client.client.table("pod_autom_monthly_usage").select(
+            "designs_generated"
+        ).eq("user_id", user.id).eq("month_start", month_start.isoformat()).execute()
+
+        monthly_used = usage_res.data[0]["designs_generated"] if usage_res.data else 0
+
+        next_gen = _calc_next_generation(gen_time, gen_tz, last_run)
+
+        return PlanStatusResponse(
+            success=True,
+            plan_type=plan_type,
+            plan_name=PLAN_NAMES.get(plan_type, "Free"),
+            monthly_limit=monthly_limit,
+            monthly_used=monthly_used,
+            monthly_remaining=max(0, monthly_limit - monthly_used),
+            generation_time=gen_time,
+            generation_timezone=gen_tz,
+            designs_per_batch=designs_per_batch,
+            next_generation_at=next_gen,
+            last_generation_at=str(last_run) if last_run else None,
+            billing_cycle_start=str(billing_start) if billing_start else None,
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching plan status: {e}")
+
+
+# =====================================================
+# SINGLE DESIGN ROUTES
+# =====================================================
+
 @router.get("/{design_id}")
 async def get_design(design_id: str, user: User = Depends(get_current_user)):
     """Get a specific design by ID."""
@@ -350,132 +482,8 @@ async def delete_design(design_id: str, user: User = Depends(get_current_user)):
 
 
 # =====================================================
-# PLAN STATUS & SCHEDULING
+# GENERATION & SCHEDULING
 # =====================================================
-
-def _get_billing_month_start(billing_cycle_start) -> date:
-    """Calculate current billing month start."""
-    if not billing_cycle_start:
-        return date.today().replace(day=1)
-    cycle_start = date.fromisoformat(str(billing_cycle_start))
-    today = date.today()
-    day_of_month = min(cycle_start.day, 28)
-    try:
-        this_month_start = today.replace(day=day_of_month)
-    except ValueError:
-        this_month_start = today.replace(day=28)
-    if this_month_start > today:
-        if this_month_start.month == 1:
-            this_month_start = this_month_start.replace(year=this_month_start.year - 1, month=12)
-        else:
-            this_month_start = this_month_start.replace(month=this_month_start.month - 1)
-    return this_month_start
-
-
-def _calc_next_generation(gen_time: str, gen_tz: str, last_run=None) -> Optional[str]:
-    """Calculate the next generation datetime as ISO string."""
-    try:
-        from zoneinfo import ZoneInfo
-        tz = ZoneInfo(gen_tz)
-        now = datetime.now(tz)
-        parts = gen_time.split(":")
-        hour = int(parts[0])
-        minute = int(parts[1]) if len(parts) > 1 else 0
-        
-        target_today = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        
-        # If already passed today or already ran today, schedule for tomorrow
-        already_ran_today = False
-        if last_run:
-            try:
-                last_dt = datetime.fromisoformat(str(last_run))
-                if last_dt.tzinfo is None:
-                    last_dt = last_dt.replace(tzinfo=timezone.utc)
-                last_in_tz = last_dt.astimezone(tz)
-                if last_in_tz.date() == now.date():
-                    already_ran_today = True
-            except Exception:
-                pass
-        
-        if target_today <= now or already_ran_today:
-            # Tomorrow
-            from datetime import timedelta
-            target_today += timedelta(days=1)
-        
-        return target_today.isoformat()
-    except Exception:
-        return None
-
-
-@router.get("/plan-status", response_model=PlanStatusResponse)
-async def get_plan_status(user: User = Depends(get_current_user)):
-    """Get the user's plan status including limits, usage, and schedule."""
-    try:
-        # Get user's shop → settings
-        shops = supabase_client.client.table("pod_autom_shops").select(
-            "id"
-        ).eq("user_id", user.id).limit(1).execute()
-        
-        if not shops.data:
-            return PlanStatusResponse(
-                success=True, plan_type="free", plan_name="Free",
-                monthly_limit=10, monthly_used=0, monthly_remaining=10,
-                generation_time="09:00", generation_timezone="Europe/Berlin",
-                designs_per_batch=5,
-            )
-        
-        shop_id = shops.data[0]["id"]
-        settings = supabase_client.client.table("pod_autom_settings").select(
-            "plan_type, monthly_design_limit, generation_time, generation_timezone, "
-            "billing_cycle_start, designs_per_batch, last_generation_run"
-        ).eq("shop_id", shop_id).limit(1).execute()
-        
-        if not settings.data:
-            return PlanStatusResponse(
-                success=True, plan_type="free", plan_name="Free",
-                monthly_limit=10, monthly_used=0, monthly_remaining=10,
-                generation_time="09:00", generation_timezone="Europe/Berlin",
-                designs_per_batch=5,
-            )
-        
-        s = settings.data[0]
-        plan_type = s.get("plan_type", "free")
-        monthly_limit = s.get("monthly_design_limit") or PLAN_LIMITS.get(plan_type, 10)
-        gen_time = s.get("generation_time", "09:00")
-        gen_tz = s.get("generation_timezone", "Europe/Berlin")
-        designs_per_batch = s.get("designs_per_batch", 5)
-        billing_start = s.get("billing_cycle_start")
-        last_run = s.get("last_generation_run")
-        
-        month_start = _get_billing_month_start(billing_start)
-        
-        # Get monthly usage
-        usage_res = supabase_client.client.table("pod_autom_monthly_usage").select(
-            "designs_generated"
-        ).eq("user_id", user.id).eq("month_start", month_start.isoformat()).execute()
-        
-        monthly_used = usage_res.data[0]["designs_generated"] if usage_res.data else 0
-        
-        next_gen = _calc_next_generation(gen_time, gen_tz, last_run)
-        
-        return PlanStatusResponse(
-            success=True,
-            plan_type=plan_type,
-            plan_name=PLAN_NAMES.get(plan_type, "Free"),
-            monthly_limit=monthly_limit,
-            monthly_used=monthly_used,
-            monthly_remaining=max(0, monthly_limit - monthly_used),
-            generation_time=gen_time,
-            generation_timezone=gen_tz,
-            designs_per_batch=designs_per_batch,
-            next_generation_at=next_gen,
-            last_generation_at=str(last_run) if last_run else None,
-            billing_cycle_start=str(billing_start) if billing_start else None,
-        )
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching plan status: {e}")
-
 
 @router.post("/generate-now", response_model=GenerateNowResponse)
 async def generate_now(
