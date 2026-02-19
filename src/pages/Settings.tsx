@@ -3,42 +3,35 @@ import { Link } from 'react-router-dom'
 import {
   Settings as SettingsIcon,
   Store,
-  Tag,
-  Wand2,
   User,
   ChevronLeft,
   Loader2,
   Megaphone,
+  Link as LinkIcon,
 } from 'lucide-react'
-import { useShops, useShopSettings } from '@src/hooks/useShopify'
+import { useShops } from '@src/hooks/useShopify'
 import {
   ShopSettings,
-  NicheManager,
-  PromptEditor,
   AccountSettings,
   PinterestManager,
 } from '@src/components/settings'
-import { ShopifyConnectButton } from '@src/components/ShopifyConnectButton'
 
 // =====================================================
 // TYPES
 // =====================================================
 
-type SettingsTab = 'shop' | 'niches' | 'prompts' | 'pinterest' | 'account'
+type SettingsTab = 'shop' | 'pinterest' | 'account'
 
 interface TabItem {
   id: SettingsTab
   label: string
   icon: React.ReactNode
-  requiresShop: boolean
 }
 
 const TABS: TabItem[] = [
-  { id: 'shop', label: 'Shop', icon: <Store className="w-5 h-5" />, requiresShop: true },
-  { id: 'niches', label: 'Nischen', icon: <Tag className="w-5 h-5" />, requiresShop: true },
-  { id: 'prompts', label: 'KI-Prompts', icon: <Wand2 className="w-5 h-5" />, requiresShop: true },
-  { id: 'pinterest', label: 'Pinterest', icon: <Megaphone className="w-5 h-5" />, requiresShop: false },
-  { id: 'account', label: 'Konto', icon: <User className="w-5 h-5" />, requiresShop: false },
+  { id: 'shop', label: 'Shop', icon: <Store className="w-5 h-5" /> },
+  { id: 'pinterest', label: 'Pinterest', icon: <Megaphone className="w-5 h-5" /> },
+  { id: 'account', label: 'Konto', icon: <User className="w-5 h-5" /> },
 ]
 
 // =====================================================
@@ -52,8 +45,6 @@ export default function Settings() {
 
   // Auto-select first shop if none selected
   const currentShopId = selectedShopId || shops[0]?.id || null
-  const { settings } = useShopSettings(currentShopId)
-
   const hasShop = shops.length > 0
 
   // Loading state
@@ -110,26 +101,20 @@ export default function Settings() {
         {/* Mobile: Horizontal scrollable tabs */}
         <div className="mb-4 lg:hidden">
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4">
-            {TABS.map((tab) => {
-              const isDisabled = tab.requiresShop && !hasShop
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => !isDisabled && setActiveTab(tab.id)}
-                  disabled={isDisabled}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap flex-shrink-0 transition-colors touch-manipulation ${
-                    activeTab === tab.id
-                      ? 'bg-violet-500 text-white'
-                      : isDisabled
-                      ? 'bg-zinc-800/50 text-zinc-600 cursor-not-allowed'
-                      : 'bg-zinc-800 text-zinc-400 hover:text-white active:bg-zinc-700'
-                  }`}
-                >
-                  {tab.icon}
-                  {tab.label}
-                </button>
-              )
-            })}
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap flex-shrink-0 transition-colors touch-manipulation ${
+                  activeTab === tab.id
+                    ? 'bg-violet-500 text-white'
+                    : 'bg-zinc-800 text-zinc-400 hover:text-white active:bg-zinc-700'
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -138,86 +123,60 @@ export default function Settings() {
           {/* Desktop Sidebar (hidden on mobile) */}
           <div className="w-64 flex-shrink-0 hidden lg:block">
             <nav className="space-y-1">
-              {TABS.map((tab) => {
-                const isDisabled = tab.requiresShop && !hasShop
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => !isDisabled && setActiveTab(tab.id)}
-                    disabled={isDisabled}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
-                      activeTab === tab.id
-                        ? 'bg-violet-500/20 text-violet-300'
-                        : isDisabled
-                        ? 'text-zinc-600 cursor-not-allowed'
-                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                    }`}
-                  >
-                    {tab.icon}
-                    <span className="font-medium">{tab.label}</span>
-                  </button>
-                )
-              })}
+              {TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                    activeTab === tab.id
+                      ? 'bg-violet-500/20 text-violet-300'
+                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                  }`}
+                >
+                  {tab.icon}
+                  <span className="font-medium">{tab.label}</span>
+                </button>
+              ))}
             </nav>
-
-            {/* Add shop button (desktop) */}
-            {hasShop && (
-              <div className="mt-6 pt-6 border-t border-zinc-800">
-                <ShopifyConnectButton className="w-full text-sm" />
-              </div>
-            )}
           </div>
 
           {/* Content */}
           <div className="flex-1 min-w-0">
             <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6">
-              {/* No shop state */}
-              {!hasShop && activeTab !== 'account' && activeTab !== 'pinterest' ? (
-                <div className="text-center py-8 sm:py-12">
-                  <div className="w-14 h-14 sm:w-16 sm:h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Store className="w-7 h-7 sm:w-8 sm:h-8 text-zinc-500" />
+              {/* Shop Settings */}
+              {activeTab === 'shop' && (
+                hasShop && currentShopId ? (
+                  <ShopSettings shopId={currentShopId} />
+                ) : (
+                  <div className="text-center py-8 sm:py-12">
+                    <div className="w-14 h-14 sm:w-16 sm:h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Store className="w-7 h-7 sm:w-8 sm:h-8 text-zinc-500" />
+                    </div>
+                    <h3 className="text-lg sm:text-xl font-semibold text-white mb-2">
+                      Kein Shop verbunden
+                    </h3>
+                    <p className="text-zinc-400 text-sm mb-6 max-w-md mx-auto px-4">
+                      Verbinde deinen Shop, um die Automatisierung einzurichten.
+                    </p>
+                    <button
+                      onClick={() => {
+                        // Placeholder - wird später implementiert
+                      }}
+                      className="btn-primary"
+                    >
+                      <LinkIcon className="w-4 h-4 mr-2" />
+                      Shop verknüpfen
+                    </button>
                   </div>
-                  <h3 className="text-lg sm:text-xl font-semibold text-white mb-2">
-                    Kein Shop verbunden
-                  </h3>
-                  <p className="text-zinc-400 text-sm mb-6 max-w-md mx-auto px-4">
-                    Verbinde zuerst deinen Shopify Store, um die Automatisierung
-                    einzurichten.
-                  </p>
-                  <ShopifyConnectButton />
-                </div>
-              ) : (
-                <>
-                  {/* Shop Settings */}
-                  {activeTab === 'shop' && currentShopId && (
-                    <ShopSettings shopId={currentShopId} />
-                  )}
-
-                  {/* Niche Manager */}
-                  {activeTab === 'niches' && settings?.id && (
-                    <NicheManager settingsId={settings.id} />
-                  )}
-
-                  {/* Prompt Editor */}
-                  {activeTab === 'prompts' && settings?.id && (
-                    <PromptEditor settingsId={settings.id} />
-                  )}
-
-                  {/* Pinterest Settings */}
-                  {activeTab === 'pinterest' && <PinterestManager />}
-
-                  {/* Account Settings */}
-                  {activeTab === 'account' && <AccountSettings />}
-                </>
+                )
               )}
-            </div>
 
-            {/* Mobile: Add shop button */}
-            {hasShop && (
-              <div className="mt-4 lg:hidden">
-                <ShopifyConnectButton className="w-full text-sm" />
-              </div>
-            )}
+              {/* Pinterest Settings */}
+              {activeTab === 'pinterest' && <PinterestManager />}
+
+              {/* Account Settings */}
+              {activeTab === 'account' && <AccountSettings />}
+            </div>
           </div>
         </div>
       </div>
