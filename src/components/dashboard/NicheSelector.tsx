@@ -5,10 +5,6 @@ import {
   Plus,
   X,
   Search,
-  TrendingUp,
-  TrendingDown,
-  Eye,
-  ShoppingCart,
   Loader2,
   Sparkles,
   MoreVertical,
@@ -30,10 +26,6 @@ export interface NicheWithStats {
   slug: string
   isActive: boolean
   productCount: number
-  impressions: number
-  sales: number
-  revenue: number
-  trend: 'up' | 'down' | 'neutral'
   createdAt: string
 }
 
@@ -71,12 +63,6 @@ interface NicheCardProps {
 function NicheCard({ niche, onToggle, onDelete }: NicheCardProps) {
   const [showMenu, setShowMenu] = useState(false)
 
-  const formatNumber = (value: number) =>
-    new Intl.NumberFormat('de-DE').format(value)
-
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value)
-
   return (
     <div
       className={`relative bg-zinc-800/50 rounded-xl border transition-all ${
@@ -85,8 +71,8 @@ function NicheCard({ niche, onToggle, onDelete }: NicheCardProps) {
           : 'border-zinc-700 opacity-60'
       }`}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between p-4 border-b border-zinc-700/50">
+      {/* Content */}
+      <div className="flex items-start justify-between p-4">
         <div className="flex items-center gap-3">
           <div
             className={`w-10 h-10 rounded-lg flex items-center justify-center ${
@@ -153,33 +139,6 @@ function NicheCard({ niche, onToggle, onDelete }: NicheCardProps) {
           )}
         </div>
       </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-3 divide-x divide-zinc-700/50">
-        <div className="p-3 text-center">
-          <div className="flex items-center justify-center gap-1 text-zinc-400 mb-1">
-            <Eye className="w-3.5 h-3.5" />
-          </div>
-          <p className="text-sm font-medium text-white">{formatNumber(niche.impressions)}</p>
-          <p className="text-xs text-zinc-500">Impressionen</p>
-        </div>
-        <div className="p-3 text-center">
-          <div className="flex items-center justify-center gap-1 text-zinc-400 mb-1">
-            <ShoppingCart className="w-3.5 h-3.5" />
-          </div>
-          <p className="text-sm font-medium text-white">{niche.sales}</p>
-          <p className="text-xs text-zinc-500">Verkäufe</p>
-        </div>
-        <div className="p-3 text-center">
-          <div className="flex items-center justify-center gap-1 mb-1">
-            {niche.trend === 'up' && <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />}
-            {niche.trend === 'down' && <TrendingDown className="w-3.5 h-3.5 text-red-400" />}
-            {niche.trend === 'neutral' && <div className="w-3.5 h-0.5 bg-zinc-600 rounded" />}
-          </div>
-          <p className="text-sm font-medium text-white">{formatCurrency(niche.revenue)}</p>
-          <p className="text-xs text-zinc-500">Umsatz</p>
-        </div>
-      </div>
     </div>
   )
 }
@@ -207,7 +166,6 @@ export function NicheSelector({
 
   const activeCount = niches.filter((n) => n.isActive).length
   const totalProducts = niches.reduce((sum, n) => sum + n.productCount, 0)
-  const totalRevenue = niches.reduce((sum, n) => sum + n.revenue, 0)
 
   // Limit checking
   const isUnlimited = maxNiches === Infinity
@@ -267,7 +225,7 @@ export function NicheSelector({
             )}
           </h2>
           <p className="text-sm text-zinc-400 mt-1">
-            {activeCount} aktiv · {totalProducts} Produkte · {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(totalRevenue)} Umsatz
+            {activeCount} aktiv · {totalProducts} Produkte
           </p>
         </div>
         {canAddMore ? (

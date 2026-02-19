@@ -34,10 +34,6 @@ function mapDbNicheToStats(niche: any): NicheWithStats {
     slug: niche.niche_slug || '',
     isActive: niche.is_active ?? true,
     productCount: niche.total_products ?? 0,
-    impressions: 0, // Would come from analytics
-    sales: niche.total_sales ?? 0,
-    revenue: parseFloat(niche.total_revenue) || 0,
-    trend: 'neutral',
     createdAt: niche.created_at,
   }
 }
@@ -94,10 +90,6 @@ export function useNicheStats(settingsId: string | null) {
         slug: nicheName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
         isActive: true,
         productCount: 0,
-        impressions: 0,
-        sales: 0,
-        revenue: 0,
-        trend: 'neutral',
         createdAt: new Date().toISOString(),
       }
 
