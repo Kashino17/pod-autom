@@ -212,10 +212,10 @@ export default function Login() {
       <div className="hidden lg:flex lg:flex-1 items-center justify-center bg-gradient-to-br from-violet-950/50 to-black p-12">
         <div className="max-w-md text-center">
           <div className="mb-8">
-            <span className="text-5xl font-bold text-gradient">POD AutoM</span>
+            <span className="text-5xl font-bold text-gradient">TMS EcomPilot</span>
           </div>
           <p className="text-xl text-zinc-300 mb-8">
-            Dein vollautomatisiertes Print-on-Demand Business
+            Dein vollautomatisiertes E-Commerce Business
           </p>
           <div className="grid grid-cols-3 gap-4 text-center">
             <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800">

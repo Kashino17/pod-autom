@@ -65,7 +65,7 @@ export default function CheckoutSuccess() {
         </h1>
 
         <p className="text-zinc-400 mb-8">
-          Willkommen bei POD AutoM
+          Willkommen bei TMS EcomPilot
           {subscription?.tier && (
             <span className="text-violet-400 font-medium">
               {' '}

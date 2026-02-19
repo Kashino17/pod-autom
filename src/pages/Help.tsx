@@ -178,7 +178,7 @@ export default function Help() {
 
         {/* Version Info */}
         <div className="text-center text-sm text-zinc-600">
-          POD AutoM v1.0.0
+          TMS EcomPilot v1.0.0
         </div>
       </div>
     </DashboardLayout>

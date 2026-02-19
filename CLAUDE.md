@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-POD AutoM is a standalone Print-on-Demand automation web application. It provides automated product creation, ad campaign management, and winner scaling for Shopify stores. This is a separate project from ReBoss NextGen but shares the same Supabase database (using `pod_autom_*` prefixed tables).
+TMS EcomPilot is a standalone E-Commerce automation web application. It provides automated product creation, ad campaign management, and winner scaling for online stores. This project uses Supabase database (using `pod_autom_*` prefixed tables for backwards compatibility).
 
 **Tech Stack:**
 - Frontend: React 19 + TypeScript 5.6 + Vite 6 + Tailwind CSS 3.4

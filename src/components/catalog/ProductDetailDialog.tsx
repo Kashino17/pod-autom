@@ -165,7 +165,7 @@ export function ProductDetailDialog({ product, isOpen, onClose }: ProductDetailD
               <Info className="w-4 h-4 text-zinc-500 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-zinc-500">
                 Dies ist eine Preisliste fuer unsere Fulfillment-Partner.
-                Bestellungen werden automatisch ueber dein POD AutoM Dashboard abgewickelt.
+                Bestellungen werden automatisch ueber dein TMS EcomPilot Dashboard abgewickelt.
               </p>
             </div>
           </div>

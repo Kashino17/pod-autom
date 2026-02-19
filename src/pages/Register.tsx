@@ -378,7 +378,7 @@ export default function Register() {
       <div className="hidden lg:flex lg:flex-1 items-center justify-center bg-gradient-to-br from-violet-950/50 to-black p-12">
         <div className="max-w-md">
           <div className="mb-8 text-center">
-            <span className="text-5xl font-bold text-gradient">POD AutoM</span>
+            <span className="text-5xl font-bold text-gradient">TMS EcomPilot</span>
           </div>
 
           {/* Benefits */}

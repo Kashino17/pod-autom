@@ -1,5 +1,5 @@
 /**
- * Database Types for POD AutoM
+ * Database Types for TMS EcomPilot
  *
  * Diese Datei sollte nach der Migration mit dem Supabase CLI generiert werden:
  * npx supabase gen types typescript --project-id YOUR_PROJECT_ID > src/lib/database.types.ts
@@ -10,7 +10,7 @@
 export interface Database {
   public: {
     Tables: {
-      // POD AutoM Subscriptions
+      // TMS EcomPilot Subscriptions
       pod_autom_subscriptions: {
         Row: {
           id: string
@@ -65,7 +65,7 @@ export interface Database {
         }
       }
 
-      // POD AutoM Shops
+      // TMS EcomPilot Shops
       pod_autom_shops: {
         Row: {
           id: string
@@ -129,7 +129,7 @@ export interface Database {
         }
       }
 
-      // POD AutoM Settings
+      // TMS EcomPilot Settings
       pod_autom_settings: {
         Row: {
           id: string
@@ -202,7 +202,7 @@ export interface Database {
         }
       }
 
-      // POD AutoM Niches
+      // TMS EcomPilot Niches
       pod_autom_niches: {
         Row: {
           id: string
@@ -248,7 +248,7 @@ export interface Database {
         }
       }
 
-      // POD AutoM Prompts
+      // TMS EcomPilot Prompts
       pod_autom_prompts: {
         Row: {
           id: string
@@ -300,7 +300,7 @@ export interface Database {
         }
       }
 
-      // POD AutoM Products
+      // TMS EcomPilot Products
       pod_autom_products: {
         Row: {
           id: string
@@ -397,7 +397,7 @@ export interface Database {
         }
       }
 
-      // POD AutoM Ad Platforms
+      // TMS EcomPilot Ad Platforms
       pod_autom_ad_platforms: {
         Row: {
           id: string
@@ -458,7 +458,7 @@ export interface Database {
         }
       }
 
-      // POD AutoM Activity Log
+      // TMS EcomPilot Activity Log
       pod_autom_activity_log: {
         Row: {
           id: string
@@ -504,7 +504,7 @@ export interface Database {
         }
       }
 
-      // POD AutoM Catalog
+      // TMS EcomPilot Catalog
       pod_autom_catalog: {
         Row: {
           id: string

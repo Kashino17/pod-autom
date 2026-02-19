@@ -1,5 +1,5 @@
 /**
- * API Client for POD AutoM Backend
+ * API Client for TMS EcomPilot Backend
  * Handles all API requests with authentication.
  */
 

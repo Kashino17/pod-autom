@@ -4,14 +4,14 @@ import { cn } from '@src/lib/utils'
 
 const faqs = [
   {
-    question: 'Was ist POD AutoM?',
+    question: 'Was ist TMS EcomPilot?',
     answer:
-      'POD AutoM ist eine vollautomatisierte Print-on-Demand Loesung, die den gesamten Prozess von der Produkterstellung bis zur Werbeanzeige uebernimmt. Du musst nur deinen Shopify-Store verbinden und deine Nischen waehlen - den Rest erledigt unsere KI.',
+      'TMS EcomPilot ist eine vollautomatisierte E-Commerce Loesung, die den gesamten Prozess von der Produkterstellung bis zur Werbeanzeige uebernimmt. Du musst nur deinen Shop verbinden und deine Nischen waehlen - den Rest erledigt unsere KI.',
   },
   {
     question: 'Brauche ich technische Vorkenntnisse?',
     answer:
-      'Nein, ueberhaupt nicht! POD AutoM ist so konzipiert, dass jeder es nutzen kann. Die Einrichtung dauert nur wenige Minuten und alles wird Schritt fuer Schritt erklaert. Unser Support steht dir bei Fragen jederzeit zur Verfuegung.',
+      'Nein, ueberhaupt nicht! TMS EcomPilot ist so konzipiert, dass jeder es nutzen kann. Die Einrichtung dauert nur wenige Minuten und alles wird Schritt fuer Schritt erklaert. Unser Support steht dir bei Fragen jederzeit zur Verfuegung.',
   },
   {
     question: 'Welche Plattformen werden unterstuetzt?',

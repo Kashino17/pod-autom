@@ -121,7 +121,7 @@ export const ROUTES = {
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001'
 export const APP_URL = import.meta.env.VITE_APP_URL || 'http://localhost:3001'
-export const APP_NAME = import.meta.env.VITE_APP_NAME || 'POD AutoM'
+export const APP_NAME = import.meta.env.VITE_APP_NAME || 'TMS EcomPilot'
 
 // =====================================================
 // GPT CONFIG
