@@ -51,6 +51,7 @@ const DashboardAnalytics = lazy(() => import('@src/pages/DashboardAnalytics'))
 // Other Protected Pages
 const Onboarding = lazy(() => import('@src/pages/Onboarding'))
 const Settings = lazy(() => import('@src/pages/Settings'))
+const Help = lazy(() => import('@src/pages/Help'))
 
 // Admin Pages
 const AdminPanel = lazy(() => import('@src/pages/AdminPanel'))
@@ -221,6 +222,14 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <Settings />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/help"
+                  element={
+                    <ProtectedRoute>
+                      <Help />
                     </ProtectedRoute>
                   }
                 />
