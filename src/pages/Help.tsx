@@ -141,10 +141,10 @@ export default function Help() {
                   Schreib uns eine E-Mail und wir antworten innerhalb von 24 Stunden.
                 </p>
                 <a
-                  href="mailto:support@pod-autom.de"
+                  href="mailto:support@tms-yield.de"
                   className="text-violet-400 hover:text-violet-300 text-sm font-medium flex items-center gap-1"
                 >
-                  support@pod-autom.de
+                  support@tms-yield.de
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>
@@ -178,7 +178,7 @@ export default function Help() {
 
         {/* Version Info */}
         <div className="text-center text-sm text-zinc-600">
-          TMS EcomPilot v1.0.0
+          TMS Yield v1.0.0
         </div>
       </div>
     </DashboardLayout>

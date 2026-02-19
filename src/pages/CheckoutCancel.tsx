@@ -31,11 +31,11 @@ export default function CheckoutCancel() {
             Falls du Fragen zu unseren Plaenen hast oder technische Probleme beim Checkout aufgetreten sind, helfen wir dir gerne weiter.
           </p>
           <a
-            href="mailto:support@pod-autom.de"
+            href="mailto:support@tms-yield.de"
             className="flex items-center gap-2 text-violet-400 hover:text-violet-300 transition-colors"
           >
             <MessageCircle className="w-4 h-4" />
-            support@pod-autom.de
+            support@tms-yield.de
           </a>
         </div>
 

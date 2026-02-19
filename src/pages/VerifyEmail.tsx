@@ -144,7 +144,7 @@ export default function VerifyEmail() {
               <p className="text-sm text-zinc-500">
                 Probleme?{' '}
                 <a
-                  href="mailto:support@pod-autom.de"
+                  href="mailto:support@tms-yield.de"
                   className="text-violet-400 hover:text-violet-300"
                 >
                   Kontaktiere den Support

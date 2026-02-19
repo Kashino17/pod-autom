@@ -119,7 +119,7 @@ export default function FAQ() {
             Noch Fragen? Wir helfen dir gerne weiter.
           </p>
           <a
-            href="mailto:support@pod-autom.de"
+            href="mailto:support@tms-yield.de"
             className="btn-secondary"
           >
             Kontaktiere uns

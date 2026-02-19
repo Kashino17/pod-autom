@@ -541,7 +541,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
                 <Sparkles className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-white">Willkommen bei TMS EcomPilot</h1>
+                <h1 className="text-lg font-bold text-white">Willkommen bei TMS Yield</h1>
                 <p className="text-sm text-zinc-400">Schritt {currentStep} von 4</p>
               </div>
             </div>

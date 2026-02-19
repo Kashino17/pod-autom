@@ -27,7 +27,9 @@
       "Bash(npm run lint)",
       "Bash(npx eslint src/components/onboarding/OnboardingModal.tsx src/components/OnboardingGuard.tsx src/hooks/useOnboardingStatus.ts src/hooks/useAdmin.ts src/components/layout/DashboardLayout.tsx --ext ts,tsx --report-unused-disable-directives)",
       "Bash(cd:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(cd /Users/ayysir/Desktop/POD\\\\ AutoM && npm run dev:*)",
+      "Bash(npm run type-check)"
     ]
   }
 }

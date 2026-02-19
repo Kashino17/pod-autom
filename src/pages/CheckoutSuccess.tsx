@@ -123,8 +123,8 @@ export default function CheckoutSuccess() {
         {/* Support note */}
         <p className="mt-8 text-zinc-600 text-xs">
           Fragen? Kontaktiere uns unter{' '}
-          <a href="mailto:support@pod-autom.de" className="text-zinc-500 hover:text-white underline">
-            support@pod-autom.de
+          <a href="mailto:support@tms-yield.de" className="text-zinc-500 hover:text-white underline">
+            support@tms-yield.de
           </a>
         </p>
       </div>
