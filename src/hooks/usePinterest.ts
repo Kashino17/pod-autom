@@ -60,7 +60,7 @@ export function usePinterest() {
   // Get Pinterest connection status
   const statusQuery = useQuery({
     queryKey: ['pinterest', 'status', user?.id],
-    queryFn: () => api.get<StatusResponse>('/api/pod-autom/pinterest/status'),
+    queryFn: () => api.get<StatusResponse>('/api/pinterest/status'),
     enabled: !!user,
     staleTime: 1000 * 60 * 2, // 2 minutes
   })
@@ -68,7 +68,7 @@ export function usePinterest() {
   // Get ad accounts
   const adAccountsQuery = useQuery({
     queryKey: ['pinterest', 'ad-accounts', user?.id],
-    queryFn: () => api.get<AdAccountsResponse>('/api/pod-autom/pinterest/ad-accounts'),
+    queryFn: () => api.get<AdAccountsResponse>('/api/pinterest/ad-accounts'),
     enabled: !!user && statusQuery.data?.connected === true,
     staleTime: 1000 * 60 * 5, // 5 minutes
   })
@@ -76,7 +76,7 @@ export function usePinterest() {
   // Get boards
   const boardsQuery = useQuery({
     queryKey: ['pinterest', 'boards', user?.id],
-    queryFn: () => api.get<BoardsResponse>('/api/pod-autom/pinterest/boards'),
+    queryFn: () => api.get<BoardsResponse>('/api/pinterest/boards'),
     enabled: !!user && statusQuery.data?.connected === true,
     staleTime: 1000 * 60 * 5, // 5 minutes
   })
@@ -84,12 +84,12 @@ export function usePinterest() {
   // Connect Pinterest (redirect to OAuth)
   const connect = () => {
     if (!user) return
-    window.location.href = `${apiUrl}/api/pod-autom/pinterest/authorize?user_id=${user.id}`
+    window.location.href = `${apiUrl}/api/pinterest/authorize?user_id=${user.id}`
   }
 
   // Disconnect Pinterest
   const disconnectMutation = useMutation({
-    mutationFn: () => api.post<{ success: boolean }>('/api/pod-autom/pinterest/disconnect'),
+    mutationFn: () => api.post<{ success: boolean }>('/api/pinterest/disconnect'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pinterest'] })
     },
@@ -98,7 +98,7 @@ export function usePinterest() {
   // Select ad account
   const selectAdAccountMutation = useMutation({
     mutationFn: (data: { ad_account_id: string; ad_account_name: string }) =>
-      api.post<{ success: boolean }>('/api/pod-autom/pinterest/select-ad-account', data),
+      api.post<{ success: boolean }>('/api/pinterest/select-ad-account', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pinterest', 'status'] })
     },
