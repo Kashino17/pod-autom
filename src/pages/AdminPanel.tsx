@@ -3,12 +3,7 @@ import {
   Users,
   CheckCircle,
   Clock,
-  Store,
   Search,
-  AlertTriangle,
-  ExternalLink,
-  Copy,
-  Check,
   ChevronLeft,
   ChevronRight,
   RefreshCw,
@@ -17,7 +12,6 @@ import { DashboardLayout } from '@src/components/layout'
 import {
   useAdminUsers,
   useAdminStats,
-  useAdminMutations,
   UserProfile,
 } from '@src/hooks/useAdmin'
 
@@ -54,42 +48,13 @@ function StatCard({ title, value, icon, color }: StatCardProps) {
 
 interface UserRowProps {
   user: UserProfile
-  onSetInstallLink: (userId: string, link: string) => void
-  onConfirmDomainChange: (userId: string) => void
-  isSettingLink: boolean
 }
 
-function UserRow({ user, onSetInstallLink, onConfirmDomainChange, isSettingLink }: UserRowProps) {
-  const [installLink, setInstallLink] = useState(user.shopify_install_link || '')
-  const [copied, setCopied] = useState(false)
-  const [isEditing, setIsEditing] = useState(!user.shopify_install_link)
-
-  const handleCopyDomain = () => {
-    if (user.shopify_domain) {
-      navigator.clipboard.writeText(user.shopify_domain)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
-  const handleSaveLink = () => {
-    if (installLink.trim()) {
-      onSetInstallLink(user.id, installLink.trim())
-      setIsEditing(false)
-    }
-  }
-
+function UserRow({ user }: UserRowProps) {
   const statusColors = {
     pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
     verified: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
     rejected: 'bg-red-500/20 text-red-400 border-red-500/30',
-  }
-
-  const connectionColors = {
-    connected: 'text-emerald-400',
-    disconnected: 'text-zinc-500',
-    error: 'text-red-400',
-    pending: 'text-yellow-400',
   }
 
   return (
@@ -99,83 +64,6 @@ function UserRow({ user, onSetInstallLink, onConfirmDomainChange, isSettingLink 
         <div>
           <p className="text-white font-medium">{user.full_name || 'Kein Name'}</p>
           <p className="text-sm text-zinc-400">{user.email}</p>
-        </div>
-      </td>
-
-      {/* Shopify Domain */}
-      <td className="px-4 py-4">
-        <div className="flex items-center gap-2">
-          {user.shopify_domain ? (
-            <>
-              <a
-                href={`https://${user.shopify_domain}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-violet-400 hover:text-violet-300 flex items-center gap-1"
-              >
-                {user.shopify_domain}
-                <ExternalLink className="w-3 h-3" />
-              </a>
-              <button
-                onClick={handleCopyDomain}
-                className="p-1 text-zinc-500 hover:text-white transition-colors"
-                title="Domain kopieren"
-              >
-                {copied ? (
-                  <Check className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-              </button>
-              {user.domain_changed_flag && (
-                <button
-                  onClick={() => onConfirmDomainChange(user.id)}
-                  className="p-1 text-yellow-400 hover:text-yellow-300 transition-colors"
-                  title={`Domain geändert von: ${user.shopify_domain_previous}`}
-                >
-                  <AlertTriangle className="w-4 h-4" />
-                </button>
-              )}
-            </>
-          ) : (
-            <span className="text-zinc-500">Keine Domain</span>
-          )}
-        </div>
-      </td>
-
-      {/* Install Link Input */}
-      <td className="px-4 py-4">
-        <div className="flex items-center gap-2">
-          {isEditing ? (
-            <>
-              <input
-                type="text"
-                value={installLink}
-                onChange={(e) => setInstallLink(e.target.value)}
-                placeholder="Install-Link einfügen..."
-                className="flex-1 px-3 py-1.5 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:border-violet-500 focus:outline-none min-w-[300px]"
-              />
-              <button
-                onClick={handleSaveLink}
-                disabled={!installLink.trim() || isSettingLink}
-                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm rounded-lg transition-colors"
-              >
-                {isSettingLink ? 'Speichern...' : 'Speichern'}
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="text-sm text-zinc-400 truncate max-w-[300px]">
-                {user.shopify_install_link || 'Nicht gesetzt'}
-              </span>
-              <button
-                onClick={() => setIsEditing(true)}
-                className="px-2 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded transition-colors"
-              >
-                Bearbeiten
-              </button>
-            </>
-          )}
         </div>
       </td>
 
@@ -189,22 +77,6 @@ function UserRow({ user, onSetInstallLink, onConfirmDomainChange, isSettingLink 
           {user.verification_status === 'pending' && 'Ausstehend'}
           {user.verification_status === 'verified' && 'Verifiziert'}
           {user.verification_status === 'rejected' && 'Abgelehnt'}
-        </span>
-      </td>
-
-      {/* Shop Connection */}
-      <td className="px-4 py-4">
-        <span
-          className={`text-sm ${
-            connectionColors[user.shop_connection_status as keyof typeof connectionColors] ||
-            'text-zinc-500'
-          }`}
-        >
-          {user.shop_connection_status === 'connected' && 'Verbunden'}
-          {user.shop_connection_status === 'disconnected' && 'Getrennt'}
-          {user.shop_connection_status === 'error' && 'Fehler'}
-          {user.shop_connection_status === 'pending' && 'Ausstehend'}
-          {!user.shop_connection_status && 'Nicht verbunden'}
         </span>
       </td>
 
@@ -234,8 +106,7 @@ export default function AdminPanel() {
     status || undefined,
     search || undefined
   )
-  const { data: stats, isLoading: isLoadingStats } = useAdminStats()
-  const { setInstallLink, isSettingLink, confirmDomainChange } = useAdminMutations()
+  const { data: stats } = useAdminStats()
 
   const handleSearch = () => {
     setSearch(searchInput)
@@ -267,7 +138,7 @@ export default function AdminPanel() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard
             title="Ausstehende Verifizierungen"
             value={stats?.pending_users || 0}
@@ -286,12 +157,6 @@ export default function AdminPanel() {
             icon={<Users className="w-5 h-5 text-violet-400" />}
             color="bg-violet-500/20"
           />
-          <StatCard
-            title="Verbundene Shops"
-            value={stats?.connected_shops || 0}
-            icon={<Store className="w-5 h-5 text-blue-400" />}
-            color="bg-blue-500/20"
-          />
         </div>
 
         {/* Filters */}
@@ -306,7 +171,7 @@ export default function AdminPanel() {
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Suche nach E-Mail, Name oder Domain..."
+                  placeholder="Suche nach E-Mail oder Name..."
                   className="w-full pl-10 pr-4 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
                 />
               </div>
@@ -345,16 +210,7 @@ export default function AdminPanel() {
                     Benutzer
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-zinc-400">
-                    Shopify Domain
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-zinc-400">
-                    Install-Link
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-zinc-400">
                     Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-zinc-400">
-                    Shop
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-zinc-400">
                     Registriert
@@ -364,7 +220,7 @@ export default function AdminPanel() {
               <tbody>
                 {isLoadingUsers ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
+                    <td colSpan={3} className="px-4 py-8 text-center text-zinc-400">
                       Laden...
                     </td>
                   </tr>
@@ -373,14 +229,11 @@ export default function AdminPanel() {
                     <UserRow
                       key={user.id}
                       user={user}
-                      onSetInstallLink={(userId, link) => setInstallLink({ userId, installLink: link })}
-                      onConfirmDomainChange={confirmDomainChange}
-                      isSettingLink={isSettingLink}
                     />
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
+                    <td colSpan={3} className="px-4 py-8 text-center text-zinc-400">
                       Keine Benutzer gefunden
                     </td>
                   </tr>

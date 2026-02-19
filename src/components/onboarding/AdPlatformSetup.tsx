@@ -7,7 +7,7 @@ import { useSubscription } from '@src/contexts/SubscriptionContext'
 // =====================================================
 
 interface AdPlatformSetupProps {
-  shopId: string
+  shopId: string | null
   onComplete: () => void
   onBack: () => void
 }

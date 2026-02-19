@@ -7,7 +7,7 @@ import { useShopSettings } from '@src/hooks/useShopify'
 // =====================================================
 
 interface PromptConfigProps {
-  shopId: string
+  shopId: string | null
   onComplete: () => void
   onBack: () => void
 }

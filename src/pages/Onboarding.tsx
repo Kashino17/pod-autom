@@ -1,9 +1,7 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { CheckCircle, Loader2 } from 'lucide-react'
-import { useShops } from '@src/hooks/useShopify'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { CheckCircle } from 'lucide-react'
 import {
-  ShopConnection,
   NicheSelection,
   PromptConfig,
   AdPlatformSetup,
@@ -13,7 +11,7 @@ import {
 // TYPES
 // =====================================================
 
-type OnboardingStep = 1 | 2 | 3 | 4
+type OnboardingStep = 1 | 2 | 3
 
 interface StepInfo {
   number: number
@@ -22,10 +20,9 @@ interface StepInfo {
 }
 
 const STEPS: StepInfo[] = [
-  { number: 1, title: 'Shop verbinden', description: 'Shopify Store anbinden' },
-  { number: 2, title: 'Nischen wählen', description: 'Zielgruppen definieren' },
-  { number: 3, title: 'KI konfigurieren', description: 'Prompts anpassen' },
-  { number: 4, title: 'Ads verbinden', description: 'Werbeplattformen' },
+  { number: 1, title: 'Nischen wählen', description: 'Zielgruppen definieren' },
+  { number: 2, title: 'KI konfigurieren', description: 'Prompts anpassen' },
+  { number: 3, title: 'Ads verbinden', description: 'Werbeplattformen' },
 ]
 
 // =====================================================
@@ -34,32 +31,9 @@ const STEPS: StepInfo[] = [
 
 export default function Onboarding() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const { shops, isLoading: shopsLoading, refetch } = useShops()
 
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(1)
   const [isCompleting, setIsCompleting] = useState(false)
-
-  // Check for OAuth callback
-  useEffect(() => {
-    const success = searchParams.get('shopify_connected')
-    const error = searchParams.get('error')
-
-    if (success === 'true') {
-      // Shopify OAuth was successful, refetch shops and move to step 2
-      refetch()
-      setCurrentStep(2)
-      // Clear the URL params
-      window.history.replaceState({}, '', '/onboarding')
-    } else if (error) {
-      // Handle error - show toast or error message
-      console.error('OAuth error:', error)
-      window.history.replaceState({}, '', '/onboarding')
-    }
-  }, [searchParams, refetch])
-
-  // Get the current shop ID (first shop)
-  const currentShopId = shops[0]?.id || null
 
   // Step navigation
   const goToStep = (step: OnboardingStep) => {
@@ -75,15 +49,6 @@ export default function Onboarding() {
     setTimeout(() => {
       navigate('/dashboard')
     }, 1000)
-  }
-
-  // Loading state
-  if (shopsLoading) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
-      </div>
-    )
   }
 
   return (
@@ -147,38 +112,30 @@ export default function Onboarding() {
 
         {/* Step content */}
         <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 sm:p-8">
-          {/* Step 1: Shop Connection */}
+          {/* Step 1: Niche Selection */}
           {currentStep === 1 && (
-            <ShopConnection
+            <NicheSelection
+              shopId={null}
               onComplete={() => goToStep(2)}
-              onSkip={() => goToStep(2)}
+              onBack={() => navigate('/dashboard')}
             />
           )}
 
-          {/* Step 2: Niche Selection */}
-          {currentStep === 2 && currentShopId && (
-            <NicheSelection
-              shopId={currentShopId}
+          {/* Step 2: Prompt Config */}
+          {currentStep === 2 && (
+            <PromptConfig
+              shopId={null}
               onComplete={() => goToStep(3)}
               onBack={() => goToStep(1)}
             />
           )}
 
-          {/* Step 3: Prompt Config */}
-          {currentStep === 3 && currentShopId && (
-            <PromptConfig
-              shopId={currentShopId}
-              onComplete={() => goToStep(4)}
-              onBack={() => goToStep(2)}
-            />
-          )}
-
-          {/* Step 4: Ad Platform Setup */}
-          {currentStep === 4 && currentShopId && (
+          {/* Step 3: Ad Platform Setup */}
+          {currentStep === 3 && (
             <AdPlatformSetup
-              shopId={currentShopId}
+              shopId={null}
               onComplete={handleComplete}
-              onBack={() => goToStep(3)}
+              onBack={() => goToStep(2)}
             />
           )}
 

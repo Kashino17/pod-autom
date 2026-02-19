@@ -7,7 +7,7 @@ import { useNiches, useShopSettings } from '@src/hooks/useShopify'
 // =====================================================
 
 interface NicheSelectionProps {
-  shopId: string
+  shopId: string | null
   onComplete: () => void
   onBack: () => void
 }
