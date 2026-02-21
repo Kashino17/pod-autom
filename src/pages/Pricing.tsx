@@ -91,7 +91,7 @@ export default function Pricing() {
             to={user ? '/dashboard' : '/'}
             className="text-xl font-bold text-white"
           >
-            POD Auto<span className="text-emerald-400">M</span>
+            TMS <span className="text-violet-500">Solvado</span>
           </Link>
           {user ? (
             <Link

@@ -60,7 +60,7 @@ export default function Onboarding() {
         {/* Logo */}
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-white">
-            POD Auto<span className="text-violet-500">M</span>
+            TMS <span className="text-violet-500">Solvado</span>
           </h1>
         </div>
 

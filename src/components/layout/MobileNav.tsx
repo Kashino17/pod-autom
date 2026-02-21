@@ -170,7 +170,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
         {/* Header */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-zinc-800">
           <span className="text-xl font-bold text-white">
-            POD Auto<span className="text-violet-500">M</span>
+            TMS <span className="text-violet-500">Solvado</span>
           </span>
           <button
             onClick={onClose}
