@@ -1,5 +1,5 @@
 """
-POD AutoM Backend - Configuration
+TMS Solvado Backend - Configuration
 Loads environment variables and provides typed config.
 """
 import os
@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     # App
-    APP_NAME: str = "POD AutoM API"
+    APP_NAME: str = "TMS Solvado API"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"

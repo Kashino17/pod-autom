@@ -13,7 +13,7 @@ const footerLinks = {
     { label: 'AGB', href: '/agb' },
   ],
   support: [
-    { label: 'Kontakt', href: 'mailto:support@tms-yield.de' },
+    { label: 'Kontakt', href: 'mailto:support@solvado.de' },
     { label: 'Hilfe-Center', href: '/hilfe' },
   ],
 }
@@ -28,7 +28,7 @@ export default function Footer() {
           {/* Brand */}
           <div className="md:col-span-1">
             <Link to="/" className="inline-block mb-4">
-              <span className="text-2xl font-bold text-gradient">TMS EcomPilot</span>
+              <span className="text-2xl font-bold text-gradient">TMS Solvado</span>
             </Link>
             <p className="text-zinc-400 text-sm leading-relaxed mb-6">
               Vollautomatisierter E-Commerce fuer dein passives Einkommen.
@@ -111,7 +111,7 @@ export default function Footer() {
         {/* Bottom Bar */}
         <div className="mt-12 pt-8 border-t border-zinc-800 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-zinc-500 text-sm">
-            &copy; {currentYear} TMS Yield. Alle Rechte vorbehalten.
+            &copy; {currentYear} TMS Solvado. Alle Rechte vorbehalten.
           </p>
           <div className="flex items-center gap-6 text-zinc-500 text-sm">
             <span>Made with</span>

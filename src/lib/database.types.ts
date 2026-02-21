@@ -1,5 +1,5 @@
 /**
- * Database Types for TMS EcomPilot
+ * Database Types for TMS Solvado
  *
  * Diese Datei sollte nach der Migration mit dem Supabase CLI generiert werden:
  * npx supabase gen types typescript --project-id YOUR_PROJECT_ID > src/lib/database.types.ts
@@ -10,7 +10,7 @@
 export interface Database {
   public: {
     Tables: {
-      // TMS EcomPilot Subscriptions
+      // TMS Solvado Subscriptions
       pod_autom_subscriptions: {
         Row: {
           id: string
@@ -65,7 +65,7 @@ export interface Database {
         }
       }
 
-      // TMS EcomPilot Shops
+      // TMS Solvado Shops
       pod_autom_shops: {
         Row: {
           id: string
@@ -129,7 +129,7 @@ export interface Database {
         }
       }
 
-      // TMS EcomPilot Settings
+      // TMS Solvado Settings
       pod_autom_settings: {
         Row: {
           id: string
@@ -202,7 +202,7 @@ export interface Database {
         }
       }
 
-      // TMS EcomPilot Niches
+      // TMS Solvado Niches
       pod_autom_niches: {
         Row: {
           id: string
@@ -248,7 +248,7 @@ export interface Database {
         }
       }
 
-      // TMS EcomPilot Prompts
+      // TMS Solvado Prompts
       pod_autom_prompts: {
         Row: {
           id: string
@@ -300,7 +300,7 @@ export interface Database {
         }
       }
 
-      // TMS EcomPilot Products
+      // TMS Solvado Products
       pod_autom_products: {
         Row: {
           id: string
@@ -397,7 +397,7 @@ export interface Database {
         }
       }
 
-      // TMS EcomPilot Ad Platforms
+      // TMS Solvado Ad Platforms
       pod_autom_ad_platforms: {
         Row: {
           id: string
@@ -458,7 +458,7 @@ export interface Database {
         }
       }
 
-      // TMS EcomPilot Activity Log
+      // TMS Solvado Activity Log
       pod_autom_activity_log: {
         Row: {
           id: string
@@ -504,7 +504,7 @@ export interface Database {
         }
       }
 
-      // TMS EcomPilot Catalog
+      // TMS Solvado Catalog
       pod_autom_catalog: {
         Row: {
           id: string

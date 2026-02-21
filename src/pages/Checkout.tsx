@@ -62,7 +62,7 @@ export default function Checkout() {
             Waehle deinen Plan
           </h1>
           <p className="text-zinc-400">
-            Starte jetzt mit TMS EcomPilot und automatisiere dein E-Commerce Business
+            Starte jetzt mit TMS Solvado und automatisiere dein E-Commerce Business
           </p>
         </div>
 

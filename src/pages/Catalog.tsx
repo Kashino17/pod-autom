@@ -18,7 +18,7 @@ export default function Catalog() {
               className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
-              <span className="font-semibold">TMS EcomPilot</span>
+              <span className="font-semibold">TMS Solvado</span>
             </Link>
 
             {/* CTA */}
@@ -43,7 +43,7 @@ export default function Catalog() {
 
           <p className="text-lg text-zinc-400 max-w-2xl mx-auto mb-8">
             Hochwertige Print-on-Demand Produkte von unserem Fulfillment-Partner.
-            Alle Preise sind Netto-Einkaufspreise fuer TMS EcomPilot Kunden.
+            Alle Preise sind Netto-Einkaufspreise fuer TMS Solvado Kunden.
           </p>
 
           {/* Features */}
@@ -110,7 +110,7 @@ export default function Catalog() {
             Bereit fuer automatisiertes Print-on-Demand?
           </h2>
           <p className="text-zinc-400 mb-8">
-            Mit TMS EcomPilot erstellst du automatisch Produkte mit KI-generierten Designs
+            Mit TMS Solvado erstellst du automatisch Produkte mit KI-generierten Designs
             und verkaufst sie ueber deine Shopify-Shops - vollautomatisch.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -129,7 +129,7 @@ export default function Catalog() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-sm text-zinc-500">
-              &copy; {new Date().getFullYear()} TMS EcomPilot. Alle Rechte vorbehalten.
+              &copy; {new Date().getFullYear()} TMS Solvado. Alle Rechte vorbehalten.
             </p>
             <div className="flex items-center gap-6">
               <Link to="/" className="text-sm text-zinc-500 hover:text-white transition-colors">

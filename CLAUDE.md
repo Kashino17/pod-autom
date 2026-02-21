@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TMS EcomPilot is a standalone E-Commerce automation web application. It provides automated product creation, ad campaign management, and winner scaling for online stores. This project uses Supabase database (using `pod_autom_*` prefixed tables for backwards compatibility).
+TMS Solvado is a standalone E-Commerce automation web application. It provides automated product creation, ad campaign management, and winner scaling for online stores. This project uses Supabase database (using `pod_autom_*` prefixed tables for backwards compatibility).
 
 **Tech Stack:**
 - Frontend: React 19 + TypeScript 5.6 + Vite 6 + Tailwind CSS 3.4
@@ -99,7 +99,7 @@ VITE_STRIPE_PRICE_VIP=
 
 # App Config
 VITE_APP_URL=http://localhost:3001
-VITE_APP_NAME=POD AutoM
+VITE_APP_NAME=TMS Solvado
 ```
 
 ## TypeScript Configuration

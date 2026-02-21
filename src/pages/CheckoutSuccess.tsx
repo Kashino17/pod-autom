@@ -65,7 +65,7 @@ export default function CheckoutSuccess() {
         </h1>
 
         <p className="text-zinc-400 mb-8">
-          Willkommen bei TMS EcomPilot
+          Willkommen bei TMS Solvado
           {subscription?.tier && (
             <span className="text-violet-400 font-medium">
               {' '}
@@ -123,8 +123,8 @@ export default function CheckoutSuccess() {
         {/* Support note */}
         <p className="mt-8 text-zinc-600 text-xs">
           Fragen? Kontaktiere uns unter{' '}
-          <a href="mailto:support@tms-yield.de" className="text-zinc-500 hover:text-white underline">
-            support@tms-yield.de
+          <a href="mailto:support@solvado.de" className="text-zinc-500 hover:text-white underline">
+            support@solvado.de
           </a>
         </p>
       </div>

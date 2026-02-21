@@ -1,5 +1,5 @@
 """
-POD AutoM Backend - Main FastAPI Application
+TMS Solvado Backend - Main FastAPI Application
 """
 import os
 import sys
@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="Backend API für POD AutoM - Vollautomatisierte Print-on-Demand Lösung",
+    description="Backend API für TMS Solvado - Vollautomatisierte E-Commerce Lösung",
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
     lifespan=lifespan,

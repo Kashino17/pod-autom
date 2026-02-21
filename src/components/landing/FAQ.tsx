@@ -4,14 +4,14 @@ import { cn } from '@src/lib/utils'
 
 const faqs = [
   {
-    question: 'Was ist TMS EcomPilot?',
+    question: 'Was ist TMS Solvado?',
     answer:
-      'TMS EcomPilot ist eine vollautomatisierte E-Commerce Loesung, die den gesamten Prozess von der Produkterstellung bis zur Werbeanzeige uebernimmt. Du musst nur deinen Shop verbinden und deine Nischen waehlen - den Rest erledigt unsere KI.',
+      'TMS Solvado ist eine vollautomatisierte E-Commerce Loesung, die den gesamten Prozess von der Produkterstellung bis zur Werbeanzeige uebernimmt. Du musst nur deinen Shop verbinden und deine Nischen waehlen - den Rest erledigt unsere KI.',
   },
   {
     question: 'Brauche ich technische Vorkenntnisse?',
     answer:
-      'Nein, ueberhaupt nicht! TMS EcomPilot ist so konzipiert, dass jeder es nutzen kann. Die Einrichtung dauert nur wenige Minuten und alles wird Schritt fuer Schritt erklaert. Unser Support steht dir bei Fragen jederzeit zur Verfuegung.',
+      'Nein, ueberhaupt nicht! TMS Solvado ist so konzipiert, dass jeder es nutzen kann. Die Einrichtung dauert nur wenige Minuten und alles wird Schritt fuer Schritt erklaert. Unser Support steht dir bei Fragen jederzeit zur Verfuegung.',
   },
   {
     question: 'Welche Plattformen werden unterstuetzt?',
@@ -119,7 +119,7 @@ export default function FAQ() {
             Noch Fragen? Wir helfen dir gerne weiter.
           </p>
           <a
-            href="mailto:support@tms-yield.de"
+            href="mailto:support@solvado.de"
             className="btn-secondary"
           >
             Kontaktiere uns

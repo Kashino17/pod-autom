@@ -212,7 +212,7 @@ export default function Login() {
       <div className="hidden lg:flex lg:flex-1 items-center justify-center bg-gradient-to-br from-violet-950/50 to-black p-12">
         <div className="max-w-md text-center">
           <div className="mb-8">
-            <span className="text-5xl font-bold text-gradient">TMS EcomPilot</span>
+            <span className="text-5xl font-bold text-gradient">TMS Solvado</span>
           </div>
           <p className="text-xl text-zinc-300 mb-8">
             Dein vollautomatisiertes E-Commerce Business

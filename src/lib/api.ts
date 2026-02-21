@@ -1,5 +1,5 @@
 /**
- * API Client for TMS EcomPilot Backend
+ * API Client for TMS Solvado Backend
  * Handles all API requests with authentication.
  */
 

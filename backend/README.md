@@ -1,6 +1,6 @@
-# POD AutoM Backend
+# TMS Solvado Backend
 
-FastAPI Backend für die POD AutoM Automatisierungs-Plattform.
+FastAPI Backend für die TMS Solvado Automatisierungs-Plattform.
 
 ## Struktur
 

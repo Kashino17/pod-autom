@@ -157,7 +157,7 @@ export function ShopConnection({ onComplete, onSkip }: ShopConnectionProps) {
             </div>
           </div>
           <p className="text-sm text-zinc-400 mb-4">
-            Klicke auf den Button unten, um die TMS EcomPilot App in deinem Shop zu installieren.
+            Klicke auf den Button unten, um die TMS Solvado App in deinem Shop zu installieren.
           </p>
         </div>
 

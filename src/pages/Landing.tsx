@@ -17,7 +17,7 @@ function LandingHeader() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2">
-            <span className="text-xl font-bold text-gradient">TMS EcomPilot</span>
+            <span className="text-xl font-bold text-gradient">TMS Solvado</span>
           </Link>
 
           {/* Navigation */}

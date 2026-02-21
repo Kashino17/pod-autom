@@ -81,7 +81,7 @@ function Step1AccountType({ formData, onChange }: StepProps) {
   return (
     <div className="space-y-6">
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-white mb-2">Wie nutzt du TMS EcomPilot?</h2>
+        <h2 className="text-2xl font-bold text-white mb-2">Wie nutzt du TMS Solvado?</h2>
         <p className="text-zinc-400">Wähle deinen Account-Typ für die korrekte Rechnungsstellung.</p>
       </div>
 
@@ -541,7 +541,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
                 <Sparkles className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-white">Willkommen bei TMS Yield</h1>
+                <h1 className="text-lg font-bold text-white">Willkommen bei TMS Solvado</h1>
                 <p className="text-sm text-zinc-400">Schritt {currentStep} von 4</p>
               </div>
             </div>
