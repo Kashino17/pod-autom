@@ -28,52 +28,13 @@ export function useOnboardingStatus(): OnboardingStatus {
       return { isComplete: false, missingFields: [] }
     }
 
-    const missing: string[] = []
-
-    // Check required fields for all users
-    if (!profile.first_name?.trim()) {
-      missing.push('first_name')
+    // Only trust the explicit onboarding_completed flag.
+    // Profile fields alone are not enough — user must finish the full flow.
+    if (profile.onboarding_completed) {
+      return { isComplete: true, missingFields: [] }
     }
 
-    if (!profile.last_name?.trim()) {
-      missing.push('last_name')
-    }
-
-    // Company name required only for companies
-    if (profile.account_type === 'company' && !profile.company_name?.trim()) {
-      missing.push('company_name')
-    }
-
-    // Billing address fields
-    if (!profile.billing_street?.trim()) {
-      missing.push('billing_street')
-    }
-
-    if (!profile.billing_city?.trim()) {
-      missing.push('billing_city')
-    }
-
-    if (!profile.billing_zip?.trim()) {
-      missing.push('billing_zip')
-    }
-
-    if (!profile.billing_country?.trim()) {
-      missing.push('billing_country')
-    }
-
-    // Shopify domain
-    if (!profile.shopify_domain?.trim()) {
-      missing.push('shopify_domain')
-    }
-
-    // Onboarding is complete only when ALL required fields are filled
-    // This ensures existing accounts without the new fields will see the onboarding
-    const complete = missing.length === 0
-
-    return {
-      isComplete: complete,
-      missingFields: missing,
-    }
+    return { isComplete: false, missingFields: ['onboarding'] }
   }, [profile])
 
   return {
