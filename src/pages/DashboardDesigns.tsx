@@ -20,7 +20,7 @@ import {
   TrendingUp,
   Play,
   Settings,
-  Timer,
+  Layers,
   Loader2,
   CheckCircle2,
   XCircle,
@@ -31,54 +31,13 @@ import {
 import { DashboardLayout } from '@src/components/layout'
 import { designsApi, type Design, type PlanStatus, type GenerationJob } from '@src/lib/api'
 import { useToastStore } from '@src/lib/store'
+import { CreditGate } from '@src/components/credits/CreditGate'
 
 // =====================================================
 // TYPES
 // =====================================================
 
 type StatusFilter = 'all' | 'ready' | 'generating' | 'pending' | 'failed'
-
-// =====================================================
-// COUNTDOWN HOOK
-// =====================================================
-
-function useCountdown(targetDate: string | null) {
-  const [timeLeft, setTimeLeft] = useState<{
-    days: number; hours: number; minutes: number; seconds: number; total: number
-  } | null>(null)
-
-  useEffect(() => {
-    if (!targetDate) {
-      setTimeLeft(null)
-      return
-    }
-
-    const update = () => {
-      const now = new Date().getTime()
-      const target = new Date(targetDate).getTime()
-      const diff = target - now
-
-      if (diff <= 0) {
-        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, total: 0 })
-        return
-      }
-
-      setTimeLeft({
-        days: Math.floor(diff / (1000 * 60 * 60 * 24)),
-        hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
-        minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
-        seconds: Math.floor((diff % (1000 * 60)) / 1000),
-        total: diff,
-      })
-    }
-
-    update()
-    const interval = setInterval(update, 1000)
-    return () => clearInterval(interval)
-  }, [targetDate])
-
-  return timeLeft
-}
 
 // =====================================================
 // STATUS BADGE
@@ -264,7 +223,6 @@ function PlanBanner({
 }) {
   const [manualCount, setManualCount] = useState(1)
   const [showSchedule, setShowSchedule] = useState(false)
-  const countdown = useCountdown(planStatus.next_generation_at)
 
   const usagePercent = planStatus.monthly_limit > 0
     ? Math.round((planStatus.monthly_used / planStatus.monthly_limit) * 100)
@@ -275,9 +233,9 @@ function PlanBanner({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" data-tour="designs-plan-banner">
         {/* Monthly Usage */}
-        <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4">
+        <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4" data-tour="designs-usage">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-violet-400" />
@@ -302,59 +260,39 @@ function PlanBanner({
           </p>
         </div>
 
-        {/* Countdown */}
-        <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Timer className="w-4 h-4 text-amber-400" />
-            <span className="text-xs text-zinc-400 uppercase tracking-wider">Nächste Generation</span>
-          </div>
-          {countdown && countdown.total > 0 ? (
-            <>
-              <div className="flex items-end gap-2 mb-1">
-                {countdown.days > 0 && (
-                  <div className="text-center">
-                    <span className="text-2xl font-bold text-white">{countdown.days}</span>
-                    <span className="text-xs text-zinc-500 ml-0.5">T</span>
-                  </div>
-                )}
-                <div className="text-center">
-                  <span className="text-2xl font-bold text-white">{String(countdown.hours).padStart(2, '0')}</span>
-                  <span className="text-xs text-zinc-500 ml-0.5">Std</span>
-                </div>
-                <span className="text-zinc-600 text-lg mb-0.5">:</span>
-                <div className="text-center">
-                  <span className="text-2xl font-bold text-white">{String(countdown.minutes).padStart(2, '0')}</span>
-                  <span className="text-xs text-zinc-500 ml-0.5">Min</span>
-                </div>
-                <span className="text-zinc-600 text-lg mb-0.5">:</span>
-                <div className="text-center">
-                  <span className="text-2xl font-bold text-amber-400 tabular-nums">{String(countdown.seconds).padStart(2, '0')}</span>
-                  <span className="text-xs text-zinc-500 ml-0.5">Sek</span>
-                </div>
-              </div>
-              <p className="text-xs text-zinc-500">
-                Täglich um {planStatus.generation_time} Uhr ({planStatus.generation_timezone.split('/').pop()})
-              </p>
-            </>
-          ) : (
-            <div>
-              <p className="text-lg font-semibold text-emerald-400">Bereit!</p>
-              <p className="text-xs text-zinc-500">
-                Geplant für {planStatus.generation_time} Uhr ({planStatus.generation_timezone.split('/').pop()})
-              </p>
+        {/* Schedule Info */}
+        <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4" data-tour="designs-countdown">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-400" />
+              <span className="text-xs text-zinc-400 uppercase tracking-wider">Auto-Generierung</span>
             </div>
-          )}
-          <button
-            onClick={() => setShowSchedule(!showSchedule)}
-            className="text-xs text-violet-400 hover:text-violet-300 mt-2 flex items-center gap-1"
-          >
-            <Settings className="w-3 h-3" />
-            Zeitplan ändern
-          </button>
+            <button
+              onClick={() => setShowSchedule(!showSchedule)}
+              className="p-1 rounded hover:bg-zinc-700 text-zinc-500 hover:text-zinc-300 transition-colors"
+              title="Zeitplan ändern"
+            >
+              <Settings className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="flex items-baseline gap-1.5 mb-2">
+            <span className="text-2xl font-bold text-white">{planStatus.generation_time}</span>
+            <span className="text-sm text-zinc-500">Uhr</span>
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-xs text-zinc-500 flex items-center gap-1.5">
+              <Calendar className="w-3 h-3" />
+              Täglich · {planStatus.generation_timezone.split('/').pop()?.replace('_', ' ')}
+            </p>
+            <p className="text-xs text-zinc-500 flex items-center gap-1.5">
+              <Layers className="w-3 h-3" />
+              {planStatus.designs_per_batch} {planStatus.designs_per_batch === 1 ? 'Design' : 'Designs'} pro Durchlauf
+            </p>
+          </div>
         </div>
 
         {/* Manual Trigger */}
-        <div className={`bg-zinc-800/50 border rounded-xl p-4 transition-all ${
+        <div data-tour="designs-generate" className={`bg-zinc-800/50 border rounded-xl p-4 transition-all ${
           hasActiveJob ? 'border-violet-500/30 bg-violet-500/5' : 'border-zinc-700'
         }`}>
           <div className="flex items-center gap-2 mb-2">
@@ -369,36 +307,34 @@ function PlanBanner({
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-2 mb-3">
-                <select
-                  value={manualCount}
-                  onChange={(e) => setManualCount(parseInt(e.target.value))}
-                  disabled={isDisabled}
-                  className="bg-zinc-700 border border-zinc-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500/50 flex-1"
-                >
-                  {[1, 2, 3, 5, 10, 15, 20, 30, 50].filter(n => n <= maxManual).map((n) => (
-                    <option key={n} value={n}>{n} {n === 1 ? 'Design' : 'Designs'}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => onGenerateNow(manualCount)}
-                  disabled={isDisabled}
-                  className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700 disabled:from-zinc-600 disabled:to-zinc-600 disabled:cursor-not-allowed text-white rounded-lg transition-all font-semibold text-sm shadow-lg shadow-violet-500/20 hover:shadow-violet-500/30 active:scale-95"
-                >
-                  {isGenerating ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Rocket className="w-4 h-4" />
-                  )}
-                  Los!
-                </button>
-              </div>
-              {maxManual <= 0 ? (
+              <CreditGate featureKey="design_generation" unitCount={manualCount} disableOnly>
+                <div className="flex items-center gap-2 mb-3">
+                  <select
+                    value={manualCount}
+                    onChange={(e) => setManualCount(parseInt(e.target.value))}
+                    disabled={isDisabled}
+                    className="bg-zinc-700 border border-zinc-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500/50 flex-1"
+                  >
+                    {[1, 2, 3, 5, 10, 15, 20, 30, 50].filter(n => n <= maxManual).map((n) => (
+                      <option key={n} value={n}>{n} {n === 1 ? 'Design' : 'Designs'}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => onGenerateNow(manualCount)}
+                    disabled={isDisabled}
+                    className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700 disabled:from-zinc-600 disabled:to-zinc-600 disabled:cursor-not-allowed text-white rounded-lg transition-all font-semibold text-sm shadow-lg shadow-violet-500/20 hover:shadow-violet-500/30 active:scale-95"
+                  >
+                    {isGenerating ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Rocket className="w-4 h-4" />
+                    )}
+                    Los!
+                  </button>
+                </div>
+              </CreditGate>
+              {maxManual <= 0 && (
                 <p className="text-xs text-red-400">Monatliches Limit erreicht</p>
-              ) : (
-                <p className="text-xs text-zinc-500">
-                  Max. {maxManual} Designs verfügbar
-                </p>
               )}
             </>
           )}
@@ -655,36 +591,45 @@ function DesignCard({ design, onView, onDownload, onArchive, isNew }: DesignCard
           </div>
         )}
 
-        {/* Hover Overlay */}
+        {/* Hover Overlay (Desktop) / Tap to view (Mobile) */}
         {isReady && (
-          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-            <button onClick={() => onView(design)} className="p-2.5 bg-white/20 rounded-lg hover:bg-white/30 transition-colors" title="Ansehen">
-              <Eye className="w-5 h-5 text-white" />
-            </button>
-            <button onClick={() => onDownload(design)} className="p-2.5 bg-white/20 rounded-lg hover:bg-white/30 transition-colors" title="Herunterladen">
-              <Download className="w-5 h-5 text-white" />
-            </button>
-            <button onClick={() => onArchive(design)} className="p-2.5 bg-red-500/30 rounded-lg hover:bg-red-500/50 transition-colors" title="Archivieren">
-              <Trash2 className="w-5 h-5 text-white" />
-            </button>
-          </div>
+          <>
+            {/* Desktop: Hover Overlay */}
+            <div className="hidden sm:flex absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity items-center justify-center gap-3">
+              <button onClick={() => onView(design)} className="p-2.5 bg-white/20 rounded-lg hover:bg-white/30 transition-colors" title="Ansehen">
+                <Eye className="w-5 h-5 text-white" />
+              </button>
+              <button onClick={() => onDownload(design)} className="p-2.5 bg-white/20 rounded-lg hover:bg-white/30 transition-colors" title="Herunterladen">
+                <Download className="w-5 h-5 text-white" />
+              </button>
+              <button onClick={() => onArchive(design)} className="p-2.5 bg-red-500/30 rounded-lg hover:bg-red-500/50 transition-colors" title="Archivieren">
+                <Trash2 className="w-5 h-5 text-white" />
+              </button>
+            </div>
+            {/* Mobile: Tap to view overlay */}
+            <button 
+              onClick={() => onView(design)}
+              className="sm:hidden absolute inset-0 bg-black/20 active:bg-black/40 transition-colors"
+              aria-label="Design ansehen"
+            />
+          </>
         )}
       </div>
 
       {/* Info */}
-      <div className="p-3 space-y-2">
+      <div className="p-2 sm:p-3 space-y-1.5 sm:space-y-2">
         <div className="flex items-center justify-between">
           <StatusBadge status={design.status} />
-          <span className="text-xs text-zinc-500">
+          <span className="text-[10px] sm:text-xs text-zinc-500">
             {new Date(design.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}
           </span>
         </div>
         {design.slogan_text && (
-          <p className="text-sm text-white font-medium truncate" title={design.slogan_text}>
+          <p className="text-xs sm:text-sm text-white font-medium truncate" title={design.slogan_text}>
             "{design.slogan_text}"
           </p>
         )}
-        <div className="flex items-center gap-2 text-xs text-zinc-500">
+        <div className="flex items-center gap-2 text-[10px] sm:text-xs text-zinc-500">
           {design.language && (
             <span className="px-1.5 py-0.5 bg-zinc-700 rounded text-zinc-400 uppercase">{design.language}</span>
           )}
@@ -694,6 +639,30 @@ function DesignCard({ design, onView, onDownload, onArchive, isNew }: DesignCard
               {String(design.variables_used.palette)}
             </span>
           ) : null}
+        </div>
+        {/* Mobile Action Buttons */}
+        <div className="sm:hidden flex items-center justify-between pt-1 border-t border-zinc-700/50 mt-1">
+          <button 
+            onClick={(e) => { e.stopPropagation(); onView(design); }}
+            className="p-1.5 text-zinc-400 hover:text-white transition-colors"
+            aria-label="Ansehen"
+          >
+            <Eye className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onDownload(design); }}
+            className="p-1.5 text-zinc-400 hover:text-white transition-colors"
+            aria-label="Herunterladen"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onArchive(design); }}
+            className="p-1.5 text-zinc-400 hover:text-red-400 transition-colors"
+            aria-label="Archivieren"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </div>
@@ -708,18 +677,18 @@ function DesignModal({ design, onClose, onDownload, onArchive }: {
   design: Design; onClose: () => void; onDownload: (d: Design) => void; onArchive: (d: Design) => void
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80" onClick={onClose}>
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b border-zinc-800">
-          <div className="flex items-center gap-3">
-            <Sparkles className="w-5 h-5 text-violet-400" />
-            <h2 className="text-lg font-semibold text-white">Design Details</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80" onClick={onClose}>
+      <div className="bg-zinc-900 border border-zinc-700 rounded-xl sm:rounded-2xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-3 sm:p-4 border-b border-zinc-800">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-violet-400" />
+            <h2 className="text-base sm:text-lg font-semibold text-white">Design Details</h2>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-zinc-800 transition-colors">
-            <X className="w-5 h-5 text-zinc-400" />
+          <button onClick={onClose} className="p-1.5 sm:p-2 rounded-lg hover:bg-zinc-800 transition-colors">
+            <X className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-400" />
           </button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 p-4 sm:p-6">
           <div className="aspect-square bg-zinc-800 rounded-xl overflow-hidden">
             {design.image_url ? (
               <img src={design.image_url} alt={design.slogan_text || 'Design'} className="w-full h-full object-contain" />
@@ -764,14 +733,14 @@ function DesignModal({ design, onClose, onDownload, onArchive }: {
                 <p className="text-zinc-400 text-xs mt-1 max-h-32 overflow-y-auto bg-zinc-800 p-3 rounded-lg">{design.final_prompt}</p>
               </div>
             )}
-            <div className="flex gap-3 pt-4">
+            <div className="flex gap-2 sm:gap-3 pt-4">
               {design.status === 'ready' && (
-                <button onClick={() => onDownload(design)} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-violet-500 hover:bg-violet-600 text-white rounded-lg transition-colors">
-                  <Download className="w-4 h-4" /> Herunterladen
+                <button onClick={() => onDownload(design)} className="flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-violet-500 hover:bg-violet-600 text-white rounded-lg transition-colors text-sm">
+                  <Download className="w-4 h-4" /> <span className="hidden sm:inline">Herunterladen</span><span className="sm:hidden">Download</span>
                 </button>
               )}
-              <button onClick={() => { onArchive(design); onClose() }} className="flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-800 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 border border-zinc-700 hover:border-red-500/50 rounded-lg transition-colors">
-                <Trash2 className="w-4 h-4" /> Archivieren
+              <button onClick={() => { onArchive(design); onClose() }} className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-zinc-800 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 border border-zinc-700 hover:border-red-500/50 rounded-lg transition-colors text-sm">
+                <Trash2 className="w-4 h-4" /> <span className="hidden sm:inline">Archivieren</span><span className="sm:hidden">Löschen</span>
               </button>
             </div>
           </div>
@@ -797,6 +766,16 @@ export default function DashboardDesigns() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
   const [newDesignIds, setNewDesignIds] = useState<Set<string>>(new Set())
   const prevDesignIdsRef = useRef<Set<string>>(new Set())
+  const newBadgeTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const jobBannerTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  // Clean up timers on unmount
+  useEffect(() => {
+    return () => {
+      if (newBadgeTimerRef.current) clearTimeout(newBadgeTimerRef.current)
+      if (jobBannerTimerRef.current) clearTimeout(jobBannerTimerRef.current)
+    }
+  }, [])
 
   // Fetch plan status
   const { data: planData } = useQuery({
@@ -841,7 +820,8 @@ export default function DashboardDesigns() {
     if (newIds.size > 0) {
       setNewDesignIds(newIds)
       // Clear "new" badge after 10s
-      setTimeout(() => setNewDesignIds(new Set()), 10000)
+      if (newBadgeTimerRef.current) clearTimeout(newBadgeTimerRef.current)
+      newBadgeTimerRef.current = setTimeout(() => setNewDesignIds(new Set()), 10000)
     }
     prevDesignIdsRef.current = currentIds
   }, [designs])
@@ -899,7 +879,8 @@ export default function DashboardDesigns() {
       duration: 6000,
     })
     // Keep job banner visible for 5s after completion, then clear
-    setTimeout(() => setActiveJobId(null), 5000)
+    if (jobBannerTimerRef.current) clearTimeout(jobBannerTimerRef.current)
+    jobBannerTimerRef.current = setTimeout(() => setActiveJobId(null), 5000)
   }, [queryClient, addToast])
 
   // Filter by search
@@ -955,7 +936,7 @@ export default function DashboardDesigns() {
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4" data-tour="designs-header">
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-3">
               <Sparkles className="w-7 h-7 text-violet-400" />
@@ -989,13 +970,13 @@ export default function DashboardDesigns() {
         <RecentJobsLog />
 
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex bg-zinc-800 rounded-lg p-1">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4" data-tour="designs-filters">
+          <div className="flex bg-zinc-800 rounded-lg p-1 overflow-x-auto scrollbar-hide">
             {statusTabs.map((tab) => (
               <button
                 key={tab.value}
                 onClick={() => { setStatusFilter(tab.value); setPage(0) }}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                className={`px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors flex-shrink-0 ${
                   statusFilter === tab.value ? 'bg-violet-500 text-white' : 'text-zinc-400 hover:text-white'
                 }`}
               >
@@ -1003,11 +984,11 @@ export default function DashboardDesigns() {
               </button>
             ))}
           </div>
-          <div className="relative flex-1 max-w-md">
+          <div className="relative flex-1 sm:max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
             <input
               type="text"
-              placeholder="Nach Slogans suchen..."
+              placeholder="Suchen..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500/50 transition-colors"
@@ -1053,7 +1034,7 @@ export default function DashboardDesigns() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4" data-tour="designs-grid">
               {filteredDesigns.map((design) => (
                 <DesignCard
                   key={design.id}
